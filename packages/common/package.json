@@ -1,0 +1,30 @@
+{
+  "name": "@clustec/common",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./db": "./dist/db/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx src/db/migrate.ts"
+  },
+  "dependencies": {
+    "@aztec/foundation": "4.0.0-devnet.2-patch.3",
+    "@aztec/stdlib": "4.0.0-devnet.2-patch.3",
+    "drizzle-orm": "^0.45",
+    "postgres": "^3.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "drizzle-kit": "^0.31",
+    "tsx": "^4",
+    "typescript": "^5.7"
+  }
+}

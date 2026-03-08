@@ -1,0 +1,26 @@
+{
+  "name": "clustec",
+  "private": true,
+  "packageManager": "yarn@4.9.1",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "lint": "turbo run lint",
+    "db:generate": "turbo run db:generate --filter=@clustec/common",
+    "db:migrate": "turbo run db:migrate --filter=@clustec/common",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "indexer": "turbo run start --filter=@clustec/indexer --"
+  },
+  "devDependencies": {
+    "turbo": "^2",
+    "typescript": "^5.7"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

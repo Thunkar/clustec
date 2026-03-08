@@ -1,0 +1,35 @@
+node_modules/
+dist/
+.turbo/
+*.tsbuildinfo
+
+# Yarn
+.yarn/install-state.gz
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Database
+pgdata/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+.pytest_cache/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

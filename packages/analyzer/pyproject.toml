@@ -1,0 +1,29 @@
+[project]
+name = "clustec-analyzer"
+version = "0.1.0"
+description = "Privacy leak clustering analyzer for Aztec transactions"
+requires-python = ">=3.12"
+dependencies = [
+    "hdbscan>=0.8",
+    "numpy>=1.26",
+    "psycopg[binary]>=3.2",
+    "scikit-learn>=1.5",
+    "typer>=0.15",
+    "umap-learn>=0.5",
+]
+
+[project.scripts]
+analyzer = "analyzer.__main__:app"
+
+[tool.uv]
+package = true
+dev-dependencies = [
+    "pytest>=8",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/analyzer"]
