@@ -1,4 +1,5 @@
-import "dotenv/config";
+import { loadEnv } from "../env.js";
+loadEnv();
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { createDb } from "./client.js";
 

@@ -35,3 +35,11 @@ Thumbs.db
 *.log
 
 .deploy-images.tar.gz
+
+# Terraform
+infra/.terraform/
+infra/.terraform.lock.hcl
+infra/*.tfstate
+infra/*.tfstate.backup
+infra/*.tfvars
+infra/terraform.tfvars

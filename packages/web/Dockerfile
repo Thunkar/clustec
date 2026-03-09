@@ -16,10 +16,10 @@ COPY tsconfig.base.json ./
 COPY packages/web/ packages/web/
 RUN yarn workspace @clustec/web build
 
-# ── Final: serve with nginx ──
-FROM nginx:alpine
+# ── Final: serve with Caddy (static files + API proxy + auto TLS) ──
+FROM caddy:2-alpine
 
-COPY --from=build /app/packages/web/dist /usr/share/nginx/html
-COPY packages/web/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /app/packages/web/dist /srv
+COPY Caddyfile /etc/caddy/Caddyfile
 
-EXPOSE 80
+EXPOSE 80 443

@@ -65,9 +65,16 @@ services:
       dockerfile: packages/web/Dockerfile
     restart: unless-stopped
     ports:
-      - "${WEB_PORT:-3001}:3001"
+      - "${WEB_PORT:-3001}:${WEB_PORT:-3001}"
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      DOMAIN: ${DOMAIN:-:3001}
     depends_on:
       - server
 
 volumes:
   pgdata:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,20 @@
+# Get your token at https://console.hetzner.cloud → Security → API Tokens
+hcloud_token = "your-hetzner-api-token"
+
+# Server type (cax = ARM, cx = x86)
+# cax11: 2 ARM vCPU, 4GB RAM  ~$4.10/mo  (recommended)
+# cax21: 4 ARM vCPU, 8GB RAM  ~$6.50/mo
+# cx22:  2 x86 vCPU, 4GB RAM  ~$4.60/mo
+server_type = "cax11"
+
+# Datacenter: fsn1 (Falkenstein), nbg1 (Nuremberg), hel1 (Helsinki), ash (Ashburn US)
+location = "fsn1"
+
+# Path to your SSH public key
+ssh_public_key_path = "~/.ssh/id_ed25519.pub"
+
+# Aztec network to index
+network = "devnet"
+
+# Domain for Let's Encrypt TLS
+domain = "clustec.xyz"

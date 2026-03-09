@@ -7,7 +7,8 @@
   "types": "dist/index.d.ts",
   "exports": {
     ".": "./dist/index.js",
-    "./db": "./dist/db/index.js"
+    "./db": "./dist/db/index.js",
+    "./env": "./dist/env.js"
   },
   "scripts": {
     "build": "tsc",
@@ -18,6 +19,7 @@
   "dependencies": {
     "@aztec/foundation": "4.0.0-devnet.2-patch.3",
     "@aztec/stdlib": "4.0.0-devnet.2-patch.3",
+    "dotenv": "^16",
     "drizzle-orm": "^0.45",
     "postgres": "^3.4"
   },

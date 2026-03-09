@@ -1,0 +1,31 @@
+#cloud-config
+
+package_update: true
+
+packages:
+  - curl
+  - jq
+
+write_files:
+  - path: /opt/clustec/.env
+    content: |
+      POSTGRES_PASSWORD=${postgres_password}
+      POSTGRES_USER=clustec
+      POSTGRES_DB=clustec
+      NETWORK=${network}
+      ANALYSIS_INTERVAL_MS=600000
+      DOMAIN=${domain}
+      WEB_PORT=443
+  - path: /opt/clustec/docker-compose.override.yml
+    content: |
+      services:
+        web:
+          ports:
+            - "80:80"
+
+runcmd:
+  - mkdir -p /opt/clustec/configs/networks
+  # Install Docker from official repo (includes compose plugin)
+  - curl -fsSL https://get.docker.com | sh
+  - systemctl enable docker
+  - systemctl start docker

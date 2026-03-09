@@ -34,12 +34,8 @@ async function reconcileTx(
   const dbOrder = STATUS_ORDER[tx.status] ?? -1;
   const receiptOrder = STATUS_ORDER[receiptData.status] ?? -1;
 
-  // Receipt is not more advanced — nothing to do
-  if (receiptOrder <= dbOrder) {
-    return;
-  }
-
-  // Dropped while pending
+  // Dropped while pending — handle before the general "not more advanced" guard
+  // because dropped (0) < pending (1) in STATUS_ORDER
   if (receiptData.status === "dropped" && tx.status === "pending") {
     await db
       .update(transactions)
@@ -51,6 +47,11 @@ async function reconcileTx(
     console.log(
       `[${networkId}] Reconciled ${tx.txHash.slice(0, 10)}… pending → dropped`,
     );
+    return;
+  }
+
+  // Receipt is not more advanced — nothing to do
+  if (receiptOrder <= dbOrder) {
     return;
   }
 

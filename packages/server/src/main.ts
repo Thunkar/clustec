@@ -1,4 +1,5 @@
-import "dotenv/config";
+import { loadEnv } from "@clustec/common/env";
+loadEnv();
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import Fastify from "fastify";
@@ -93,12 +94,20 @@ async function main() {
 
   await app.listen({ port, host });
 
-  // Start analysis scheduler — query DB for known networks
-  const rows = await db.select({ id: networks.id }).from(networks);
-  const networkIds = rows.map((r) => r.id);
-
   // Load per-network contract labels from config files
   const networkContracts = loadNetworkContracts();
+
+  // Wait for the indexer to register networks (they start in parallel via docker-compose).
+  // Retry a few times with increasing delay before giving up.
+  let networkIds: string[] = [];
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const rows = await db.select({ id: networks.id }).from(networks);
+    networkIds = rows.map((r) => r.id);
+    if (networkIds.length > 0) break;
+    const delayMs = 3000 * (attempt + 1);
+    app.log.info(`No networks in DB yet, retrying in ${delayMs / 1000}s (attempt ${attempt + 1}/10)…`);
+    await new Promise((r) => setTimeout(r, delayMs));
+  }
 
   // Seed contract labels for all networks
   for (const networkId of networkIds) {
@@ -134,7 +143,7 @@ async function main() {
     );
     startAnalysisScheduler(app, networkIds, analysisIntervalMs);
   } else {
-    app.log.warn("No networks found in DB — analysis scheduler not started");
+    app.log.warn("No networks found in DB after 10 attempts — analysis scheduler not started");
   }
 }
 

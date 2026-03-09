@@ -11,7 +11,6 @@
   "dependencies": {
     "@aztec/protocol-contracts": "4.0.0-devnet.2-patch.3",
     "@clustec/common": "workspace:*",
-    "dotenv": "^16",
     "drizzle-orm": "^0.45",
     "fastify": "^5",
     "pino": "^9",

@@ -93,10 +93,14 @@ docker save clustec-server:latest clustec-indexer:latest clustec-web:latest \
 SIZE=$(du -h "$IMAGES_TAR" | cut -f1)
 echo "    Archive: $SIZE"
 
-# ─── Step 3: Ensure Docker is available on remote ──────────────────
+# ─── Step 3: Wait for cloud-init + ensure Docker ──────────────────
+echo "==> Waiting for server to be ready..."
+remote "command -v cloud-init >/dev/null 2>&1 && { echo 'Waiting for cloud-init...'; cloud-init status --wait; } || true"
+
 echo "==> Checking Docker on remote..."
-remote "docker --version" || {
-  echo "Error: Docker not found on remote. Install it manually (e.g. Synology Package Center → Container Manager)."
+remote "docker compose version" || {
+  echo "Error: 'docker compose' not available on remote."
+  echo "  Install docker-compose-plugin or wait for cloud-init to finish."
   exit 1
 }
 
@@ -108,8 +112,9 @@ remote "mkdir -p $REMOTE_DIR/configs/networks"
 echo "==> Uploading images archive..."
 send "$IMAGES_TAR" "$REMOTE_DIR/images.tar.gz"
 
-echo "==> Uploading compose and configs..."
+echo "==> Uploading compose, Caddyfile, and configs..."
 send "$SCRIPT_DIR/docker-compose.yml"  "$REMOTE_DIR/docker-compose.yml"
+send "$SCRIPT_DIR/Caddyfile"           "$REMOTE_DIR/Caddyfile"
 send "$SCRIPT_DIR/.env.example"        "$REMOTE_DIR/.env.example"
 
 # Upload network configs
@@ -126,7 +131,7 @@ remote "[ -f $REMOTE_DIR/.env ] || cp $REMOTE_DIR/.env.example $REMOTE_DIR/.env"
 
 # ─── Step 8: Start services ─────────────────────────────────────────
 echo "==> Starting services..."
-remote "cd $REMOTE_DIR && docker compose -f docker-compose.yml up -d"
+remote "cd $REMOTE_DIR && docker compose up -d"
 
 # ─── Step 9: Cleanup ────────────────────────────────────────────────
 echo "==> Cleaning up..."
@@ -135,4 +140,4 @@ remote "rm -f $REMOTE_DIR/images.tar.gz"
 
 echo ""
 echo "==> Deploy complete!"
-remote "cd $REMOTE_DIR && docker compose -f docker-compose.yml ps"
+remote "cd $REMOTE_DIR && docker compose ps"

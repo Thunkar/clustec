@@ -1,4 +1,5 @@
-import "dotenv/config";
+import { loadEnv } from "@clustec/common/env";
+loadEnv();
 import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { createAztecNodeClient } from "@aztec/aztec.js/node";
