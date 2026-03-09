@@ -13,8 +13,7 @@ export function registerGraphRoutes(app: FastifyInstance, db: Db) {
   /**
    * Per-transaction slot timeline: for each public data write slot this tx
    * touches, return all other txs that wrote to the same slot, ordered by
-   * block number. This allows a timeline visualization showing when each
-   * slot was written by which transaction.
+   * block number. The focal tx is flagged so the UI can highlight it.
    */
   app.get<{
     Params: { id: string; hash: string };
@@ -83,17 +82,36 @@ export function registerGraphRoutes(app: FastifyInstance, db: Db) {
       .from(contractLabels)
       .where(eq(contractLabels.networkId, id));
 
+    // Collect known addresses from txs that wrote to these slots
+    const txIds = [...new Set(writeRows.map((r) => r.txId))];
+    const writerTxs = txIds.length > 0
+      ? await db
+          .select({ feePayer: transactions.feePayer, publicCalls: transactions.publicCalls })
+          .from(transactions)
+          .where(sql`${transactions.id} IN (${sql.join(txIds.map((id) => sql`${id}`), sql`, `)})`)
+      : [];
+    const knownAddresses = writerTxs.flatMap((t) => {
+      const addrs: string[] = [];
+      if (t.feePayer) addrs.push(t.feePayer);
+      const calls = (t.publicCalls ?? []) as { contractAddress: string; msgSender: string }[];
+      for (const c of calls) {
+        addrs.push(c.contractAddress, c.msgSender);
+      }
+      return addrs;
+    });
+
     const labelMap = new Map(labels.map((l) => [l.address, l.label]));
     const slotLookup = await buildSlotLookup(
       labels.map((l) => l.address),
-      labelMap
+      labelMap,
+      knownAddresses
     );
 
     // Group by slot and build timeline entries
     const slotMap = new Map<string, {
       txId: number;
       txHash: string;
-      blockNumber: number;
+      blockNumber: number | null;
       blockTimestamp: number | null;
       isFocalTx: boolean;
     }[]>();
@@ -113,30 +131,27 @@ export function registerGraphRoutes(app: FastifyInstance, db: Db) {
       });
     }
 
-    // Build response — include all slots the focal tx wrote to
-    const slots = [...slotMap.entries()]
-      .map(([leafSlot, entries]) => {
+    return {
+      slots: [...slotMap.entries()].map(([leafSlot, entries]) => {
         const preimage = slotLookup.get(leafSlot);
         const label = preimage
           ? labels.find(
               (l) => l.address.toLowerCase() === preimage.contractAddress.toLowerCase()
             )
           : undefined;
-
         return {
           leafSlot,
           resolvedContract: preimage
             ? {
                 address: preimage.contractAddress,
-                label: label?.label ?? null,
+                label: preimage.contractLabel ?? label?.label ?? null,
                 contractType: label?.contractType ?? null,
                 storageSlotIndex: preimage.storageSlotIndex,
               }
             : null,
           writes: entries,
         };
-      });
-
-    return { slots };
+      }),
+    };
   });
 }

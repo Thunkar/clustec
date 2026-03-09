@@ -1,3 +1,4 @@
+CREATE TYPE "public"."tx_status" AS ENUM('pending', 'mined', 'finalized');--> statement-breakpoint
 CREATE TABLE "blocks" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"network_id" text NOT NULL,
@@ -35,6 +36,7 @@ CREATE TABLE "contract_interactions" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"tx_id" integer NOT NULL,
 	"contract_address" text NOT NULL,
+	"function_selector" text,
 	"source" text NOT NULL
 );
 --> statement-breakpoint
@@ -96,36 +98,36 @@ CREATE TABLE "sync_cursors" (
 CREATE TABLE "transactions" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"network_id" text NOT NULL,
-	"block_number" bigint NOT NULL,
 	"tx_hash" text NOT NULL,
-	"tx_index" integer NOT NULL,
-	"revert_code" integer DEFAULT 0 NOT NULL,
-	"transaction_fee" text,
+	"status" "tx_status" DEFAULT 'pending' NOT NULL,
+	"block_number" bigint,
+	"tx_index" integer,
+	"revert_code" integer DEFAULT 0,
+	"actual_fee" text,
 	"num_note_hashes" integer DEFAULT 0 NOT NULL,
 	"num_nullifiers" integer DEFAULT 0 NOT NULL,
 	"num_l2_to_l1_msgs" integer DEFAULT 0 NOT NULL,
-	"num_public_data_writes" integer DEFAULT 0 NOT NULL,
 	"num_private_logs" integer DEFAULT 0 NOT NULL,
-	"num_public_logs" integer DEFAULT 0 NOT NULL,
 	"num_contract_class_logs" integer DEFAULT 0 NOT NULL,
-	"private_log_total_size" integer DEFAULT 0 NOT NULL,
-	"public_log_total_size" integer DEFAULT 0 NOT NULL,
-	"fee_payer" text,
-	"expiration_timestamp" bigint,
 	"gas_limit_da" bigint,
 	"gas_limit_l2" bigint,
 	"max_fee_per_da_gas" bigint,
 	"max_fee_per_l2_gas" bigint,
-	"gas_used_da" bigint,
-	"gas_used_l2" bigint,
-	"num_setup_calls" integer DEFAULT 0,
-	"num_app_calls" integer DEFAULT 0,
-	"has_teardown" boolean DEFAULT false,
+	"num_setup_calls" integer DEFAULT 0 NOT NULL,
+	"num_app_calls" integer DEFAULT 0 NOT NULL,
+	"has_teardown" boolean DEFAULT false NOT NULL,
+	"total_public_calldata_size" integer DEFAULT 0 NOT NULL,
+	"fee_payer" text,
+	"expiration_timestamp" bigint,
 	"public_calls" jsonb,
 	"l2_to_l1_msg_details" jsonb,
-	"raw_tx_effect" jsonb,
-	"raw_public_inputs" jsonb,
+	"num_public_data_writes" integer DEFAULT 0,
+	"num_public_logs" integer DEFAULT 0,
+	"private_log_total_size" integer DEFAULT 0,
+	"public_log_total_size" integer DEFAULT 0,
+	"raw_tx" jsonb,
 	"created_at" timestamp DEFAULT now() NOT NULL,
+	"mined_at" timestamp,
 	CONSTRAINT "txs_network_hash" UNIQUE("network_id","tx_hash")
 );
 --> statement-breakpoint
@@ -157,10 +159,13 @@ CREATE INDEX "cm_run_idx" ON "cluster_memberships" USING btree ("run_id");--> st
 CREATE INDEX "cm_cluster_idx" ON "cluster_memberships" USING btree ("run_id","cluster_id");--> statement-breakpoint
 CREATE INDEX "ci_tx_idx" ON "contract_interactions" USING btree ("tx_id");--> statement-breakpoint
 CREATE INDEX "ci_contract_idx" ON "contract_interactions" USING btree ("contract_address");--> statement-breakpoint
+CREATE INDEX "ci_selector_idx" ON "contract_interactions" USING btree ("function_selector");--> statement-breakpoint
 CREATE INDEX "fv_tx_idx" ON "feature_vectors" USING btree ("tx_id");--> statement-breakpoint
 CREATE INDEX "note_hashes_value_idx" ON "note_hashes" USING btree ("value");--> statement-breakpoint
 CREATE INDEX "nullifiers_value_idx" ON "nullifiers" USING btree ("value");--> statement-breakpoint
 CREATE INDEX "pdw_leaf_slot_idx" ON "public_data_writes" USING btree ("leaf_slot");--> statement-breakpoint
-CREATE INDEX "txs_network_block_idx" ON "transactions" USING btree ("network_id","block_number");--> statement-breakpoint
+CREATE INDEX "txs_status_idx" ON "transactions" USING btree ("network_id","status");--> statement-breakpoint
 CREATE INDEX "txs_hash_idx" ON "transactions" USING btree ("tx_hash");--> statement-breakpoint
+CREATE INDEX "txs_fee_payer_idx" ON "transactions" USING btree ("fee_payer");--> statement-breakpoint
+CREATE INDEX "txs_block_idx" ON "transactions" USING btree ("network_id","block_number");--> statement-breakpoint
 CREATE INDEX "umap_run_idx" ON "umap_projections" USING btree ("run_id");

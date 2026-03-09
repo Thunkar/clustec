@@ -2,8 +2,8 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Layout } from "./components/Layout";
 import { Dashboard } from "./pages/Dashboard";
+import { Transactions } from "./pages/Transactions";
 import { Outliers } from "./pages/Outliers";
-
 import { TxDetail } from "./pages/TxDetail";
 import { Labels } from "./pages/Labels";
 import { MyTransactions } from "./pages/MyTransactions";
@@ -24,6 +24,7 @@ export function App() {
         <Routes>
           <Route element={<Layout />}>
             <Route path="/" element={<Dashboard />} />
+            <Route path="/txs" element={<Transactions />} />
             <Route path="/privacy-sets" element={<Outliers />} />
             <Route path="/tx/:hash" element={<TxDetail />} />
             <Route path="/labels" element={<Labels />} />

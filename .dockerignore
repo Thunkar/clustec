@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.turbo/
+*.tsbuildinfo
+.git/
+.env
+.env.*
+pgdata/
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+*.egg-info/
+.DS_Store
+*.log
+.yarn/install-state.gz

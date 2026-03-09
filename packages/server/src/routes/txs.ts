@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
-import { eq, desc, and, ne, sql, inArray, or } from "drizzle-orm";
+import type { AnyColumn } from "drizzle-orm";
+import { eq, desc, asc, and, ne, or, sql, ilike } from "drizzle-orm";
 import {
   type Db,
   transactions,
@@ -9,88 +10,82 @@ import {
   publicDataWrites,
   clusterMemberships,
   contractLabels,
-  contractInteractions,
   buildSlotLookup,
-  computePublicDataTreeLeafSlot,
 } from "@clustec/common";
+
+// Allowed sort columns and directions
+const SORT_COLUMNS: Record<string, AnyColumn> = {
+  createdAt: transactions.createdAt,
+  blockNumber: transactions.blockNumber,
+  numNoteHashes: transactions.numNoteHashes,
+  numNullifiers: transactions.numNullifiers,
+  numPublicDataWrites: transactions.numPublicDataWrites,
+  actualFee: transactions.actualFee,
+  feePayer: transactions.feePayer,
+  status: transactions.status,
+};
 
 export function registerTxRoutes(app: FastifyInstance, db: Db) {
   app.get<{
     Params: { id: string };
-    Querystring: { page?: string; limit?: string; contract?: string };
+    Querystring: {
+      page?: string;
+      limit?: string;
+      feePayer?: string;
+      status?: string;
+      search?: string;
+      sort?: string;
+      order?: string;
+    };
   }>("/api/networks/:id/txs", async (request) => {
     const { id } = request.params;
     const page = parseInt(request.query.page ?? "1", 10);
     const limit = Math.min(parseInt(request.query.limit ?? "50", 10), 100);
     const offset = (page - 1) * limit;
-    const contractFilter = request.query.contract;
+    const { feePayer, status, search } = request.query;
 
-    if (contractFilter) {
-      // 1. Find txs via contract_interactions table (from public logs)
-      const ciTxIds = db
-        .selectDistinct({ txId: contractInteractions.txId })
-        .from(contractInteractions)
-        .innerJoin(transactions, eq(transactions.id, contractInteractions.txId))
-        .where(
-          and(
-            eq(transactions.networkId, id),
-            eq(contractInteractions.contractAddress, contractFilter)
-          )
-        );
+    const sortCol = SORT_COLUMNS[request.query.sort ?? ""] ?? transactions.createdAt;
+    const sortDir = request.query.order === "asc" ? asc : desc;
 
-      // 2. Find txs via public data writes (slot-derived)
-      const leafSlots: string[] = [];
-      for (let i = 0; i <= 20; i++) {
-        leafSlots.push(
-          await computePublicDataTreeLeafSlot(contractFilter, BigInt(i))
-        );
-      }
-      const pdwTxIds = db
-        .selectDistinct({ txId: publicDataWrites.txId })
-        .from(publicDataWrites)
-        .innerJoin(transactions, eq(transactions.id, publicDataWrites.txId))
-        .where(
-          and(
-            eq(transactions.networkId, id),
-            inArray(publicDataWrites.leafSlot, leafSlots)
-          )
-        );
-
-      // Union both sets via SQL
-      const [ciRows, pdwRows] = await Promise.all([ciTxIds, pdwTxIds]);
-      const txIdSet = new Set<number>();
-      for (const r of ciRows) txIdSet.add(r.txId);
-      for (const r of pdwRows) txIdSet.add(r.txId);
-
-      if (txIdSet.size === 0) {
-        return { data: [], page, limit };
-      }
-
-      const rows = await db
-        .select()
-        .from(transactions)
-        .where(
-          and(
-            eq(transactions.networkId, id),
-            inArray(transactions.id, [...txIdSet])
-          )
-        )
-        .orderBy(desc(transactions.blockNumber))
-        .limit(limit)
-        .offset(offset);
-
-      return { data: rows, page, limit };
+    // Build conditions
+    const conditions = [eq(transactions.networkId, id)];
+    if (status) {
+      conditions.push(eq(transactions.status, status as "pending" | "mined" | "finalized"));
+    }
+    if (feePayer) {
+      conditions.push(eq(transactions.feePayer, feePayer));
     }
 
-    const rows = await db
-      .select()
-      .from(transactions)
-      .where(eq(transactions.networkId, id))
-      .orderBy(desc(transactions.blockNumber))
-      .limit(limit)
-      .offset(offset);
+    // Fuzzy search: match against tx hash, fee payer, or JSONB public calls addresses
+    if (search) {
+      const pattern = `%${search}%`;
+      conditions.push(
+        or(
+          ilike(transactions.txHash, pattern),
+          ilike(transactions.feePayer, pattern),
+          // Search inside publicCalls JSONB - contract addresses and msg senders
+          sql`${transactions.publicCalls}::text ILIKE ${pattern}`,
+        )!,
+      );
+    }
 
-    return { data: rows, page, limit };
+    const where = and(...conditions);
+
+    const [rows, [{ count: total }]] = await Promise.all([
+      db
+        .select()
+        .from(transactions)
+        .where(where)
+        .orderBy(sortDir(sortCol))
+        .limit(limit)
+        .offset(offset),
+      db
+        .select({ count: sql<number>`count(*)` })
+        .from(transactions)
+        .where(where),
+    ]);
+
+    return { data: rows, page, limit, total: Number(total) };
   });
 
   app.get<{
@@ -115,7 +110,6 @@ export function registerTxRoutes(app: FastifyInstance, db: Db) {
       nulls,
       pdws,
       memberships,
-      interactions,
       labels,
     ] = await Promise.all([
       db.select().from(featureVectors).where(eq(featureVectors.txId, tx.id)).limit(1),
@@ -123,15 +117,22 @@ export function registerTxRoutes(app: FastifyInstance, db: Db) {
       db.select().from(nullifiers).where(eq(nullifiers.txId, tx.id)),
       db.select().from(publicDataWrites).where(eq(publicDataWrites.txId, tx.id)),
       db.select().from(clusterMemberships).where(eq(clusterMemberships.txId, tx.id)),
-      db.select().from(contractInteractions).where(eq(contractInteractions.txId, tx.id)),
       db.select().from(contractLabels).where(eq(contractLabels.networkId, id)),
     ]);
+
+    // Collect all known addresses for map-key resolution
+    const rawCalls_ = (tx.publicCalls ?? []) as { contractAddress: string; msgSender: string }[];
+    const knownAddresses = [
+      ...(tx.feePayer ? [tx.feePayer] : []),
+      ...rawCalls_.flatMap((c) => [c.contractAddress, c.msgSender]),
+    ];
 
     // Resolve public data write leaf slots to contract + slot index
     const labelMap = new Map(labels.map((l) => [l.address, l.label]));
     const slotLookup = await buildSlotLookup(
       labels.map((l) => l.address),
-      labelMap
+      labelMap,
+      knownAddresses
     );
 
     const resolvedPdws = pdws.map((w) => {
@@ -154,13 +155,28 @@ export function registerTxRoutes(app: FastifyInstance, db: Db) {
       };
     });
 
-    // Resolve contract interaction addresses to labels
-    const resolvedInteractions = interactions.map((ci) => {
+    // Resolve public calls from JSONB, enriched with contract labels
+    const rawCalls = (tx.publicCalls ?? []) as {
+      contractAddress: string;
+      functionSelector: string;
+      msgSender: string;
+      isStaticCall: boolean;
+      phase: string;
+      calldataSize: number;
+      calldata?: string[];
+    }[];
+    const resolvedCalls = rawCalls.map((c) => {
       const label = labels.find(
-        (l) => l.address.toLowerCase() === ci.contractAddress.toLowerCase()
+        (l) => l.address.toLowerCase() === c.contractAddress.toLowerCase()
       );
       return {
-        ...ci,
+        contractAddress: c.contractAddress,
+        functionSelector: c.functionSelector,
+        phase: c.phase,
+        msgSender: c.msgSender,
+        isStaticCall: c.isStaticCall,
+        calldataSize: c.calldataSize,
+        calldata: c.calldata ?? [],
         label: label?.label ?? null,
         contractType: label?.contractType ?? null,
       };
@@ -209,10 +225,11 @@ export function registerTxRoutes(app: FastifyInstance, db: Db) {
     // Find similar transactions
     let similarTxs: {
       txHash: string;
-      blockNumber: number;
+      blockNumber: number | null;
+      status: string;
       numNoteHashes: number;
       numNullifiers: number;
-      numPublicDataWrites: number;
+      numPublicDataWrites: number | null;
       feePayer: string | null;
       outlierScore: number | null;
     }[] = [];
@@ -222,6 +239,7 @@ export function registerTxRoutes(app: FastifyInstance, db: Db) {
         .select({
           txHash: transactions.txHash,
           blockNumber: transactions.blockNumber,
+          status: transactions.status,
           numNoteHashes: transactions.numNoteHashes,
           numNullifiers: transactions.numNullifiers,
           numPublicDataWrites: transactions.numPublicDataWrites,
@@ -246,7 +264,7 @@ export function registerTxRoutes(app: FastifyInstance, db: Db) {
       noteHashes: notes,
       nullifiers: nulls,
       publicDataWrites: resolvedPdws,
-      contractInteractions: resolvedInteractions,
+      publicCalls: resolvedCalls,
       clusterMemberships: memberships,
       privacySet,
       similarTxs,

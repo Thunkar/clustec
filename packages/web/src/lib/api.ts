@@ -53,22 +53,33 @@ export interface Block {
 export interface Transaction {
   id: number;
   networkId: string;
-  blockNumber: number;
   txHash: string;
-  txIndex: number;
-  revertCode: number;
-  transactionFee: string | null;
+  status: "pending" | "mined" | "finalized";
+  blockNumber: number | null;
+  txIndex: number | null;
+  revertCode: number | null;
+  actualFee: string | null;
   numNoteHashes: number;
   numNullifiers: number;
   numL2ToL1Msgs: number;
-  numPublicDataWrites: number;
   numPrivateLogs: number;
-  numPublicLogs: number;
   numContractClassLogs: number;
-  privateLogTotalSize: number;
-  publicLogTotalSize: number;
+  gasLimitDa: number | null;
+  gasLimitL2: number | null;
+  maxFeePerDaGas: number | null;
+  maxFeePerL2Gas: number | null;
+  numSetupCalls: number;
+  numAppCalls: number;
+  hasTeardown: boolean;
+  totalPublicCalldataSize: number;
   feePayer: string | null;
   expirationTimestamp: number | null;
+  numPublicDataWrites: number | null;
+  numPublicLogs: number | null;
+  privateLogTotalSize: number | null;
+  publicLogTotalSize: number | null;
+  createdAt: string;
+  minedAt: string | null;
 }
 
 export interface ClusterRun {
@@ -97,12 +108,12 @@ export interface OutlierEntry {
   outlierScore: number | null;
   clusterId: number;
   clusterSize: number;
-  blockNumber: number;
+  blockNumber: number | null;
   numNoteHashes: number;
   numNullifiers: number;
-  numPublicDataWrites: number;
+  numPublicDataWrites: number | null;
   numPrivateLogs: number;
-  numPublicLogs: number;
+  numPublicLogs: number | null;
 }
 
 export interface ClusterSize {
@@ -120,6 +131,32 @@ export interface ContractLabel {
   contractType: string | null;
 }
 
+export interface PublicCall {
+  contractAddress: string;
+  functionSelector: string | null;
+  phase: "setup" | "app" | "teardown";
+  msgSender: string | null;
+  isStaticCall: boolean;
+  calldataSize: number;
+  calldata: string[];
+  label: string | null;
+  contractType: string | null;
+}
+
+export interface NoteHash {
+  id: number;
+  txId: number;
+  value: string;
+  position: number;
+}
+
+export interface Nullifier {
+  id: number;
+  txId: number;
+  value: string;
+  position: number;
+}
+
 export interface ResolvedContract {
   address: string;
   label: string | null;
@@ -127,10 +164,19 @@ export interface ResolvedContract {
   storageSlotIndex: number | string;
 }
 
+export interface PublicDataWrite {
+  id: number;
+  txId: number;
+  leafSlot: string;
+  value: string;
+  position: number;
+  resolvedContract: ResolvedContract | null;
+}
+
 export interface SlotWrite {
   txId: number;
   txHash: string;
-  blockNumber: number;
+  blockNumber: number | null;
   blockTimestamp: number | null;
   isFocalTx: boolean;
 }
@@ -147,10 +193,11 @@ export interface TxGraphData {
 
 export interface SimilarTx {
   txHash: string;
-  blockNumber: number;
+  blockNumber: number | null;
+  status: string;
   numNoteHashes: number;
   numNullifiers: number;
-  numPublicDataWrites: number;
+  numPublicDataWrites: number | null;
   feePayer: string | null;
   outlierScore: number | null;
 }
@@ -162,28 +209,13 @@ export interface PrivacySet {
   outlierScore: number | null;
 }
 
-export interface ContractInteraction {
-  id: number;
-  txId: number;
-  contractAddress: string;
-  source: "public_log" | "contract_class_log" | "public_data_write";
-  label: string | null;
-  contractType: string | null;
-}
-
 export interface TxDetail {
   tx: Transaction;
   featureVector: number[] | null;
-  noteHashes: { id: number; value: string; position: number }[];
-  nullifiers: { id: number; value: string; position: number }[];
-  publicDataWrites: {
-    id: number;
-    leafSlot: string;
-    value: string;
-    position: number;
-    resolvedContract: ResolvedContract | null;
-  }[];
-  contractInteractions: ContractInteraction[];
+  noteHashes: NoteHash[];
+  nullifiers: Nullifier[];
+  publicDataWrites: PublicDataWrite[];
+  publicCalls: PublicCall[];
   clusterMemberships: { runId: number; clusterId: number; membershipScore: number | null; outlierScore: number | null }[];
   privacySet: PrivacySet | null;
   similarTxs: SimilarTx[];
@@ -194,12 +226,12 @@ export interface ClusterMember {
   txHash: string;
   membershipScore: number | null;
   outlierScore: number | null;
-  blockNumber: number;
+  blockNumber: number | null;
   numNoteHashes: number;
   numNullifiers: number;
-  numPublicDataWrites: number;
+  numPublicDataWrites: number | null;
   numPrivateLogs: number;
-  numPublicLogs: number;
+  numPublicLogs: number | null;
   numContractClassLogs: number;
   numL2ToL1Msgs: number;
 }
@@ -213,10 +245,22 @@ export const api = {
     fetchJson<{ data: Block[]; page: number; limit: number }>(`/networks/${id}/blocks?page=${page}&limit=${limit}`),
   getBlock: (id: string, blockNumber: number) =>
     fetchJson<{ block: Block; transactions: Transaction[] }>(`/networks/${id}/blocks/${blockNumber}`),
-  getTxs: (id: string, page = 1, limit = 50, contract?: string) =>
-    fetchJson<{ data: Transaction[]; page: number; limit: number }>(
-      `/networks/${id}/txs?page=${page}&limit=${limit}${contract ? `&contract=${encodeURIComponent(contract)}` : ""}`
-    ),
+  getTxs: (
+    id: string,
+    page = 1,
+    limit = 50,
+    filters?: { feePayer?: string; status?: string; search?: string; sort?: string; order?: string }
+  ) => {
+    const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+    if (filters?.feePayer) params.set("feePayer", filters.feePayer);
+    if (filters?.status) params.set("status", filters.status);
+    if (filters?.search) params.set("search", filters.search);
+    if (filters?.sort) params.set("sort", filters.sort);
+    if (filters?.order) params.set("order", filters.order);
+    return fetchJson<{ data: Transaction[]; page: number; limit: number; total: number }>(
+      `/networks/${id}/txs?${params.toString()}`
+    );
+  },
   getTxDetail: (id: string, hash: string) =>
     fetchJson<TxDetail>(`/networks/${id}/txs/${hash}`),
   getClusterRuns: (id: string) => fetchJson<ClusterRun[]>(`/networks/${id}/clusters`),

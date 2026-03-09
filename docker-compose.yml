@@ -1,19 +1,73 @@
 services:
   postgres:
     image: postgres:16-alpine
-    ports:
-      - "5432:5432"
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: clustec
-      POSTGRES_PASSWORD: clustec
-      POSTGRES_DB: clustec
+      POSTGRES_USER: ${POSTGRES_USER:-clustec}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-clustec}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U clustec"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-clustec}"]
       interval: 5s
       timeout: 5s
       retries: 5
+
+  migrate:
+    image: clustec-server:latest
+    build:
+      context: .
+      dockerfile: packages/server/Dockerfile
+    command:
+      ["node", "--import", "tsx/esm", "packages/common/src/db/migrate.ts"]
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-clustec}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-clustec}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  server:
+    image: clustec-server:latest
+    build:
+      context: .
+      dockerfile: packages/server/Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-clustec}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-clustec}
+      PORT: "3002"
+      HOST: "0.0.0.0"
+      NODE_ENV: production
+      ANALYSIS_INTERVAL_MS: ${ANALYSIS_INTERVAL_MS:-600000}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  indexer:
+    image: clustec-indexer:latest
+    build:
+      context: .
+      dockerfile: packages/indexer/Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-clustec}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-clustec}
+    volumes:
+      - ./configs/networks/${NETWORK:-devnet}.json:/app/config.json:ro
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  web:
+    image: clustec-web:latest
+    build:
+      context: .
+      dockerfile: packages/web/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-3001}:3001"
+    depends_on:
+      - server
 
 volumes:
   pgdata:

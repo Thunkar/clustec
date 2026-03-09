@@ -1,5 +1,6 @@
 import {
   pgTable,
+  pgEnum,
   serial,
   text,
   integer,
@@ -11,6 +12,14 @@ import {
   index,
   unique,
 } from "drizzle-orm/pg-core";
+
+// ── Enums ────────────────────────────────────────────────
+
+export const txStatusEnum = pgEnum("tx_status", [
+  "pending",
+  "mined",
+  "finalized",
+]);
 
 // ── Networks ──────────────────────────────────────────────
 
@@ -49,7 +58,7 @@ export const blocks = pgTable(
     timestamp: bigint("timestamp", { mode: "number" }),
     slotNumber: bigint("slot_number", { mode: "number" }),
     numTxs: integer("num_txs").notNull().default(0),
-    totalFees: text("total_fees"), // stored as string to avoid precision loss
+    totalFees: text("total_fees"),
     totalManaUsed: text("total_mana_used"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
@@ -68,60 +77,66 @@ export const transactions = pgTable(
     networkId: text("network_id")
       .references(() => networks.id)
       .notNull(),
-    blockNumber: bigint("block_number", { mode: "number" }).notNull(),
     txHash: text("tx_hash").notNull(),
-    txIndex: integer("tx_index").notNull(),
-    revertCode: integer("revert_code").notNull().default(0),
-    transactionFee: text("transaction_fee"), // string for bigint precision
+    status: txStatusEnum("status").notNull().default("pending"),
 
-    // ── Shape counts (the privacy leakage surface) ──
+    // ── Filled on mine ──
+    blockNumber: bigint("block_number", { mode: "number" }),
+    txIndex: integer("tx_index"),
+    revertCode: integer("revert_code").default(0),
+    actualFee: text("actual_fee"), // from TxEffect, string for bigint precision
+
+    // ── Shape counts (from private kernel public inputs) ──
     numNoteHashes: integer("num_note_hashes").notNull().default(0),
     numNullifiers: integer("num_nullifiers").notNull().default(0),
     numL2ToL1Msgs: integer("num_l2_to_l1_msgs").notNull().default(0),
-    numPublicDataWrites: integer("num_public_data_writes")
-      .notNull()
-      .default(0),
     numPrivateLogs: integer("num_private_logs").notNull().default(0),
-    numPublicLogs: integer("num_public_logs").notNull().default(0),
     numContractClassLogs: integer("num_contract_class_logs")
       .notNull()
       .default(0),
-    privateLogTotalSize: integer("private_log_total_size")
-      .notNull()
-      .default(0),
-    publicLogTotalSize: integer("public_log_total_size").notNull().default(0),
 
-    // ── From full Tx public inputs (if captured) ──
-    feePayer: text("fee_payer"),
-    expirationTimestamp: bigint("expiration_timestamp", { mode: "number" }),
+    // ── Gas settings (from full Tx) ──
     gasLimitDa: bigint("gas_limit_da", { mode: "number" }),
     gasLimitL2: bigint("gas_limit_l2", { mode: "number" }),
     maxFeePerDaGas: bigint("max_fee_per_da_gas", { mode: "number" }),
     maxFeePerL2Gas: bigint("max_fee_per_l2_gas", { mode: "number" }),
 
-    // ── Gas usage ──
-    gasUsedDa: bigint("gas_used_da", { mode: "number" }),
-    gasUsedL2: bigint("gas_used_l2", { mode: "number" }),
-
     // ── Public call structure ──
-    numSetupCalls: integer("num_setup_calls").default(0),
-    numAppCalls: integer("num_app_calls").default(0),
-    hasTeardown: boolean("has_teardown").default(false),
-    publicCalls: jsonb("public_calls"), // PublicCallInfo[]
+    numSetupCalls: integer("num_setup_calls").notNull().default(0),
+    numAppCalls: integer("num_app_calls").notNull().default(0),
+    hasTeardown: boolean("has_teardown").notNull().default(false),
+    totalPublicCalldataSize: integer("total_public_calldata_size")
+      .notNull()
+      .default(0),
 
-    // ── L2→L1 messages with recipients ──
-    l2ToL1MsgDetails: jsonb("l2_to_l1_msg_details"), // L2ToL1MsgInfo[]
+    // ── Queryable metadata (not in feature vector) ──
+    feePayer: text("fee_payer"),
+    expirationTimestamp: bigint("expiration_timestamp", { mode: "number" }),
 
-    // ── Raw data for future analysis ──
-    rawTxEffect: jsonb("raw_tx_effect"),
-    rawPublicInputs: jsonb("raw_public_inputs"),
+    // ── Structured data (JSONB) ──
+    // [{contractAddress, functionSelector, msgSender, isStaticCall, phase, calldataSize}]
+    publicCalls: jsonb("public_calls"),
+    // [{recipient, senderContract}]
+    l2ToL1MsgDetails: jsonb("l2_to_l1_msg_details"),
+
+    // ── Filled on mine: execution results ──
+    numPublicDataWrites: integer("num_public_data_writes").default(0),
+    numPublicLogs: integer("num_public_logs").default(0),
+    privateLogTotalSize: integer("private_log_total_size").default(0),
+    publicLogTotalSize: integer("public_log_total_size").default(0),
+
+    // ── Raw data ──
+    rawTx: jsonb("raw_tx"),
 
     createdAt: timestamp("created_at").defaultNow().notNull(),
+    minedAt: timestamp("mined_at"),
   },
   (t) => [
     unique("txs_network_hash").on(t.networkId, t.txHash),
-    index("txs_network_block_idx").on(t.networkId, t.blockNumber),
+    index("txs_status_idx").on(t.networkId, t.status),
     index("txs_hash_idx").on(t.txHash),
+    index("txs_fee_payer_idx").on(t.feePayer),
+    index("txs_block_idx").on(t.networkId, t.blockNumber),
   ]
 );
 
@@ -134,7 +149,7 @@ export const noteHashes = pgTable(
     txId: integer("tx_id")
       .references(() => transactions.id)
       .notNull(),
-    value: text("value").notNull(), // hex string
+    value: text("value").notNull(),
     position: integer("position").notNull(),
   },
   (t) => [index("note_hashes_value_idx").on(t.value)]
@@ -147,7 +162,7 @@ export const nullifiers = pgTable(
     txId: integer("tx_id")
       .references(() => transactions.id)
       .notNull(),
-    value: text("value").notNull(), // hex string
+    value: text("value").notNull(),
     position: integer("position").notNull(),
   },
   (t) => [index("nullifiers_value_idx").on(t.value)]
@@ -160,14 +175,14 @@ export const publicDataWrites = pgTable(
     txId: integer("tx_id")
       .references(() => transactions.id)
       .notNull(),
-    leafSlot: text("leaf_slot").notNull(), // hex string
-    value: text("value").notNull(), // hex string
+    leafSlot: text("leaf_slot").notNull(),
+    value: text("value").notNull(),
     position: integer("position").notNull(),
   },
   (t) => [index("pdw_leaf_slot_idx").on(t.leafSlot)]
 );
 
-// ── Contract interactions (from public/contract class logs) ──
+// ── Contract interactions (from public calls) ─────────────
 
 export const contractInteractions = pgTable(
   "contract_interactions",
@@ -177,11 +192,13 @@ export const contractInteractions = pgTable(
       .references(() => transactions.id)
       .notNull(),
     contractAddress: text("contract_address").notNull(),
-    source: text("source").notNull(), // "public_log" | "contract_class_log" | "public_data_write"
+    functionSelector: text("function_selector"),
+    source: text("source").notNull(), // "setup" | "app" | "teardown"
   },
   (t) => [
     index("ci_tx_idx").on(t.txId),
     index("ci_contract_idx").on(t.contractAddress),
+    index("ci_selector_idx").on(t.functionSelector),
   ]
 );
 
@@ -196,7 +213,7 @@ export const contractLabels = pgTable(
       .notNull(),
     address: text("address").notNull(),
     label: text("label").notNull(),
-    contractType: text("contract_type"), // e.g. "Token", "AMM", "FPC"
+    contractType: text("contract_type"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (t) => [unique("labels_network_address").on(t.networkId, t.address)]
@@ -223,8 +240,8 @@ export const clusterRuns = pgTable("cluster_runs", {
   networkId: text("network_id")
     .references(() => networks.id)
     .notNull(),
-  algorithm: text("algorithm").notNull(), // e.g. "hdbscan"
-  params: jsonb("params"), // algorithm-specific parameters
+  algorithm: text("algorithm").notNull(),
+  params: jsonb("params"),
   numClusters: integer("num_clusters"),
   numOutliers: integer("num_outliers"),
   computedAt: timestamp("computed_at").defaultNow().notNull(),
@@ -240,7 +257,7 @@ export const clusterMemberships = pgTable(
     txId: integer("tx_id")
       .references(() => transactions.id)
       .notNull(),
-    clusterId: integer("cluster_id").notNull(), // -1 = outlier in HDBSCAN
+    clusterId: integer("cluster_id").notNull(),
     membershipScore: real("membership_score"),
     outlierScore: real("outlier_score"),
   },

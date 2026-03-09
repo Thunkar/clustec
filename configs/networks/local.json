@@ -4,6 +4,6 @@
   "nodeUrl": "http://localhost:8080",
   "chainId": 31337,
   "pollIntervalMs": 500,
-  "batchSize": 500,
+  "batchSize": 200,
   "enabled": false
 }

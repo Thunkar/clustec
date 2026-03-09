@@ -37,9 +37,14 @@ def load_features(
     tx_hashes = [r[1] for r in rows]
     raw_vectors = [json.loads(r[2]) if isinstance(r[2], str) else r[2] for r in rows]
 
-    # Feature vector changed from 16-dim (with public inputs) to 11-dim (tx effect only).
-    # Truncate old vectors so all rows have consistent dimensions.
-    FEATURE_DIM = 11
+    # 18-dim feature vector from mempool-first indexer:
+    #  0: numNoteHashes       1: numNullifiers        2: numL2ToL1Msgs
+    #  3: numPrivateLogs      4: numContractClassLogs  5: gasLimitDa
+    #  6: gasLimitL2          7: maxFeePerDaGas        8: maxFeePerL2Gas
+    #  9: numSetupCalls      10: numAppCalls          11: hasTeardown
+    # 12: totalPublicCalldataSize  13: numPublicCalls  14: hasFeePayer
+    # 15: numL2ToL1MsgDetails     16: numStaticCalls   17: numDistinctContracts
+    FEATURE_DIM = 18
     raw_vectors = [v[:FEATURE_DIM] for v in raw_vectors]
     vectors = np.array(raw_vectors, dtype=np.float64)
 

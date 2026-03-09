@@ -138,7 +138,7 @@ function ClusterMembersView({
                 Public Logs{sortIndicator("numPublicLogs")}
               </SortableHeader>
               <SortableHeader $active={sortKey === "numContractClassLogs"} onClick={() => handleSort("numContractClassLogs")}>
-                Class Logs{sortIndicator("numContractClassLogs")}
+                Contract Class Logs{sortIndicator("numContractClassLogs")}
               </SortableHeader>
               <SortableHeader $active={sortKey === "numL2ToL1Msgs"} onClick={() => handleSort("numL2ToL1Msgs")}>
                 L2→L1 Msgs{sortIndicator("numL2ToL1Msgs")}
@@ -168,10 +168,10 @@ function ClusterMembersView({
                     <span style={{ color: theme.colors.textMuted }}>—</span>
                   )}
                 </td>
-                <td>{m.blockNumber.toLocaleString()}</td>
+                <td>{m.blockNumber != null ? m.blockNumber.toLocaleString() : "—"}</td>
                 <td>{m.numNoteHashes}</td>
                 <td>{m.numNullifiers}</td>
-                <td>{m.numPublicDataWrites}</td>
+                <td>{m.numPublicDataWrites ?? "—"}</td>
                 <td>{m.numPrivateLogs}</td>
                 <td>{m.numPublicLogs}</td>
                 <td>{m.numContractClassLogs}</td>

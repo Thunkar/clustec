@@ -22,11 +22,16 @@ export function useBlocks(networkId: string, page = 1) {
   });
 }
 
-export function useTxs(networkId: string, page = 1, contract?: string) {
+export function useTxs(
+  networkId: string,
+  page = 1,
+  filters?: { feePayer?: string; status?: string; search?: string; sort?: string; order?: string }
+) {
   return useQuery({
-    queryKey: ["networks", networkId, "txs", page, contract ?? ""],
-    queryFn: () => api.getTxs(networkId, page, 50, contract),
+    queryKey: ["networks", networkId, "txs", page, filters],
+    queryFn: () => api.getTxs(networkId, page, 50, filters),
     enabled: !!networkId,
+    placeholderData: (prev) => prev,
   });
 }
 

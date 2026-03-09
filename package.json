@@ -12,8 +12,8 @@
     "lint": "turbo run lint",
     "db:generate": "turbo run db:generate --filter=@clustec/common",
     "db:migrate": "turbo run db:migrate --filter=@clustec/common",
-    "db:up": "docker compose up -d",
-    "db:down": "docker compose down",
+    "db:up": "docker compose -f docker-compose.local.yml up -d",
+    "db:down": "docker compose -f docker-compose.local.yml down",
     "indexer": "turbo run start --filter=@clustec/indexer --"
   },
   "devDependencies": {

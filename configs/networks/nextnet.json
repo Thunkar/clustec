@@ -4,6 +4,6 @@
   "nodeUrl": "https://nextnet.aztec-labs.com",
   "chainId": 11155111,
   "pollIntervalMs": 500,
-  "batchSize": 500,
+  "batchSize": 200,
   "enabled": true
 }

@@ -55,6 +55,7 @@ const Main = styled.main`
 
 const navItems = [
   { path: "/", label: "Dashboard" },
+  { path: "/txs", label: "Transactions" },
   { path: "/privacy-sets", label: "Privacy Sets" },
   { path: "/labels", label: "Labels" },
   { path: "/my-txs", label: "My Transactions" },
