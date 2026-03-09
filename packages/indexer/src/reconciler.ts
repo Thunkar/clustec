@@ -162,7 +162,9 @@ async function reconcileTx(
   );
 }
 
-export async function reconcileOnStartup(
+const DEFAULT_INTERVAL_MS = 300_000;
+
+async function reconcile(
   networkId: string,
   node: AztecNode,
   db: Db,
@@ -183,7 +185,6 @@ export async function reconcileOnStartup(
     );
 
   if (staleTxs.length === 0) {
-    console.log(`[${networkId}] No stale transactions to reconcile.`);
     return;
   }
 
@@ -199,6 +200,25 @@ export async function reconcileOnStartup(
   }
 
   console.log(
-    `[${networkId}] Reconciled ${staleTxs.length} transactions on startup.`,
+    `[${networkId}] Reconciliation complete (${staleTxs.length} txs).`,
   );
+}
+
+export async function startReconciler(
+  networkId: string,
+  node: AztecNode,
+  db: Db,
+  intervalMs: number = DEFAULT_INTERVAL_MS,
+): Promise<NodeJS.Timeout> {
+  // Run immediately on startup
+  await reconcile(networkId, node, db);
+
+  // Then periodically
+  return setInterval(async () => {
+    try {
+      await reconcile(networkId, node, db);
+    } catch (err) {
+      console.error(`[${networkId}] Reconciliation error:`, err);
+    }
+  }, intervalMs);
 }

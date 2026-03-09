@@ -206,17 +206,18 @@ export interface SimilarTx {
   status: string;
   numNoteHashes: number;
   numNullifiers: number;
-  numPublicDataWrites: number | null;
   numL2ToL1Msgs: number;
   numPrivateLogs: number;
-  numPublicLogs: number | null;
   numContractClassLogs: number;
-  numSetupCalls: number;
-  numAppCalls: number;
-  hasTeardown: boolean;
-  totalPublicCalldataSize: number;
+  numPublicLogs: number | null;
   gasLimitDa: number | null;
   gasLimitL2: number | null;
+  maxFeePerDaGas: number | null;
+  maxFeePerL2Gas: number | null;
+  numSetupCalls: number;
+  numAppCalls: number;
+  totalPublicCalldataSize: number;
+  expirationTimestamp: number | null;
   feePayer: string;
   outlierScore: number | null;
 }
@@ -271,22 +272,25 @@ export interface TxDetail {
 export interface ClusterMember {
   txId: number;
   txHash: string;
+  status: string;
   membershipScore: number | null;
   outlierScore: number | null;
   blockNumber: number | null;
   numNoteHashes: number;
   numNullifiers: number;
-  numPublicDataWrites: number | null;
-  numPrivateLogs: number;
-  numPublicLogs: number | null;
-  numContractClassLogs: number;
   numL2ToL1Msgs: number;
-  numSetupCalls: number;
-  numAppCalls: number;
-  hasTeardown: boolean;
-  totalPublicCalldataSize: number;
+  numPrivateLogs: number;
+  numContractClassLogs: number;
+  numPublicLogs: number | null;
   gasLimitDa: number | null;
   gasLimitL2: number | null;
+  maxFeePerDaGas: number | null;
+  maxFeePerL2Gas: number | null;
+  numSetupCalls: number;
+  numAppCalls: number;
+  totalPublicCalldataSize: number;
+  expirationTimestamp: number | null;
+  feePayer: string;
 }
 
 // ── API functions ──

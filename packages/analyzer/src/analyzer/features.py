@@ -1,6 +1,6 @@
 """Load feature vectors and compute Gower distance matrix.
 
-The feature vector is a mixed-type array: 13 numeric dimensions followed
+The feature vector is a mixed-type array: 14 numeric dimensions followed
 by 1 categorical dimension (fee payer address).  Gower distance handles
 both types correctly — range-normalized Manhattan for numeric features,
 simple matching (0 = same, 1 = different) for categorical.
@@ -11,9 +11,9 @@ import json
 import numpy as np
 import psycopg
 
-# Layout: 13 numeric + 1 categorical (fee payer)
-NUMERIC_DIM = 13
-CATEGORICAL_START = 13
+# Layout: 14 numeric + 1 categorical (fee payer)
+NUMERIC_DIM = 14
+CATEGORICAL_START = 14
 
 
 def load_features(
@@ -22,7 +22,7 @@ def load_features(
     """Load feature vectors for a network.
 
     Returns:
-        numeric: (N, 13) array of numeric features
+        numeric: (N, 14) array of numeric features
         categoricals: list of N fee payer strings
         tx_ids: list of transaction DB IDs
         tx_hashes: list of transaction hashes

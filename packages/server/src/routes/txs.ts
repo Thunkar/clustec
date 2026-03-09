@@ -24,6 +24,13 @@ const SORT_COLUMNS: Record<string, AnyColumn> = {
   numPublicLogs: transactions.numPublicLogs,
   numContractClassLogs: transactions.numContractClassLogs,
   numL2ToL1Msgs: transactions.numL2ToL1Msgs,
+  numSetupCalls: transactions.numSetupCalls,
+  numAppCalls: transactions.numAppCalls,
+  totalPublicCalldataSize: transactions.totalPublicCalldataSize,
+  gasLimitDa: transactions.gasLimitDa,
+  gasLimitL2: transactions.gasLimitL2,
+  maxFeePerDaGas: transactions.maxFeePerDaGas,
+  maxFeePerL2Gas: transactions.maxFeePerL2Gas,
   actualFee: transactions.actualFee,
   feePayer: transactions.feePayer,
   status: transactions.status,
@@ -103,6 +110,9 @@ export function registerTxRoutes(app: FastifyInstance, db: Db) {
       totalPublicCalldataSize: transactions.totalPublicCalldataSize,
       gasLimitDa: transactions.gasLimitDa,
       gasLimitL2: transactions.gasLimitL2,
+      maxFeePerDaGas: transactions.maxFeePerDaGas,
+      maxFeePerL2Gas: transactions.maxFeePerL2Gas,
+      expirationTimestamp: transactions.expirationTimestamp,
       feePayer: transactions.feePayer,
       createdAt: transactions.createdAt,
     };
@@ -265,18 +275,19 @@ export function registerTxRoutes(app: FastifyInstance, db: Db) {
       status: string;
       numNoteHashes: number;
       numNullifiers: number;
-      numPublicDataWrites: number | null;
       numL2ToL1Msgs: number;
       numPrivateLogs: number;
-      numPublicLogs: number | null;
       numContractClassLogs: number;
-      numSetupCalls: number;
-      numAppCalls: number;
-      hasTeardown: boolean;
-      totalPublicCalldataSize: number;
+      numPublicLogs: number | null;
       gasLimitDa: number | null;
       gasLimitL2: number | null;
-      feePayer: string | null;
+      maxFeePerDaGas: number | null;
+      maxFeePerL2Gas: number | null;
+      numSetupCalls: number;
+      numAppCalls: number;
+      totalPublicCalldataSize: number;
+      expirationTimestamp: number | null;
+      feePayer: string;
       outlierScore: number | null;
     }[] = [];
 
@@ -288,17 +299,18 @@ export function registerTxRoutes(app: FastifyInstance, db: Db) {
           status: transactions.status,
           numNoteHashes: transactions.numNoteHashes,
           numNullifiers: transactions.numNullifiers,
-          numPublicDataWrites: transactions.numPublicDataWrites,
           numL2ToL1Msgs: transactions.numL2ToL1Msgs,
           numPrivateLogs: transactions.numPrivateLogs,
-          numPublicLogs: transactions.numPublicLogs,
           numContractClassLogs: transactions.numContractClassLogs,
-          numSetupCalls: transactions.numSetupCalls,
-          numAppCalls: transactions.numAppCalls,
-          hasTeardown: transactions.hasTeardown,
-          totalPublicCalldataSize: transactions.totalPublicCalldataSize,
+          numPublicLogs: transactions.numPublicLogs,
           gasLimitDa: transactions.gasLimitDa,
           gasLimitL2: transactions.gasLimitL2,
+          maxFeePerDaGas: transactions.maxFeePerDaGas,
+          maxFeePerL2Gas: transactions.maxFeePerL2Gas,
+          numSetupCalls: transactions.numSetupCalls,
+          numAppCalls: transactions.numAppCalls,
+          totalPublicCalldataSize: transactions.totalPublicCalldataSize,
+          expirationTimestamp: transactions.expirationTimestamp,
           feePayer: transactions.feePayer,
           outlierScore: clusterMemberships.outlierScore,
         })

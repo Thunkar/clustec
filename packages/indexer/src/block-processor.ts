@@ -15,7 +15,8 @@ import {
   nullifiers,
   publicDataWrites,
 } from "@clustec/common";
-import { extractFromTxEffect } from "./extractor.js";
+import { extractFromTx, extractFromTxEffect } from "./extractor.js";
+import { computeFeatureVector } from "./features.js";
 
 /**
  * Extends L2TipsMemoryStore so it acts as both the local data provider
@@ -102,18 +103,36 @@ export class BlockProcessor extends L2TipsMemoryStore {
         const effect = block.body.txEffects[i];
         const mined = extractFromTxEffect(effect, i);
 
-        // Check if tx was already seen in mempool (has feePayer)
+        // Check if tx was already seen in mempool (has pending data)
         const [existing] = await this.db
-          .select({ feePayer: transactions.feePayer })
+          .select({
+            feePayer: transactions.feePayer,
+            numNoteHashes: transactions.numNoteHashes,
+            numNullifiers: transactions.numNullifiers,
+            numL2ToL1Msgs: transactions.numL2ToL1Msgs,
+            numPrivateLogs: transactions.numPrivateLogs,
+            numContractClassLogs: transactions.numContractClassLogs,
+            gasLimitDa: transactions.gasLimitDa,
+            gasLimitL2: transactions.gasLimitL2,
+            maxFeePerDaGas: transactions.maxFeePerDaGas,
+            maxFeePerL2Gas: transactions.maxFeePerL2Gas,
+            numSetupCalls: transactions.numSetupCalls,
+            numAppCalls: transactions.numAppCalls,
+            totalPublicCalldataSize: transactions.totalPublicCalldataSize,
+            expirationTimestamp: transactions.expirationTimestamp,
+          })
           .from(transactions)
           .where(and(eq(transactions.networkId, this.networkId), eq(transactions.txHash, mined.txHash)))
           .limit(1);
 
+        // For block-first txs, extract pending data from the full Tx object
+        let pendingFields: Record<string, unknown> | null = null;
         let feePayer: string;
+
         if (existing?.feePayer) {
           feePayer = existing.feePayer;
         } else {
-          // Block-first tx: fetch full Tx from node to get fee payer
+          // Block-first tx: fetch full Tx from node to get pending data
           const fullTx = await this.node.getTxByHash(TxHash.fromString(mined.txHash));
           if (!fullTx) {
             console.warn(
@@ -123,8 +142,43 @@ export class BlockProcessor extends L2TipsMemoryStore {
             );
             continue;
           }
-          feePayer = fullTx.data.feePayer.toString();
+          const extracted = extractFromTx(fullTx);
+          feePayer = extracted.feePayer;
+          pendingFields = {
+            numNoteHashes: extracted.numNoteHashes,
+            numNullifiers: extracted.numNullifiers,
+            numL2ToL1Msgs: extracted.numL2ToL1Msgs,
+            numPrivateLogs: extracted.numPrivateLogs,
+            numContractClassLogs: extracted.numContractClassLogs,
+            gasLimitDa: extracted.gasLimitDa,
+            gasLimitL2: extracted.gasLimitL2,
+            maxFeePerDaGas: extracted.maxFeePerDaGas,
+            maxFeePerL2Gas: extracted.maxFeePerL2Gas,
+            numSetupCalls: extracted.numSetupCalls,
+            numAppCalls: extracted.numAppCalls,
+            hasTeardown: extracted.hasTeardown,
+            totalPublicCalldataSize: extracted.totalPublicCalldataSize,
+            expirationTimestamp: extracted.expirationTimestamp,
+            publicCalls: extracted.publicCalls,
+            l2ToL1MsgDetails: extracted.l2ToL1MsgDetails,
+            hasPendingData: true,
+          };
         }
+
+        const minedFields = {
+          status: "proposed" as const,
+          feePayer,
+          blockNumber: block.number,
+          txIndex: mined.txIndex,
+          executionResult: mined.executionResult,
+          actualFee: mined.actualFee,
+          numPublicDataWrites: mined.numPublicDataWrites,
+          numPublicLogs: mined.numPublicLogs,
+          privateLogTotalSize: mined.privateLogTotalSize,
+          publicLogTotalSize: mined.publicLogTotalSize,
+          rawTxEffect: JSON.parse(JSON.stringify(effect)),
+          proposedAt: new Date(),
+        };
 
         // 2a. Upsert transaction (block-first: insert new or update existing pending row)
         const upserted = await this.db
@@ -132,34 +186,16 @@ export class BlockProcessor extends L2TipsMemoryStore {
           .values({
             networkId: this.networkId,
             txHash: mined.txHash,
-            feePayer,
-            status: "proposed",
-            blockNumber: block.number,
-            txIndex: mined.txIndex,
-            executionResult: mined.executionResult,
-            actualFee: mined.actualFee,
-            numPublicDataWrites: mined.numPublicDataWrites,
-            numPublicLogs: mined.numPublicLogs,
-            privateLogTotalSize: mined.privateLogTotalSize,
-            publicLogTotalSize: mined.publicLogTotalSize,
-            rawTxEffect: JSON.parse(JSON.stringify(effect)),
-            proposedAt: new Date(),
+            ...(pendingFields ?? {}),
+            ...minedFields,
           })
           .onConflictDoUpdate({
             target: [transactions.networkId, transactions.txHash],
+            // For mempool-seen txs, only update mined fields (pending data already set)
+            // For block-first txs, also set pending fields extracted from full Tx
             set: {
-              status: "proposed",
-              feePayer,
-              blockNumber: block.number,
-              txIndex: mined.txIndex,
-              executionResult: mined.executionResult,
-              actualFee: mined.actualFee,
-              numPublicDataWrites: mined.numPublicDataWrites,
-              numPublicLogs: mined.numPublicLogs,
-              privateLogTotalSize: mined.privateLogTotalSize,
-              publicLogTotalSize: mined.publicLogTotalSize,
-              rawTxEffect: JSON.parse(JSON.stringify(effect)),
-              proposedAt: new Date(),
+              ...(pendingFields ?? {}),
+              ...minedFields,
             },
           })
           .returning({ id: transactions.id });
@@ -207,6 +243,36 @@ export class BlockProcessor extends L2TipsMemoryStore {
         }
 
         await Promise.all(inserts);
+
+        // 2c. Compute and store feature vector now that we have mined data.
+        // Pending fields come from either the existing DB row (mempool-seen)
+        // or the freshly extracted pendingFields (block-first).
+        const pf = pendingFields as Record<string, number | null> | null;
+        const vector = computeFeatureVector({
+          numNoteHashes: existing?.numNoteHashes ?? (pf?.numNoteHashes as number) ?? 0,
+          numNullifiers: existing?.numNullifiers ?? (pf?.numNullifiers as number) ?? 0,
+          numL2ToL1Msgs: existing?.numL2ToL1Msgs ?? (pf?.numL2ToL1Msgs as number) ?? 0,
+          numPrivateLogs: existing?.numPrivateLogs ?? (pf?.numPrivateLogs as number) ?? 0,
+          numContractClassLogs: existing?.numContractClassLogs ?? (pf?.numContractClassLogs as number) ?? 0,
+          numPublicLogs: mined.numPublicLogs,
+          gasLimitDa: existing?.gasLimitDa ?? (pf?.gasLimitDa as number | null) ?? null,
+          gasLimitL2: existing?.gasLimitL2 ?? (pf?.gasLimitL2 as number | null) ?? null,
+          maxFeePerDaGas: existing?.maxFeePerDaGas ?? (pf?.maxFeePerDaGas as number | null) ?? null,
+          maxFeePerL2Gas: existing?.maxFeePerL2Gas ?? (pf?.maxFeePerL2Gas as number | null) ?? null,
+          numSetupCalls: existing?.numSetupCalls ?? (pf?.numSetupCalls as number) ?? 0,
+          numAppCalls: existing?.numAppCalls ?? (pf?.numAppCalls as number) ?? 0,
+          totalPublicCalldataSize: existing?.totalPublicCalldataSize ?? (pf?.totalPublicCalldataSize as number) ?? 0,
+          feePayer,
+          expirationTimestamp: existing?.expirationTimestamp ?? (pf?.expirationTimestamp as number | null) ?? null,
+          anchorBlockTimestamp: null,
+        });
+        await this.db
+          .insert(featureVectors)
+          .values({ txId, vector })
+          .onConflictDoUpdate({
+            target: featureVectors.txId,
+            set: { vector, computedAt: new Date() },
+          });
       }
 
       // 3. Update sync cursor

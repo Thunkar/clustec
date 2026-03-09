@@ -1,28 +1,24 @@
 import { useState, useMemo } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import styled from "@emotion/styled";
 import { useNetworkStore } from "../stores/network";
 import { useClusterRuns, useClusterDetail, useClusterMembers, useOutliers } from "../api/hooks";
 import { useMyTxs } from "../stores/my-txs";
-import type { OutlierEntry, ClusterMember, ClusterSize } from "../lib/api";
+import { useAddressResolver } from "../hooks/useAddressResolver";
+import type { ClusterMember, ClusterSize } from "../lib/api";
 import {
-  PageContainer, PageTitle, Card, Table, TableWrapper, Truncate, Loading, Badge, Flex, Button,
+  PageContainer, PageTitle, Card, Table, TableWrapper, Loading, Badge, Flex, Button,
 } from "../components/ui";
+import { TxTable, type TxSortKey, type SortDir } from "../components/TxTable";
 import { theme } from "../lib/theme";
 
-type MemberSortKey = "outlierScore" | "blockNumber" | "numNoteHashes" | "numNullifiers" | "numPublicDataWrites" | "numPrivateLogs" | "numPublicLogs" | "numContractClassLogs" | "numL2ToL1Msgs" | "numSetupCalls" | "numAppCalls" | "totalPublicCalldataSize" | "gasLimitDa" | "gasLimitL2";
 type OverviewSortKey = "clusterId" | "count" | "avgOutlierScore";
-type SortDir = "asc" | "desc";
 
 const SortableHeader = styled.th<{ $active?: boolean }>`
   cursor: pointer;
   user-select: none;
   white-space: nowrap;
-
-  &:hover {
-    color: ${theme.colors.text};
-  }
-
+  &:hover { color: ${theme.colors.text}; }
   ${(p) => p.$active && `color: ${theme.colors.primary};`}
 `;
 
@@ -34,10 +30,7 @@ const BackButton = styled.button`
   font-size: ${theme.fontSize.sm};
   padding: 0;
   margin-bottom: ${theme.spacing.md};
-
-  &:hover {
-    text-decoration: underline;
-  }
+  &:hover { text-decoration: underline; }
 `;
 
 const PAGE_SIZE = 50;
@@ -45,27 +38,18 @@ const PAGE_SIZE = 50;
 // ── Cluster Members View ──
 
 function ClusterMembersView({
-  clusterId,
-  runId,
-  networkId,
-  totalTxs,
-  clusterSize,
-  onBack,
+  clusterId, runId, networkId, totalTxs, clusterSize, onBack,
 }: {
-  clusterId: number;
-  runId: number;
-  networkId: string;
-  totalTxs: number;
-  clusterSize: number;
-  onBack: () => void;
+  clusterId: number; runId: number; networkId: string;
+  totalTxs: number; clusterSize: number; onBack: () => void;
 }) {
   const { data, isLoading } = useClusterMembers(networkId, runId, clusterId);
-  const { isTracked } = useMyTxs();
-  const [sortKey, setSortKey] = useState<MemberSortKey>("outlierScore");
+  const resolveAddress = useAddressResolver();
+  const [sortKey, setSortKey] = useState<TxSortKey>("outlierScore");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [page, setPage] = useState(1);
 
-  const handleSort = (key: MemberSortKey) => {
+  const handleSort = (key: TxSortKey) => {
     if (sortKey === key) setSortDir(sortDir === "asc" ? "desc" : "asc");
     else { setSortKey(key); setSortDir("desc"); }
     setPage(1);
@@ -74,17 +58,15 @@ function ClusterMembersView({
   const sorted = useMemo(() => {
     if (!data?.members) return [];
     return [...data.members].sort((a, b) => {
-      const av = a[sortKey] ?? (sortDir === "asc" ? Infinity : -Infinity);
-      const bv = b[sortKey] ?? (sortDir === "asc" ? Infinity : -Infinity);
+      const av = (a as unknown as Record<string, unknown>)[sortKey] ?? (sortDir === "asc" ? Infinity : -Infinity);
+      const bv = (b as unknown as Record<string, unknown>)[sortKey] ?? (sortDir === "asc" ? Infinity : -Infinity);
+      if (typeof av === "string" && typeof bv === "string") return sortDir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
       return sortDir === "asc" ? (av as number) - (bv as number) : (bv as number) - (av as number);
     });
   }, [data?.members, sortKey, sortDir]);
 
   const totalPages = Math.ceil(sorted.length / PAGE_SIZE);
   const paged = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const sortIndicator = (key: MemberSortKey) =>
-    sortKey === key ? (sortDir === "asc" ? " ↑" : " ↓") : "";
-
   const pct = totalTxs > 0 ? (clusterSize / totalTxs) * 100 : 0;
 
   if (isLoading) return <Loading />;
@@ -111,102 +93,16 @@ function ClusterMembersView({
         }
       </p>
       <Card style={{ padding: 0, overflow: "hidden" }}>
-        <TableWrapper>
-        <Table>
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Tx Hash</th>
-              <SortableHeader $active={sortKey === "outlierScore"} onClick={() => handleSort("outlierScore")}>
-                Outlier Score{sortIndicator("outlierScore")}
-              </SortableHeader>
-              <SortableHeader $active={sortKey === "blockNumber"} onClick={() => handleSort("blockNumber")}>
-                Block{sortIndicator("blockNumber")}
-              </SortableHeader>
-              <SortableHeader $active={sortKey === "numNoteHashes"} onClick={() => handleSort("numNoteHashes")}>
-                Note Hashes{sortIndicator("numNoteHashes")}
-              </SortableHeader>
-              <SortableHeader $active={sortKey === "numNullifiers"} onClick={() => handleSort("numNullifiers")}>
-                Nullifiers{sortIndicator("numNullifiers")}
-              </SortableHeader>
-              <SortableHeader $active={sortKey === "numPublicDataWrites"} onClick={() => handleSort("numPublicDataWrites")}>
-                Public Data Writes{sortIndicator("numPublicDataWrites")}
-              </SortableHeader>
-              <SortableHeader $active={sortKey === "numPrivateLogs"} onClick={() => handleSort("numPrivateLogs")}>
-                Private Logs{sortIndicator("numPrivateLogs")}
-              </SortableHeader>
-              <SortableHeader $active={sortKey === "numPublicLogs"} onClick={() => handleSort("numPublicLogs")}>
-                Public Logs{sortIndicator("numPublicLogs")}
-              </SortableHeader>
-              <SortableHeader $active={sortKey === "numContractClassLogs"} onClick={() => handleSort("numContractClassLogs")}>
-                Contract Class Logs{sortIndicator("numContractClassLogs")}
-              </SortableHeader>
-              <SortableHeader $active={sortKey === "numL2ToL1Msgs"} onClick={() => handleSort("numL2ToL1Msgs")}>
-                L2→L1 Messages{sortIndicator("numL2ToL1Msgs")}
-              </SortableHeader>
-              <SortableHeader $active={sortKey === "numSetupCalls"} onClick={() => handleSort("numSetupCalls")}>
-                Setup Calls{sortIndicator("numSetupCalls")}
-              </SortableHeader>
-              <SortableHeader $active={sortKey === "numAppCalls"} onClick={() => handleSort("numAppCalls")}>
-                App Calls{sortIndicator("numAppCalls")}
-              </SortableHeader>
-              <th>Teardown</th>
-              <SortableHeader $active={sortKey === "totalPublicCalldataSize"} onClick={() => handleSort("totalPublicCalldataSize")}>
-                Calldata Size{sortIndicator("totalPublicCalldataSize")}
-              </SortableHeader>
-              <SortableHeader $active={sortKey === "gasLimitDa"} onClick={() => handleSort("gasLimitDa")}>
-                Gas Limit (DA){sortIndicator("gasLimitDa")}
-              </SortableHeader>
-              <SortableHeader $active={sortKey === "gasLimitL2"} onClick={() => handleSort("gasLimitL2")}>
-                Gas Limit (L2){sortIndicator("gasLimitL2")}
-              </SortableHeader>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {paged.map((m, i) => (
-              <tr key={m.txId}>
-                <td>{(page - 1) * PAGE_SIZE + i + 1}</td>
-                <td>
-                  <Link to={`/tx/${m.txHash}`} style={{ color: theme.colors.primary, textDecoration: "none" }}>
-                    <Truncate>{m.txHash}</Truncate>
-                  </Link>
-                </td>
-                <td>
-                  {m.outlierScore != null ? (
-                    <Badge color={
-                      m.outlierScore > 0.5 ? theme.colors.danger
-                        : m.outlierScore > 0.2 ? theme.colors.warning
-                          : theme.colors.success
-                    }>
-                      {(m.outlierScore * 100).toFixed(1)}%
-                    </Badge>
-                  ) : (
-                    <span style={{ color: theme.colors.textMuted }}>—</span>
-                  )}
-                </td>
-                <td>{m.blockNumber != null ? m.blockNumber.toLocaleString() : "—"}</td>
-                <td>{m.numNoteHashes}</td>
-                <td>{m.numNullifiers}</td>
-                <td>{m.numPublicDataWrites ?? "—"}</td>
-                <td>{m.numPrivateLogs}</td>
-                <td>{m.numPublicLogs}</td>
-                <td>{m.numContractClassLogs}</td>
-                <td>{m.numL2ToL1Msgs}</td>
-                <td>{m.numSetupCalls}</td>
-                <td>{m.numAppCalls}</td>
-                <td>{m.hasTeardown ? "Yes" : "No"}</td>
-                <td>{m.totalPublicCalldataSize}</td>
-                <td>{m.gasLimitDa != null ? m.gasLimitDa.toLocaleString() : "—"}</td>
-                <td>{m.gasLimitL2 != null ? m.gasLimitL2.toLocaleString() : "—"}</td>
-                <td>
-                  {isTracked(m.txHash) && <Badge color={theme.colors.warning}>Mine</Badge>}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </Table>
-        </TableWrapper>
+        <TxTable
+          rows={paged}
+          sortKey={sortKey}
+          sortDir={sortDir}
+          onSort={handleSort}
+          resolveAddress={resolveAddress}
+          showOutlierScore
+          showIndex
+          pageOffset={(page - 1) * PAGE_SIZE}
+        />
       </Card>
       {totalPages > 1 && (
         <Flex justify="center" gap="12px" style={{ marginTop: theme.spacing.md }}>
@@ -236,7 +132,7 @@ export function Outliers() {
     : null;
 
   const [sortKey, setSortKey] = useState<OverviewSortKey>("count");
-  const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [page, setPage] = useState(1);
 
   const handleSort = (key: OverviewSortKey) => {
@@ -259,20 +155,13 @@ export function Outliers() {
   const sorted = useMemo(() => {
     if (!detail?.clusterSizes) return [];
     return [...detail.clusterSizes].sort((a, b) => {
-      // Outliers (clusterId === -1) always appear first
       if (a.clusterId === -1 && b.clusterId !== -1) return -1;
       if (b.clusterId === -1 && a.clusterId !== -1) return 1;
-
       let av: number, bv: number;
       switch (sortKey) {
-        case "clusterId":
-          av = a.clusterId; bv = b.clusterId; break;
-        case "count":
-          av = Number(a.count);
-          bv = Number(b.count); break;
-        case "avgOutlierScore":
-          av = a.avgOutlierScore ?? 0;
-          bv = b.avgOutlierScore ?? 0; break;
+        case "clusterId": av = a.clusterId; bv = b.clusterId; break;
+        case "count": av = Number(a.count); bv = Number(b.count); break;
+        case "avgOutlierScore": av = a.avgOutlierScore ?? 0; bv = b.avgOutlierScore ?? 0; break;
       }
       return sortDir === "asc" ? av - bv : bv - av;
     });
@@ -285,11 +174,10 @@ export function Outliers() {
 
   if (isLoading) return <Loading />;
 
-  // Drill-down into a specific cluster
   if (selectedCluster !== null) {
     const clusterSize = clusterSizeMap.get(selectedCluster) ?? 0;
     return (
-      <PageContainer>
+      <PageContainer style={{ maxWidth: "none", padding: theme.spacing.md }}>
         <ClusterMembersView
           clusterId={selectedCluster}
           runId={latestRunId}

@@ -45,6 +45,26 @@ const Legend = styled.div`
   min-width: 0;
 `;
 
+const DashboardContainer = styled(PageContainer)`
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 56px);
+  overflow: hidden;
+
+  @media (max-width: 768px) {
+    height: auto;
+    overflow: auto;
+  }
+`;
+
+const PlotSection = styled.div`
+  margin-top: ${theme.spacing.md};
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+`;
+
 export function Dashboard() {
   const { selectedNetwork } = useNetworkStore();
   const navigate = useNavigate();
@@ -83,7 +103,7 @@ export function Dashboard() {
   if (isLoading) return <Loading />;
 
   return (
-    <PageContainer>
+    <DashboardContainer>
       <PageTitle>Dashboard</PageTitle>
 
       <TopRow>
@@ -152,11 +172,11 @@ export function Dashboard() {
 
       {/* 3D UMAP Projection */}
       {umapData?.points && umapData.points.length > 0 && (
-        <div style={{ marginTop: theme.spacing.md }}>
+        <PlotSection>
           <p style={{ color: theme.colors.textMuted, marginBottom: theme.spacing.sm, fontSize: theme.fontSize.xs }}>
             3D cluster visualization. Drag to rotate, scroll to zoom, click a point to view.
           </p>
-          <Card style={{ padding: theme.spacing.sm, overflow: "hidden", height: "clamp(400px, 50vh, 700px)" }}>
+          <Card style={{ padding: theme.spacing.sm, overflow: "hidden", flex: 1, minHeight: 400 }}>
             <ScatterPlot3D
               points={umapData.points}
               height="100%"
@@ -164,8 +184,8 @@ export function Dashboard() {
               onOutlierClick={(p) => navigate(`/tx/${p.txHash}`)}
             />
           </Card>
-        </div>
+        </PlotSection>
       )}
-    </PageContainer>
+    </DashboardContainer>
   );
 }

@@ -16,13 +16,13 @@ def two_clusters():
     """Two clear numeric clusters with different categorical labels."""
     rng = np.random.default_rng(42)
     # Cluster A: low values, fee payer "0xAAA"
-    numeric_a = rng.normal(0, 0.5, (30, 13))
+    numeric_a = rng.normal(0, 0.5, (30, 14))
     cats_a = ["0xAAA"] * 30
     # Cluster B: high values, fee payer "0xBBB"
-    numeric_b = rng.normal(5, 0.5, (30, 13))
+    numeric_b = rng.normal(5, 0.5, (30, 14))
     cats_b = ["0xBBB"] * 30
     # Outliers: extreme values, third fee payer
-    numeric_out = rng.normal(20, 0.1, (3, 13))
+    numeric_out = rng.normal(20, 0.1, (3, 14))
     cats_out = ["0xCCC"] * 3
 
     numeric = np.vstack([numeric_a, numeric_b, numeric_out])

@@ -3,10 +3,8 @@ import {
   type Db,
   transactions,
   contractInteractions,
-  featureVectors,
 } from "@clustec/common";
 import { extractFromTx } from "./extractor.js";
-import { computeFeatureVector } from "./features.js";
 
 export class MempoolWatcher {
   private running = false;
@@ -72,7 +70,6 @@ export class MempoolWatcher {
 
       try {
         const extracted = extractFromTx(tx);
-        const vector = computeFeatureVector(extracted);
 
         const pendingFields = {
           numNoteHashes: extracted.numNoteHashes,
@@ -141,16 +138,6 @@ export class MempoolWatcher {
               .onConflictDoNothing()
           );
         }
-
-        inserts.push(
-          this.db
-            .insert(featureVectors)
-            .values({ txId, vector })
-            .onConflictDoUpdate({
-              target: featureVectors.txId,
-              set: { vector, computedAt: new Date() },
-            })
-        );
 
         await Promise.all(inserts);
         processed++;

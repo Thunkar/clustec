@@ -14,6 +14,7 @@ import { useTxDetail, useTxGraph } from "../api/hooks";
 import { useMyTxs } from "../stores/my-txs";
 import { useAddressResolver } from "../hooks/useAddressResolver";
 import type { PrivateLogDetail, ContractClassLogDetail, PublicAddress } from "../lib/api";
+import { TxTable } from "../components/TxTable";
 import {
   PageContainer,
   PageTitle,
@@ -858,80 +859,11 @@ export function TxDetail() {
             Similar Transactions ({similarTxs.length})
           </SectionTitle>
           <Card style={{ padding: 0, overflow: "hidden" }}>
-            <TableWrapper>
-            <Table>
-              <thead>
-                <tr>
-                  <th>Hash</th>
-                  <th>Status</th>
-                  <th>Block</th>
-                  <th>Note Hashes</th>
-                  <th>Nullifiers</th>
-                  <th>Public Data Writes</th>
-                  <th>Private Logs</th>
-                  <th>Public Logs</th>
-                  <th>Contract Class Logs</th>
-                  <th>L2→L1 Messages</th>
-                  <th>Setup Calls</th>
-                  <th>App Calls</th>
-                  <th>Teardown</th>
-                  <th>Calldata Size</th>
-                  <th>Gas Limit (DA)</th>
-                  <th>Gas Limit (L2)</th>
-                  <th>Fee Payer</th>
-                  <th>Outlier Score</th>
-                </tr>
-              </thead>
-              <tbody>
-                {similarTxs.map((stx) => (
-                  <tr key={stx.txHash}>
-                    <td>
-                      <Link
-                        to={`/tx/${stx.txHash}`}
-                        style={{
-                          color: theme.colors.primary,
-                          textDecoration: "none",
-                        }}
-                      >
-                        <Truncate>{stx.txHash}</Truncate>
-                      </Link>
-                    </td>
-                    <td><StatusBadge status={stx.status} /></td>
-                    <td>{stx.blockNumber != null ? stx.blockNumber.toLocaleString() : "\u2014"}</td>
-                    <td>{stx.numNoteHashes}</td>
-                    <td>{stx.numNullifiers}</td>
-                    <td>{stx.numPublicDataWrites ?? "\u2014"}</td>
-                    <td>{stx.numPrivateLogs}</td>
-                    <td>{stx.numPublicLogs ?? "\u2014"}</td>
-                    <td>{stx.numContractClassLogs}</td>
-                    <td>{stx.numL2ToL1Msgs}</td>
-                    <td>{stx.numSetupCalls}</td>
-                    <td>{stx.numAppCalls}</td>
-                    <td>{stx.hasTeardown ? "Yes" : "No"}</td>
-                    <td>{stx.totalPublicCalldataSize}</td>
-                    <td>{stx.gasLimitDa != null ? stx.gasLimitDa.toLocaleString() : "\u2014"}</td>
-                    <td>{stx.gasLimitL2 != null ? stx.gasLimitL2.toLocaleString() : "\u2014"}</td>
-                    <td>
-                      <Mono style={{ fontSize: "10px" }}>
-                        {resolveAddress(stx.feePayer)}
-                      </Mono>
-                    </td>
-                    <td>
-                      {stx.outlierScore != null ? (
-                        <Badge color={
-                          stx.outlierScore > 0.5 ? theme.colors.danger
-                            : stx.outlierScore > 0.2 ? theme.colors.warning
-                              : theme.colors.success
-                        }>
-                          {(stx.outlierScore * 100).toFixed(1)}%
-                        </Badge>
-                      ) : "\u2014"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </Table>
-            </TableWrapper>
+            <TxTable
+              rows={similarTxs}
+              resolveAddress={resolveAddress}
+              showOutlierScore
+            />
           </Card>
         </>
       )}
@@ -956,7 +888,7 @@ export function TxDetail() {
               <FeatureRow key={i}>
                 <FeatureName>{label}</FeatureName>
                 <FeatureValue>
-                  {i === 13
+                  {i === 14
                     ? resolveAddress(String(featureVector[i]))
                     : typeof featureVector[i] === "number"
                       ? (featureVector[i] as number).toLocaleString()
@@ -979,6 +911,7 @@ const FEATURE_LABELS = [
   "L2 to L1 Messages",
   "Private Logs",
   "Contract Class Logs",
+  "Public Logs",
   "Gas Limit (DA)",
   "Gas Limit (L2)",
   "Max Fee Per DA Gas",

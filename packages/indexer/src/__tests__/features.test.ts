@@ -1,38 +1,34 @@
 import { describe, it, expect } from "vitest";
-import { computeFeatureVector, FEATURE_DIM, NUMERIC_DIM } from "../features.js";
-import type { ExtractedPendingData } from "../types.js";
+import { computeFeatureVector, FEATURE_DIM, NUMERIC_DIM, type FeatureInput } from "../features.js";
 
-function makeTx(overrides: Partial<ExtractedPendingData> = {}): ExtractedPendingData {
+function makeTx(overrides: Partial<FeatureInput> = {}): FeatureInput {
   return {
-    txHash: "0xabc",
     numNoteHashes: 0,
     numNullifiers: 1,
     numL2ToL1Msgs: 0,
     numPrivateLogs: 0,
     numContractClassLogs: 0,
+    numPublicLogs: 0,
     gasLimitDa: null,
     gasLimitL2: null,
     maxFeePerDaGas: null,
     maxFeePerL2Gas: null,
     numSetupCalls: 0,
     numAppCalls: 0,
-    hasTeardown: false,
     totalPublicCalldataSize: 0,
-    publicCalls: [],
     feePayer: "0x" + "ab".repeat(32),
     expirationTimestamp: null,
     anchorBlockTimestamp: null,
-    l2ToL1MsgDetails: [],
     ...overrides,
   };
 }
 
 describe("computeFeatureVector", () => {
-  it("produces a 14-dimensional vector (13 numeric + 1 categorical)", () => {
+  it("produces a 15-dimensional vector (14 numeric + 1 categorical)", () => {
     const vector = computeFeatureVector(makeTx());
     expect(vector).toHaveLength(FEATURE_DIM);
-    expect(FEATURE_DIM).toBe(14);
-    expect(NUMERIC_DIM).toBe(13);
+    expect(FEATURE_DIM).toBe(15);
+    expect(NUMERIC_DIM).toBe(14);
   });
 
   it("encodes numeric features in the correct positions", () => {
@@ -42,6 +38,7 @@ describe("computeFeatureVector", () => {
       numL2ToL1Msgs: 1,
       numPrivateLogs: 2,
       numContractClassLogs: 1,
+      numPublicLogs: 4,
       gasLimitDa: 100,
       gasLimitL2: 200,
       maxFeePerDaGas: 10,
@@ -59,20 +56,21 @@ describe("computeFeatureVector", () => {
     expect(vector[2]).toBe(1);   // numL2ToL1Msgs
     expect(vector[3]).toBe(2);   // numPrivateLogs
     expect(vector[4]).toBe(1);   // numContractClassLogs
-    expect(vector[5]).toBe(100); // gasLimitDa
-    expect(vector[6]).toBe(200); // gasLimitL2
-    expect(vector[7]).toBe(10);  // maxFeePerDaGas
-    expect(vector[8]).toBe(20);  // maxFeePerL2Gas
-    expect(vector[9]).toBe(1);   // numSetupCalls
-    expect(vector[10]).toBe(2);  // numAppCalls
-    expect(vector[11]).toBe(50); // totalPublicCalldataSize
-    expect(vector[12]).toBe(24); // expirationDelta
+    expect(vector[5]).toBe(4);   // numPublicLogs
+    expect(vector[6]).toBe(100); // gasLimitDa
+    expect(vector[7]).toBe(200); // gasLimitL2
+    expect(vector[8]).toBe(10);  // maxFeePerDaGas
+    expect(vector[9]).toBe(20);  // maxFeePerL2Gas
+    expect(vector[10]).toBe(1);  // numSetupCalls
+    expect(vector[11]).toBe(2);  // numAppCalls
+    expect(vector[12]).toBe(50); // totalPublicCalldataSize
+    expect(vector[13]).toBe(24); // expirationDelta
   });
 
-  it("includes fee payer address at position 13", () => {
+  it("includes fee payer address at position 14", () => {
     const addr = "0x" + "cd".repeat(32);
     const vector = computeFeatureVector(makeTx({ feePayer: addr }));
-    expect(vector[13]).toBe(addr);
+    expect(vector[14]).toBe(addr);
   });
 
   it("preserves different fee payer addresses", () => {
@@ -80,18 +78,19 @@ describe("computeFeatureVector", () => {
     const addrB = "0x" + "bb".repeat(32);
     const vA = computeFeatureVector(makeTx({ feePayer: addrA }));
     const vB = computeFeatureVector(makeTx({ feePayer: addrB }));
-    expect(vA[13]).toBe(addrA);
-    expect(vB[13]).toBe(addrB);
-    expect(vA[13]).not.toBe(vB[13]);
+    expect(vA[14]).toBe(addrA);
+    expect(vB[14]).toBe(addrB);
+    expect(vA[14]).not.toBe(vB[14]);
   });
 
-  it("uses 0 for null gas values and null expiration", () => {
-    const vector = computeFeatureVector(makeTx());
-    expect(vector[5]).toBe(0);  // gasLimitDa
-    expect(vector[6]).toBe(0);  // gasLimitL2
-    expect(vector[7]).toBe(0);  // maxFeePerDaGas
-    expect(vector[8]).toBe(0);  // maxFeePerL2Gas
-    expect(vector[12]).toBe(0); // expirationDelta (null → 0)
+  it("uses 0 for null gas values, null expiration, and null numPublicLogs", () => {
+    const vector = computeFeatureVector(makeTx({ numPublicLogs: null }));
+    expect(vector[5]).toBe(0);  // numPublicLogs (null → 0)
+    expect(vector[6]).toBe(0);  // gasLimitDa
+    expect(vector[7]).toBe(0);  // gasLimitL2
+    expect(vector[8]).toBe(0);  // maxFeePerDaGas
+    expect(vector[9]).toBe(0);  // maxFeePerL2Gas
+    expect(vector[13]).toBe(0); // expirationDelta (null → 0)
   });
 
   it("computes expiration delta from anchor block", () => {
@@ -99,14 +98,14 @@ describe("computeFeatureVector", () => {
       expirationTimestamp: 1000048,
       anchorBlockTimestamp: 1000000,
     }));
-    expect(vector[12]).toBe(48);
+    expect(vector[13]).toBe(48);
   });
 
   it("uses 0 when only one of expiration/anchor is present", () => {
     const v1 = computeFeatureVector(makeTx({ expirationTimestamp: 100 }));
-    expect(v1[12]).toBe(0);
+    expect(v1[13]).toBe(0);
     const v2 = computeFeatureVector(makeTx({ anchorBlockTimestamp: 100 }));
-    expect(v2[12]).toBe(0);
+    expect(v2[13]).toBe(0);
   });
 
   it("produces different vectors for differently shaped txs", () => {

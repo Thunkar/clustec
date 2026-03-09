@@ -8,7 +8,7 @@ import { eq } from "drizzle-orm";
 import { createDb, networks, syncCursors } from "@clustec/common";
 import { BlockProcessor } from "./block-processor.js";
 import { MempoolWatcher } from "./mempool-watcher.js";
-import { reconcileOnStartup } from "./startup-reconciler.js";
+import { startReconciler } from "./reconciler.js";
 
 interface NetworkConfig {
   id: string;
@@ -88,10 +88,9 @@ async function main() {
     console.log(`[${config.id}] Network registered in DB.`);
   }
 
-  // 1. Reconcile non-finalized txs before starting streams
-  console.log(`[${config.id}] Running startup reconciliation...`);
-  await reconcileOnStartup(config.id, node, db);
-  console.log(`[${config.id}] Startup reconciliation complete.`);
+  // 1. Reconcile non-finalized txs on startup + periodically (every 60s)
+  console.log(`[${config.id}] Starting reconciler...`);
+  await startReconciler(config.id, node, db);
 
   // 2. Mempool watcher — catches pending txs with full Tx data
   const mempoolWatcher = new MempoolWatcher(
