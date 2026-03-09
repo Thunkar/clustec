@@ -655,7 +655,7 @@ export function TxDetail() {
         {tx.actualFee && (
           <Field>
             <FieldLabel>Actual Fee</FieldLabel>
-            <FieldValue>{tx.actualFee}</FieldValue>
+            <FieldValue>{Number(tx.actualFee).toLocaleString()} mana</FieldValue>
           </Field>
         )}
         {tx.expirationTimestamp != null && tx.expirationTimestamp !== 0 && (

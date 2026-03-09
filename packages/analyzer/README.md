@@ -9,7 +9,7 @@ Clusters Aztec L2 transactions by shape to detect privacy leaks. Uses Gower dist
                       │
                       ▼
               ┌───────────────┐
-              │ load_features │  Extract 13 numeric dims + fee payer
+              │ load_features │  Extract 14 numeric dims + fee payer
               └───────┬───────┘  from feature_vectors table
                       │
                       ▼
@@ -44,7 +44,7 @@ Both HDBSCAN and UMAP operate on the **same Gower distance matrix**. UMAP preser
 
 | Step | Module | What it does |
 |------|--------|-------------|
-| 1 | `features.load_features` | Loads feature vectors from DB. Splits into 13 numeric dimensions and 1 categorical (fee payer). |
+| 1 | `features.load_features` | Loads feature vectors from DB. Splits into 14 numeric dimensions and 1 categorical (fee payer). |
 | 2 | `features.gower_distance_matrix` | Computes N×N pairwise distance matrix using Gower distance. |
 | 3 | `umap_proj.compute_umap` | Projects distance matrix to 2D/3D via UMAP (`metric="precomputed"`). For visualization only. |
 | 4 | `clustering.run_hdbscan` | Clusters on the Gower distance matrix (`metric="precomputed"`). Returns labels, membership scores, outlier scores. |
@@ -67,9 +67,9 @@ gower(i, j) = (sum of numeric distances + sum of categorical distances) / total 
 
 Result is always in [0, 1]. Both HDBSCAN and UMAP accept precomputed distance matrices.
 
-## Feature Vector Layout (14 dimensions)
+## Feature Vector Layout (15 dimensions)
 
-Computed by the indexer from mempool `Tx` data and stored in `feature_vectors.vector` as JSON.
+Computed by the indexer at block time (when txs are proposed) and stored in `feature_vectors.vector` as JSON. This ensures post-execution fields like `numPublicLogs` have real values.
 
 | Dim | Field | Type |
 |-----|-------|------|
@@ -78,15 +78,16 @@ Computed by the indexer from mempool `Tx` data and stored in `feature_vectors.ve
 | 2 | numL2ToL1Msgs | numeric |
 | 3 | numPrivateLogs | numeric |
 | 4 | numContractClassLogs | numeric |
-| 5 | gasLimitDa | numeric |
-| 6 | gasLimitL2 | numeric |
-| 7 | maxFeePerDaGas | numeric |
-| 8 | maxFeePerL2Gas | numeric |
-| 9 | numSetupCalls | numeric |
-| 10 | numAppCalls | numeric |
-| 11 | totalPublicCalldataSize | numeric |
-| 12 | expirationDelta | numeric |
-| 13 | feePayer | categorical |
+| 5 | numPublicLogs | numeric |
+| 6 | gasLimitDa | numeric |
+| 7 | gasLimitL2 | numeric |
+| 8 | maxFeePerDaGas | numeric |
+| 9 | maxFeePerL2Gas | numeric |
+| 10 | numSetupCalls | numeric |
+| 11 | numAppCalls | numeric |
+| 12 | totalPublicCalldataSize | numeric |
+| 13 | expirationDelta | numeric |
+| 14 | feePayer | categorical |
 
 **Fee payer** is the AztecAddress that pays the tx fee. Txs using the same fee payment contract (FPC) will share this value — a strong clustering signal indicating they likely come from the same application.
 
