@@ -1,5 +1,8 @@
+import type { AztecNode } from "@aztec/stdlib/interfaces/client";
 import type { L2BlockStreamEvent } from "@aztec/stdlib/block";
 import { L2TipsMemoryStore } from "@aztec/stdlib/block";
+import { TxHash } from "@aztec/stdlib/tx";
+import type { BlockNumber } from "@aztec/foundation/branded-types";
 import { eq, and, gt, lte, inArray } from "drizzle-orm";
 import {
   type Db,
@@ -28,9 +31,23 @@ import { extractFromTxEffect } from "./extractor.js";
 export class BlockProcessor extends L2TipsMemoryStore {
   constructor(
     private readonly networkId: string,
+    private readonly node: AztecNode,
     private readonly db: Db,
   ) {
     super();
+  }
+
+  /**
+   * Fall back to the node for block hashes not yet in the memory store.
+   * Required for reorg detection on startup when skipFinalized is set.
+   */
+  override async getL2BlockHash(number: BlockNumber): Promise<string | undefined> {
+    const stored = await super.getL2BlockHash(number);
+    if (stored) return stored;
+    const header = await this.node.getBlockHeader(number);
+    if (!header) return undefined;
+    const hash = await header.hash();
+    return hash.toString();
   }
 
   override async handleBlockStreamEvent(
@@ -85,12 +102,37 @@ export class BlockProcessor extends L2TipsMemoryStore {
         const effect = block.body.txEffects[i];
         const mined = extractFromTxEffect(effect, i);
 
+        // Check if tx was already seen in mempool (has feePayer)
+        const [existing] = await this.db
+          .select({ feePayer: transactions.feePayer })
+          .from(transactions)
+          .where(and(eq(transactions.networkId, this.networkId), eq(transactions.txHash, mined.txHash)))
+          .limit(1);
+
+        let feePayer: string;
+        if (existing?.feePayer) {
+          feePayer = existing.feePayer;
+        } else {
+          // Block-first tx: fetch full Tx from node to get fee payer
+          const fullTx = await this.node.getTxByHash(TxHash.fromString(mined.txHash));
+          if (!fullTx) {
+            console.warn(
+              `[${this.networkId}] Skipping tx ${mined.txHash} in block ${block.number}: ` +
+              `not in DB and not available from node (likely already finalized). ` +
+              `This should not happen during normal operation — check startingBlock config.`
+            );
+            continue;
+          }
+          feePayer = fullTx.data.feePayer.toString();
+        }
+
         // 2a. Upsert transaction (block-first: insert new or update existing pending row)
         const upserted = await this.db
           .insert(transactions)
           .values({
             networkId: this.networkId,
             txHash: mined.txHash,
+            feePayer,
             status: "proposed",
             blockNumber: block.number,
             txIndex: mined.txIndex,
@@ -107,6 +149,7 @@ export class BlockProcessor extends L2TipsMemoryStore {
             target: [transactions.networkId, transactions.txHash],
             set: {
               status: "proposed",
+              feePayer,
               blockNumber: block.number,
               txIndex: mined.txIndex,
               executionResult: mined.executionResult,

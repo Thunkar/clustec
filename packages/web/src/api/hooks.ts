@@ -116,4 +116,12 @@ export function useTxGraph(networkId: string, hash: string) {
   });
 }
 
+export function useFeePayerStats(networkId: string) {
+  return useQuery({
+    queryKey: ["networks", networkId, "fee-payer-stats"],
+    queryFn: () => api.getFeePayerStats(networkId),
+    enabled: !!networkId,
+  });
+}
+
 

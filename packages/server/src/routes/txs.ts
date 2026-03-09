@@ -60,24 +60,56 @@ export function registerTxRoutes(app: FastifyInstance, db: Db) {
       conditions.push(eq(transactions.feePayer, feePayer));
     }
 
-    // Fuzzy search: match against tx hash, fee payer, or JSONB public calls addresses
+    // Search: match against tx hash, fee payer, or public call addresses
     if (search) {
       const pattern = `%${search}%`;
       conditions.push(
         or(
           ilike(transactions.txHash, pattern),
           ilike(transactions.feePayer, pattern),
-          // Search inside publicCalls JSONB - contract addresses and msg senders
-          sql`${transactions.publicCalls}::text ILIKE ${pattern}`,
+          // Search contractAddress and msgSender inside publicCalls JSONB array
+          sql`EXISTS (
+            SELECT 1 FROM jsonb_array_elements(${transactions.publicCalls}) AS elem
+            WHERE elem->>'contractAddress' ILIKE ${pattern}
+               OR elem->>'msgSender' ILIKE ${pattern}
+          )`,
         )!,
       );
     }
 
     const where = and(...conditions);
 
+    // Select only lightweight scalar columns — exclude heavy JSONB blobs
+    // (publicCalls, l2ToL1MsgDetails, rawTx, rawTxEffect)
+    const listColumns = {
+      id: transactions.id,
+      networkId: transactions.networkId,
+      txHash: transactions.txHash,
+      status: transactions.status,
+      executionResult: transactions.executionResult,
+      blockNumber: transactions.blockNumber,
+      txIndex: transactions.txIndex,
+      actualFee: transactions.actualFee,
+      numNoteHashes: transactions.numNoteHashes,
+      numNullifiers: transactions.numNullifiers,
+      numL2ToL1Msgs: transactions.numL2ToL1Msgs,
+      numPrivateLogs: transactions.numPrivateLogs,
+      numContractClassLogs: transactions.numContractClassLogs,
+      numPublicDataWrites: transactions.numPublicDataWrites,
+      numPublicLogs: transactions.numPublicLogs,
+      numSetupCalls: transactions.numSetupCalls,
+      numAppCalls: transactions.numAppCalls,
+      hasTeardown: transactions.hasTeardown,
+      totalPublicCalldataSize: transactions.totalPublicCalldataSize,
+      gasLimitDa: transactions.gasLimitDa,
+      gasLimitL2: transactions.gasLimitL2,
+      feePayer: transactions.feePayer,
+      createdAt: transactions.createdAt,
+    };
+
     const [rows, [{ count: total }]] = await Promise.all([
       db
-        .select()
+        .select(listColumns)
         .from(transactions)
         .where(where)
         .orderBy(sortDir(sortCol))
@@ -282,6 +314,76 @@ export function registerTxRoutes(app: FastifyInstance, db: Db) {
         .limit(20);
     }
 
+    // Extract private log details from rawTxEffect
+    const rawEffect = tx.rawTxEffect as Record<string, unknown> | null;
+    const privateLogDetails: { index: number; emittedLength: number }[] = [];
+    if (rawEffect && Array.isArray(rawEffect.privateLogs)) {
+      for (let i = 0; i < rawEffect.privateLogs.length; i++) {
+        const log = rawEffect.privateLogs[i] as Record<string, unknown>;
+        const emitted = typeof log?.emittedLength === "number" ? log.emittedLength : 0;
+        if (emitted > 0) {
+          privateLogDetails.push({ index: i, emittedLength: emitted });
+        }
+      }
+    }
+
+    // Extract contract class log details from rawTxEffect
+    const contractClassLogDetails: { index: number; contractAddress: string | null; contractClassId: string | null; emittedLength: number }[] = [];
+    if (rawEffect && Array.isArray(rawEffect.contractClassLogs)) {
+      for (let i = 0; i < rawEffect.contractClassLogs.length; i++) {
+        const log = rawEffect.contractClassLogs[i] as Record<string, unknown>;
+        const addr = typeof log?.contractAddress === "string" ? log.contractAddress : null;
+        const emitted = typeof log?.emittedLength === "number" ? log.emittedLength : 0;
+        // contractClassId is typically the first field in the log
+        const fields = Array.isArray(log?.fields) ? log.fields as string[] : [];
+        const contractClassId = fields.length > 0 ? String(fields[0]) : null;
+        if (addr || emitted > 0) {
+          contractClassLogDetails.push({ index: i, contractAddress: addr, contractClassId, emittedLength: emitted });
+        }
+      }
+    }
+
+    // Collect all publicly visible addresses
+    const l2ToL1Msgs = (tx.l2ToL1MsgDetails ?? []) as { recipient: string; senderContract: string }[];
+    const addrSet = new Map<string, { address: string; source: string }>();
+    const addAddr = (address: string, source: string) => {
+      if (address && !addrSet.has(`${address}:${source}`)) {
+        addrSet.set(`${address}:${source}`, { address, source });
+      }
+    };
+
+    if (tx.feePayer) addAddr(tx.feePayer, "feePayer");
+    for (let ci = 0; ci < rawCalls.length; ci++) {
+      const c = rawCalls[ci];
+      addAddr(c.contractAddress, `publicCalls[${ci}].contractAddress`);
+      if (c.msgSender) addAddr(c.msgSender, `publicCalls[${ci}].msgSender`);
+    }
+    for (let mi = 0; mi < l2ToL1Msgs.length; mi++) {
+      const msg = l2ToL1Msgs[mi];
+      addAddr(msg.recipient, `l2ToL1Msgs[${mi}].recipient`);
+      addAddr(msg.senderContract, `l2ToL1Msgs[${mi}].senderContract`);
+    }
+
+    const publicAddresses = [...addrSet.values()].map((a) => {
+      const label = labels.find(
+        (l) => l.address.toLowerCase() === a.address.toLowerCase()
+      );
+      return { ...a, label: label?.label ?? null };
+    });
+
+    // Fee payer usage percentage across all txs on this network
+    const [feePayerCount] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(transactions)
+      .where(and(eq(transactions.networkId, id), eq(transactions.feePayer, tx.feePayer)));
+    const [totalCount] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(transactions)
+      .where(eq(transactions.networkId, id));
+    const feePayerPct = totalCount.count > 0
+      ? (Number(feePayerCount.count) / Number(totalCount.count)) * 100
+      : 0;
+
     return {
       tx,
       featureVector: fv?.vector ?? null,
@@ -292,6 +394,48 @@ export function registerTxRoutes(app: FastifyInstance, db: Db) {
       clusterMemberships: memberships,
       privacySet,
       similarTxs,
+      privateLogDetails,
+      contractClassLogDetails,
+      publicAddresses,
+      feePayerPct,
     };
+  });
+
+  // Fee payer distribution stats
+  app.get<{
+    Params: { id: string };
+  }>("/api/networks/:id/txs/stats/fee-payers", async (request) => {
+    const { id } = request.params;
+
+    const rows = await db
+      .select({
+        address: transactions.feePayer,
+        count: sql<number>`count(*)`,
+      })
+      .from(transactions)
+      .where(eq(transactions.networkId, id))
+      .groupBy(transactions.feePayer)
+      .orderBy(desc(sql`count(*)`))
+      .limit(20);
+
+    const labels = await db
+      .select()
+      .from(contractLabels)
+      .where(eq(contractLabels.networkId, id));
+
+    const feePayers = rows
+      .filter((r) => r.address != null)
+      .map((r) => {
+        const label = labels.find(
+          (l) => l.address.toLowerCase() === r.address!.toLowerCase()
+        );
+        return {
+          address: r.address!,
+          count: Number(r.count),
+          label: label?.label ?? null,
+        };
+      });
+
+    return { feePayers };
   });
 }

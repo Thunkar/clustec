@@ -134,7 +134,7 @@ export const transactions = pgTable(
       .default(0),
 
     // ── Queryable metadata ──
-    feePayer: text("fee_payer"),
+    feePayer: text("fee_payer").notNull(),
     expirationTimestamp: bigint("expiration_timestamp", { mode: "number" }),
 
     // ── Structured data (JSONB) ──
@@ -167,6 +167,11 @@ export const transactions = pgTable(
     index("txs_hash_idx").on(t.txHash),
     index("txs_fee_payer_idx").on(t.feePayer),
     index("txs_block_idx").on(t.networkId, t.blockNumber),
+    // GIN index for JSONB search on public call addresses
+    index("txs_public_calls_gin_idx").using(
+      "gin",
+      t.publicCalls,
+    ),
   ]
 );
 

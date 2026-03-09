@@ -1,4 +1,4 @@
-import { useState, Fragment } from "react";
+import { useState, useMemo, Fragment } from "react";
 import { useParams, Link } from "react-router-dom";
 import styled from "@emotion/styled";
 import {
@@ -13,6 +13,7 @@ import { useNetworkStore } from "../stores/network";
 import { useTxDetail, useTxGraph } from "../api/hooks";
 import { useMyTxs } from "../stores/my-txs";
 import { useAddressResolver } from "../hooks/useAddressResolver";
+import type { PrivateLogDetail, ContractClassLogDetail, PublicAddress } from "../lib/api";
 import {
   PageContainer,
   PageTitle,
@@ -134,6 +135,76 @@ const CalldataToggle = styled.button`
     text-decoration: underline;
   }
 `;
+
+const SortableHeader = styled.th<{ active?: boolean }>`
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  color: ${(p) => (p.active ? theme.colors.primary : "inherit")};
+  &:hover {
+    color: ${theme.colors.primary};
+  }
+`;
+
+const FeatureRow = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: ${theme.spacing.xs} 0;
+  &:not(:last-child) {
+    border-bottom: 1px solid ${theme.colors.border};
+  }
+`;
+
+const FeatureName = styled.span`
+  font-size: ${theme.fontSize.xs};
+  color: ${theme.colors.textMuted};
+`;
+
+const FeatureValue = styled(Mono)`
+  font-size: ${theme.fontSize.sm};
+`;
+
+// ── Sortable table helper ──
+
+type SortDir = "asc" | "desc";
+
+function useSortableTable<T>(data: T[], defaultKey: keyof T & string, defaultDir: SortDir = "asc") {
+  const [sortKey, setSortKey] = useState<keyof T & string>(defaultKey);
+  const [sortDir, setSortDir] = useState<SortDir>(defaultDir);
+
+  const sorted = useMemo(() => {
+    const copy = [...data];
+    copy.sort((a, b) => {
+      const va = a[sortKey];
+      const vb = b[sortKey];
+      if (va == null && vb == null) return 0;
+      if (va == null) return 1;
+      if (vb == null) return -1;
+      if (typeof va === "number" && typeof vb === "number") {
+        return sortDir === "asc" ? va - vb : vb - va;
+      }
+      const sa = String(va);
+      const sb = String(vb);
+      return sortDir === "asc" ? sa.localeCompare(sb) : sb.localeCompare(sa);
+    });
+    return copy;
+  }, [data, sortKey, sortDir]);
+
+  const toggleSort = (key: keyof T & string) => {
+    if (key === sortKey) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  };
+
+  const indicator = (key: keyof T & string) =>
+    key === sortKey ? (sortDir === "asc" ? " ▲" : " ▼") : "";
+
+  return { sorted, sortKey, sortDir, toggleSort, indicator };
+}
 
 // ── Slot Timeline subsection ──
 
@@ -436,6 +507,10 @@ export function TxDetail() {
     publicCalls,
     privacySet,
     similarTxs,
+    privateLogDetails,
+    contractClassLogDetails,
+    publicAddresses,
+    feePayerPct,
   } = data;
   const tracked = isTracked(tx.txHash);
 
@@ -567,12 +642,15 @@ export function TxDetail() {
             </Field>
           )}
         </Flex>
-        {tx.feePayer && (
-          <Field>
-            <FieldLabel>Fee Payer</FieldLabel>
-            <FieldValue>{resolveAddress(tx.feePayer)}</FieldValue>
-          </Field>
-        )}
+        <Field>
+          <FieldLabel>Fee Payer</FieldLabel>
+          <FieldValue>
+            {resolveAddress(tx.feePayer)}
+            <span style={{ color: theme.colors.textMuted, fontSize: theme.fontSize.xs, marginLeft: "8px" }}>
+              ({feePayerPct < 0.1 ? "<0.1" : feePayerPct.toFixed(1)}% of network txs)
+            </span>
+          </FieldValue>
+        </Field>
         {tx.actualFee && (
           <Field>
             <FieldLabel>Actual Fee</FieldLabel>
@@ -835,7 +913,7 @@ export function TxDetail() {
                     <td>{stx.gasLimitL2 != null ? stx.gasLimitL2.toLocaleString() : "\u2014"}</td>
                     <td>
                       <Mono style={{ fontSize: "10px" }}>
-                        {stx.feePayer ? resolveAddress(stx.feePayer) : "\u2014"}
+                        {resolveAddress(stx.feePayer)}
                       </Mono>
                     </td>
                     <td>
@@ -858,18 +936,219 @@ export function TxDetail() {
         </>
       )}
 
+      {/* Publicly Visible Addresses */}
+      <PublicAddressesSection addresses={publicAddresses} resolveAddress={resolveAddress} feePayer={tx.feePayer} />
+
+      {/* Private Logs */}
+      <PrivateLogsSection logs={privateLogDetails} />
+
+      {/* Contract Class Logs */}
+      <ContractClassLogsSection logs={contractClassLogDetails} resolveAddress={resolveAddress} />
+
+      {/* Feature Vector (labeled) */}
       {featureVector && (
         <>
           <SectionTitle style={{ marginTop: theme.spacing.lg }}>
             Feature Vector
           </SectionTitle>
           <Card>
-            <Mono style={{ fontSize: "11px", wordBreak: "break-all" }}>
-              [{featureVector.join(", ")}]
-            </Mono>
+            {FEATURE_LABELS.map((label, i) => (
+              <FeatureRow key={i}>
+                <FeatureName>{label}</FeatureName>
+                <FeatureValue>
+                  {i === 13
+                    ? resolveAddress(String(featureVector[i]))
+                    : typeof featureVector[i] === "number"
+                      ? (featureVector[i] as number).toLocaleString()
+                      : String(featureVector[i])}
+                </FeatureValue>
+              </FeatureRow>
+            ))}
           </Card>
         </>
       )}
     </PageContainer>
+  );
+}
+
+// ── Feature vector dimension labels ──
+
+const FEATURE_LABELS = [
+  "Note Hashes",
+  "Nullifiers",
+  "L2 to L1 Messages",
+  "Private Logs",
+  "Contract Class Logs",
+  "Gas Limit (DA)",
+  "Gas Limit (L2)",
+  "Max Fee Per DA Gas",
+  "Max Fee Per L2 Gas",
+  "Setup Calls",
+  "App Calls",
+  "Total Public Calldata Size",
+  "Expiration Delta",
+  "Fee Payer",
+];
+
+// ── Publicly Visible Addresses section ──
+
+function PublicAddressesSection({
+  addresses,
+  resolveAddress,
+  feePayer,
+}: {
+  addresses: PublicAddress[];
+  resolveAddress: (addr: string) => string;
+  feePayer: string;
+}) {
+  const { sorted, toggleSort, indicator, sortKey } = useSortableTable(addresses, "source");
+
+  if (addresses.length === 0) return null;
+
+  return (
+    <>
+      <SectionTitle style={{ marginTop: theme.spacing.lg }}>
+        Publicly Visible Addresses ({addresses.length})
+      </SectionTitle>
+      <Card style={{ padding: 0, overflow: "hidden", marginBottom: theme.spacing.md }}>
+        <TableWrapper>
+          <Table>
+            <thead>
+              <tr>
+                <SortableHeader active={sortKey === "address"} onClick={() => toggleSort("address")}>
+                  Address{indicator("address")}
+                </SortableHeader>
+                <SortableHeader active={sortKey === "source"} onClick={() => toggleSort("source")}>
+                  Source{indicator("source")}
+                </SortableHeader>
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.map((a, i) => {
+                const isFeePayer = a.address.toLowerCase() === feePayer.toLowerCase();
+                return (
+                  <tr key={i} style={isFeePayer ? { background: "rgba(255, 198, 108, 0.08)" } : undefined}>
+                    <td>
+                      <Mono style={{ fontSize: "10px" }}>
+                        {resolveAddress(a.address)}
+                      </Mono>
+                    </td>
+                    <td>
+                      <Mono style={{ fontSize: "10px", color: isFeePayer ? theme.colors.warning : theme.colors.textMuted }}>
+                        {a.source}
+                      </Mono>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </Table>
+        </TableWrapper>
+      </Card>
+    </>
+  );
+}
+
+// ── Private Logs section ──
+
+function PrivateLogsSection({ logs }: { logs: PrivateLogDetail[] }) {
+  const { sorted, toggleSort, indicator, sortKey } = useSortableTable(logs, "index");
+
+  if (logs.length === 0) return null;
+
+  return (
+    <>
+      <SectionTitle style={{ marginTop: theme.spacing.lg }}>
+        Private Logs ({logs.length})
+      </SectionTitle>
+      <Card style={{ padding: 0, overflow: "hidden", marginBottom: theme.spacing.md }}>
+        <TableWrapper>
+          <Table>
+            <thead>
+              <tr>
+                <SortableHeader active={sortKey === "index"} onClick={() => toggleSort("index")}>
+                  #{indicator("index")}
+                </SortableHeader>
+                <SortableHeader active={sortKey === "emittedLength"} onClick={() => toggleSort("emittedLength")}>
+                  Emitted Length{indicator("emittedLength")}
+                </SortableHeader>
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.map((log) => (
+                <tr key={log.index}>
+                  <td>{log.index}</td>
+                  <td>{log.emittedLength.toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        </TableWrapper>
+      </Card>
+    </>
+  );
+}
+
+// ── Contract Class Logs section ──
+
+function ContractClassLogsSection({
+  logs,
+  resolveAddress,
+}: {
+  logs: ContractClassLogDetail[];
+  resolveAddress: (addr: string) => string;
+}) {
+  const { sorted, toggleSort, indicator, sortKey } = useSortableTable(logs, "index");
+
+  if (logs.length === 0) return null;
+
+  return (
+    <>
+      <SectionTitle style={{ marginTop: theme.spacing.lg }}>
+        Contract Class Logs ({logs.length})
+      </SectionTitle>
+      <Card style={{ padding: 0, overflow: "hidden", marginBottom: theme.spacing.md }}>
+        <TableWrapper>
+          <Table>
+            <thead>
+              <tr>
+                <SortableHeader active={sortKey === "index"} onClick={() => toggleSort("index")}>
+                  #{indicator("index")}
+                </SortableHeader>
+                <SortableHeader active={sortKey === "contractAddress"} onClick={() => toggleSort("contractAddress")}>
+                  Contract Address{indicator("contractAddress")}
+                </SortableHeader>
+                <SortableHeader active={sortKey === "contractClassId"} onClick={() => toggleSort("contractClassId")}>
+                  Contract Class ID{indicator("contractClassId")}
+                </SortableHeader>
+                <SortableHeader active={sortKey === "emittedLength"} onClick={() => toggleSort("emittedLength")}>
+                  Emitted Length{indicator("emittedLength")}
+                </SortableHeader>
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.map((log) => (
+                <tr key={log.index}>
+                  <td>{log.index}</td>
+                  <td>
+                    <Mono style={{ fontSize: "10px" }}>
+                      {log.contractAddress ? resolveAddress(log.contractAddress) : "\u2014"}
+                    </Mono>
+                  </td>
+                  <td>
+                    <Mono style={{ fontSize: "10px" }}>
+                      {log.contractClassId
+                        ? `${log.contractClassId.slice(0, 18)}...`
+                        : "\u2014"}
+                    </Mono>
+                  </td>
+                  <td>{log.emittedLength.toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        </TableWrapper>
+      </Card>
+    </>
   );
 }

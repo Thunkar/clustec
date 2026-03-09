@@ -101,7 +101,26 @@ async function main() {
   );
 
   // 3. Block stream — processes blocks (source of truth) and status lifecycle
-  const blockProcessor = new BlockProcessor(config.id, db);
+  // We must never process finalized blocks — getTxByHash won't have them.
+  // On restart: resume from where we left off (proposedBlock cursor).
+  // On fresh DB: start from the current node tip (only index going forward).
+  const [cursor] = await db
+    .select()
+    .from(syncCursors)
+    .where(eq(syncCursors.networkId, config.id))
+    .limit(1);
+
+  const cursorBlock = cursor?.proposedBlock ?? 0;
+  const currentNodeBlock = await node.getBlockNumber();
+  // If cursor is 0 (fresh DB), start from current tip so we only index new blocks.
+  // Otherwise resume from where we left off.
+  const startingBlock = cursorBlock === 0 ? currentNodeBlock + 1 : cursorBlock + 1;
+  console.log(
+    `[${config.id}] Block stream starting from block ${startingBlock} ` +
+    `(cursor: ${cursorBlock}, node tip: ${currentNodeBlock})`
+  );
+
+  const blockProcessor = new BlockProcessor(config.id, node, db);
 
   const blockStream = new L2BlockStream(
     node,
@@ -111,6 +130,7 @@ async function main() {
     {
       pollIntervalMS: config.blockPollIntervalMs ?? 2000,
       skipFinalized: true,
+      startingBlock,
     }
   );
 

@@ -53,7 +53,11 @@ const PaginationInfo = styled.span`
   font-size: ${theme.fontSize.xs};
 `;
 
-type SortKey = "createdAt" | "blockNumber" | "numNoteHashes" | "numNullifiers" | "numPublicDataWrites" | "numPrivateLogs" | "numPublicLogs" | "numContractClassLogs" | "numL2ToL1Msgs" | "actualFee" | "status";
+type SortKey =
+  | "createdAt" | "blockNumber"
+  | "numNoteHashes" | "numNullifiers" | "numPublicDataWrites"
+  | "numPrivateLogs" | "numPublicLogs" | "numContractClassLogs" | "numL2ToL1Msgs"
+  | "actualFee" | "feePayer" | "status";
 type SortOrder = "asc" | "desc";
 
 function StatusBadge({ status }: { status: string }) {
@@ -156,27 +160,29 @@ export function Transactions() {
               <SortHeader active={sort === "blockNumber"} onClick={() => toggleSort("blockNumber")}>
                 Block{sortIndicator("blockNumber")}
               </SortHeader>
-              <th>Fee Payer</th>
+              <SortHeader active={sort === "feePayer"} onClick={() => toggleSort("feePayer")}>
+                Fee Payer{sortIndicator("feePayer")}
+              </SortHeader>
               <SortHeader active={sort === "numNoteHashes"} onClick={() => toggleSort("numNoteHashes")}>
                 Note Hashes{sortIndicator("numNoteHashes")}
               </SortHeader>
               <SortHeader active={sort === "numNullifiers"} onClick={() => toggleSort("numNullifiers")}>
                 Nullifiers{sortIndicator("numNullifiers")}
               </SortHeader>
-              <SortHeader active={sort === "numPublicDataWrites"} onClick={() => toggleSort("numPublicDataWrites")}>
-                Public Data Writes{sortIndicator("numPublicDataWrites")}
+              <SortHeader active={sort === "numL2ToL1Msgs"} onClick={() => toggleSort("numL2ToL1Msgs")}>
+                L2→L1 Messages{sortIndicator("numL2ToL1Msgs")}
               </SortHeader>
               <SortHeader active={sort === "numPrivateLogs"} onClick={() => toggleSort("numPrivateLogs")}>
                 Private Logs{sortIndicator("numPrivateLogs")}
               </SortHeader>
-              <SortHeader active={sort === "numPublicLogs"} onClick={() => toggleSort("numPublicLogs")}>
-                Public Logs{sortIndicator("numPublicLogs")}
-              </SortHeader>
               <SortHeader active={sort === "numContractClassLogs"} onClick={() => toggleSort("numContractClassLogs")}>
                 Contract Class Logs{sortIndicator("numContractClassLogs")}
               </SortHeader>
-              <SortHeader active={sort === "numL2ToL1Msgs"} onClick={() => toggleSort("numL2ToL1Msgs")}>
-                L2→L1 Messages{sortIndicator("numL2ToL1Msgs")}
+              <SortHeader active={sort === "numPublicDataWrites"} onClick={() => toggleSort("numPublicDataWrites")}>
+                Public Data Writes{sortIndicator("numPublicDataWrites")}
+              </SortHeader>
+              <SortHeader active={sort === "numPublicLogs"} onClick={() => toggleSort("numPublicLogs")}>
+                Public Logs{sortIndicator("numPublicLogs")}
               </SortHeader>
               <th>Public Calls</th>
               <SortHeader active={sort === "actualFee"} onClick={() => toggleSort("actualFee")}>
@@ -202,16 +208,16 @@ export function Transactions() {
                 <td>{tx.blockNumber != null ? tx.blockNumber.toLocaleString() : "\u2014"}</td>
                 <td>
                   <Mono style={{ fontSize: "10px" }}>
-                    {tx.feePayer ? resolveAddress(tx.feePayer) : "\u2014"}
+                    <Truncate>{resolveAddress(tx.feePayer)}</Truncate>
                   </Mono>
                 </td>
                 <td>{tx.numNoteHashes}</td>
                 <td>{tx.numNullifiers}</td>
-                <td>{tx.numPublicDataWrites ?? "\u2014"}</td>
-                <td>{tx.numPrivateLogs}</td>
-                <td>{tx.numPublicLogs ?? "\u2014"}</td>
-                <td>{tx.numContractClassLogs}</td>
                 <td>{tx.numL2ToL1Msgs}</td>
+                <td>{tx.numPrivateLogs}</td>
+                <td>{tx.numContractClassLogs}</td>
+                <td>{tx.numPublicDataWrites ?? "\u2014"}</td>
+                <td>{tx.numPublicLogs ?? "\u2014"}</td>
                 <td>
                   <span style={{ fontSize: theme.fontSize.xs }}>
                     {tx.numSetupCalls + tx.numAppCalls + (tx.hasTeardown ? 1 : 0)}

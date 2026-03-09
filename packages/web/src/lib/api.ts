@@ -79,7 +79,7 @@ export interface Transaction {
   numAppCalls: number;
   hasTeardown: boolean;
   totalPublicCalldataSize: number;
-  feePayer: string | null;
+  feePayer: string;
   expirationTimestamp: number | null;
   numPublicDataWrites: number | null;
   numPublicLogs: number | null;
@@ -217,8 +217,32 @@ export interface SimilarTx {
   totalPublicCalldataSize: number;
   gasLimitDa: number | null;
   gasLimitL2: number | null;
-  feePayer: string | null;
+  feePayer: string;
   outlierScore: number | null;
+}
+
+export interface PrivateLogDetail {
+  index: number;
+  emittedLength: number;
+}
+
+export interface ContractClassLogDetail {
+  index: number;
+  contractAddress: string | null;
+  contractClassId: string | null;
+  emittedLength: number;
+}
+
+export interface PublicAddress {
+  address: string;
+  source: string;
+  label: string | null;
+}
+
+export interface FeePayerStat {
+  address: string;
+  count: number;
+  label: string | null;
 }
 
 export interface PrivacySet {
@@ -230,7 +254,7 @@ export interface PrivacySet {
 
 export interface TxDetail {
   tx: Transaction;
-  featureVector: number[] | null;
+  featureVector: (number | string)[] | null;
   noteHashes: NoteHash[];
   nullifiers: Nullifier[];
   publicDataWrites: PublicDataWrite[];
@@ -238,6 +262,10 @@ export interface TxDetail {
   clusterMemberships: { runId: number; clusterId: number; membershipScore: number | null; outlierScore: number | null }[];
   privacySet: PrivacySet | null;
   similarTxs: SimilarTx[];
+  privateLogDetails: PrivateLogDetail[];
+  contractClassLogDetails: ContractClassLogDetail[];
+  publicAddresses: PublicAddress[];
+  feePayerPct: number;
 }
 
 export interface ClusterMember {
@@ -303,4 +331,6 @@ export const api = {
     fetchJson<TxGraphData>(`/networks/${id}/txs/${hash}/graph`),
   getClusterMembers: (id: string, runId: number, clusterId: number) =>
     fetchJson<{ clusterId: number; members: ClusterMember[] }>(`/networks/${id}/clusters/${runId}/${clusterId}`),
+  getFeePayerStats: (id: string) =>
+    fetchJson<{ feePayers: FeePayerStat[] }>(`/networks/${id}/txs/stats/fee-payers`),
 };
