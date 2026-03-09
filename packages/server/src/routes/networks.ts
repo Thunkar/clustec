@@ -40,7 +40,10 @@ export function registerNetworkRoutes(app: FastifyInstance, db: Db) {
       network,
       blockCount: blockCount.count,
       txCount: txCount.count,
-      lastIndexedBlock: cursor?.lastBlockNumber ?? 0,
+      proposedBlock: cursor?.proposedBlock ?? 0,
+      checkpointedBlock: cursor?.checkpointedBlock ?? 0,
+      provenBlock: cursor?.provenBlock ?? 0,
+      finalizedBlock: cursor?.finalizedBlock ?? 0,
     };
   });
 }

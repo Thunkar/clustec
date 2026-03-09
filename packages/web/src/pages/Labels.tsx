@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNetworkStore } from "../stores/network";
 import { useLabels, useAddLabel, useDeleteLabel } from "../api/hooks";
 import {
-  PageContainer, PageTitle, Card, Table, Truncate, Loading,
+  PageContainer, PageTitle, Card, Table, TableWrapper, Truncate, Loading,
   Flex, Button, Input, Badge,
 } from "../components/ui";
 import { theme } from "../lib/theme";
@@ -47,6 +47,7 @@ export function Labels() {
       </Card>
 
       <Card style={{ padding: 0, overflow: "hidden" }}>
+        <TableWrapper>
         <Table>
           <thead>
             <tr>
@@ -74,6 +75,7 @@ export function Labels() {
             )}
           </tbody>
         </Table>
+        </TableWrapper>
       </Card>
     </PageContainer>
   );

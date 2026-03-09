@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useMyTxs } from "../stores/my-txs";
 import {
-  PageContainer, PageTitle, Card, Table, Truncate, Flex, Button, Input, Badge,
+  PageContainer, PageTitle, Card, Table, TableWrapper, Truncate, Flex, Button, Input, Badge,
 } from "../components/ui";
 import { theme } from "../lib/theme";
 
@@ -47,6 +47,7 @@ export function MyTransactions() {
       </Card>
 
       <Card style={{ padding: 0, overflow: "hidden" }}>
+        <TableWrapper>
         <Table>
           <thead>
             <tr>
@@ -78,6 +79,7 @@ export function MyTransactions() {
             )}
           </tbody>
         </Table>
+        </TableWrapper>
       </Card>
     </PageContainer>
   );

@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { computeFeatureVector, FEATURE_DIM } from "../features.js";
-import type { ExtractedPendingTx } from "../extractor.js";
+import { computeFeatureVector, FEATURE_DIM, NUMERIC_DIM } from "../features.js";
+import type { ExtractedPendingData } from "../types.js";
 
-function makeTx(overrides: Partial<ExtractedPendingTx> = {}): ExtractedPendingTx {
+function makeTx(overrides: Partial<ExtractedPendingData> = {}): ExtractedPendingData {
   return {
     txHash: "0xabc",
     numNoteHashes: 0,
@@ -19,21 +19,23 @@ function makeTx(overrides: Partial<ExtractedPendingTx> = {}): ExtractedPendingTx
     hasTeardown: false,
     totalPublicCalldataSize: 0,
     publicCalls: [],
-    feePayer: null,
+    feePayer: "0x" + "ab".repeat(32),
     expirationTimestamp: null,
+    anchorBlockTimestamp: null,
     l2ToL1MsgDetails: [],
     ...overrides,
   };
 }
 
 describe("computeFeatureVector", () => {
-  it("produces an 18-dimensional vector", () => {
+  it("produces a 14-dimensional vector (13 numeric + 1 categorical)", () => {
     const vector = computeFeatureVector(makeTx());
     expect(vector).toHaveLength(FEATURE_DIM);
-    expect(FEATURE_DIM).toBe(18);
+    expect(FEATURE_DIM).toBe(14);
+    expect(NUMERIC_DIM).toBe(13);
   });
 
-  it("encodes shape counts in the correct positions", () => {
+  it("encodes numeric features in the correct positions", () => {
     const tx = makeTx({
       numNoteHashes: 3,
       numNullifiers: 5,
@@ -46,15 +48,9 @@ describe("computeFeatureVector", () => {
       maxFeePerL2Gas: 20,
       numSetupCalls: 1,
       numAppCalls: 2,
-      hasTeardown: true,
       totalPublicCalldataSize: 50,
-      publicCalls: [
-        { contractAddress: "0xa", functionSelector: "0x1", msgSender: "0xb", isStaticCall: false, phase: "setup", calldataSize: 10, calldata: [] },
-        { contractAddress: "0xa", functionSelector: "0x2", msgSender: "0xb", isStaticCall: true, phase: "app", calldataSize: 20, calldata: [] },
-        { contractAddress: "0xc", functionSelector: "0x3", msgSender: "0xb", isStaticCall: false, phase: "app", calldataSize: 20, calldata: [] },
-      ],
-      feePayer: "0xfee",
-      l2ToL1MsgDetails: [{ recipient: "0xr", senderContract: "0xs" }],
+      expirationTimestamp: 1000124,
+      anchorBlockTimestamp: 1000100, // delta = 24
     });
     const vector = computeFeatureVector(tx);
 
@@ -69,21 +65,48 @@ describe("computeFeatureVector", () => {
     expect(vector[8]).toBe(20);  // maxFeePerL2Gas
     expect(vector[9]).toBe(1);   // numSetupCalls
     expect(vector[10]).toBe(2);  // numAppCalls
-    expect(vector[11]).toBe(1);  // hasTeardown
-    expect(vector[12]).toBe(50); // totalPublicCalldataSize
-    expect(vector[13]).toBe(3);  // numPublicCalls
-    expect(vector[14]).toBe(1);  // hasFeePayer
-    expect(vector[15]).toBe(1);  // numL2ToL1MsgDetails
-    expect(vector[16]).toBe(1);  // numStaticCalls
-    expect(vector[17]).toBe(2);  // numDistinctContracts
+    expect(vector[11]).toBe(50); // totalPublicCalldataSize
+    expect(vector[12]).toBe(24); // expirationDelta
   });
 
-  it("uses 0 for null gas values", () => {
+  it("includes fee payer address at position 13", () => {
+    const addr = "0x" + "cd".repeat(32);
+    const vector = computeFeatureVector(makeTx({ feePayer: addr }));
+    expect(vector[13]).toBe(addr);
+  });
+
+  it("preserves different fee payer addresses", () => {
+    const addrA = "0x" + "aa".repeat(32);
+    const addrB = "0x" + "bb".repeat(32);
+    const vA = computeFeatureVector(makeTx({ feePayer: addrA }));
+    const vB = computeFeatureVector(makeTx({ feePayer: addrB }));
+    expect(vA[13]).toBe(addrA);
+    expect(vB[13]).toBe(addrB);
+    expect(vA[13]).not.toBe(vB[13]);
+  });
+
+  it("uses 0 for null gas values and null expiration", () => {
     const vector = computeFeatureVector(makeTx());
-    expect(vector[5]).toBe(0); // gasLimitDa
-    expect(vector[6]).toBe(0); // gasLimitL2
-    expect(vector[7]).toBe(0); // maxFeePerDaGas
-    expect(vector[8]).toBe(0); // maxFeePerL2Gas
+    expect(vector[5]).toBe(0);  // gasLimitDa
+    expect(vector[6]).toBe(0);  // gasLimitL2
+    expect(vector[7]).toBe(0);  // maxFeePerDaGas
+    expect(vector[8]).toBe(0);  // maxFeePerL2Gas
+    expect(vector[12]).toBe(0); // expirationDelta (null → 0)
+  });
+
+  it("computes expiration delta from anchor block", () => {
+    const vector = computeFeatureVector(makeTx({
+      expirationTimestamp: 1000048,
+      anchorBlockTimestamp: 1000000,
+    }));
+    expect(vector[12]).toBe(48);
+  });
+
+  it("uses 0 when only one of expiration/anchor is present", () => {
+    const v1 = computeFeatureVector(makeTx({ expirationTimestamp: 100 }));
+    expect(v1[12]).toBe(0);
+    const v2 = computeFeatureVector(makeTx({ anchorBlockTimestamp: 100 }));
+    expect(v2[12]).toBe(0);
   });
 
   it("produces different vectors for differently shaped txs", () => {
@@ -95,7 +118,7 @@ describe("computeFeatureVector", () => {
     );
 
     expect(simple).not.toEqual(complex);
-    expect(complex[0]).toBeGreaterThan(simple[0]);
-    expect(complex[1]).toBeGreaterThan(simple[1]);
+    expect(complex[0]).toBeGreaterThan(simple[0] as number);
+    expect(complex[1]).toBeGreaterThan(simple[1] as number);
   });
 });

@@ -1,58 +1,26 @@
-import type { Tx, TxEffect } from "@aztec/stdlib/tx";
-
-export interface PublicCallInfo {
-  contractAddress: string;
-  functionSelector: string;
-  msgSender: string;
-  isStaticCall: boolean;
-  phase: "setup" | "app" | "teardown";
-  calldataSize: number;
-  calldata: string[];
-}
-
-export interface L2ToL1MsgInfo {
-  recipient: string;
-  senderContract: string;
-}
-
-export interface ExtractedPendingTx {
-  txHash: string;
-
-  // Shape counts (from private kernel public inputs)
-  numNoteHashes: number;
-  numNullifiers: number;
-  numL2ToL1Msgs: number;
-  numPrivateLogs: number;
-  numContractClassLogs: number;
-
-  // Gas settings
-  gasLimitDa: number | null;
-  gasLimitL2: number | null;
-  maxFeePerDaGas: number | null;
-  maxFeePerL2Gas: number | null;
-
-  // Public call structure
-  numSetupCalls: number;
-  numAppCalls: number;
-  hasTeardown: boolean;
-  totalPublicCalldataSize: number;
-  publicCalls: PublicCallInfo[];
-
-  // Queryable metadata
-  feePayer: string | null;
-  expirationTimestamp: number | null;
-
-  // L2→L1 messages
-  l2ToL1MsgDetails: L2ToL1MsgInfo[];
-}
+import type { Tx, TxEffect, TxReceipt } from "@aztec/stdlib/tx";
+import type {
+  ExtractedPendingData,
+  ExtractedMinedData,
+  ExtractedReceiptData,
+  PublicCallInfo,
+  L2ToL1MsgInfo,
+} from "./types.js";
 
 const ZERO_ADDR_66 = "0x" + "0".repeat(64);
 const ZERO_ETH_ADDR = "0x" + "0".repeat(40);
 
+const EXECUTION_RESULTS = [
+  "success",
+  "app_logic_reverted",
+  "teardown_reverted",
+  "both_reverted",
+] as const;
+
 /**
  * Extract all data from a full Tx object (available in mempool).
  */
-export function extractPendingTx(tx: Tx): ExtractedPendingTx {
+export function extractFromTx(tx: Tx): ExtractedPendingData {
   const data = tx.data;
   const gasSettings = data.constants?.txContext?.gasSettings;
 
@@ -63,7 +31,7 @@ export function extractPendingTx(tx: Tx): ExtractedPendingTx {
   const numContractClassLogs =
     data.getNonEmptyContractClassLogsHashes().length;
 
-  // L2→L1 messages from accumulated data
+  // L2->L1 messages from accumulated data
   const l2ToL1MsgDetails: L2ToL1MsgInfo[] = [];
   let numL2ToL1Msgs = 0;
   if (data.forPublic) {
@@ -152,41 +120,25 @@ export function extractPendingTx(tx: Tx): ExtractedPendingTx {
     hasTeardown: !!teardownCall,
     totalPublicCalldataSize,
     publicCalls,
-    feePayer: data.feePayer?.toString() ?? null,
+    feePayer: data.feePayer.toString(),
     expirationTimestamp: data.expirationTimestamp
       ? Number(data.expirationTimestamp)
       : null,
+    anchorBlockTimestamp:
+      data.constants?.anchorBlockHeader?.globalVariables?.timestamp != null
+        ? Number(data.constants.anchorBlockHeader.globalVariables.timestamp)
+        : null,
     l2ToL1MsgDetails,
   };
 }
 
 /**
- * Data extracted from a TxEffect when a transaction is mined.
- * Used to update pending tx records with execution results.
- */
-export interface MinedTxData {
-  txHash: string;
-  txIndex: number;
-  revertCode: number;
-  actualFee: string;
-  numPublicDataWrites: number;
-  numPublicLogs: number;
-  privateLogTotalSize: number;
-  publicLogTotalSize: number;
-
-  // Individual items for cross-tx analysis
-  noteHashes: string[];
-  nullifiers: string[];
-  publicDataWrites: { leafSlot: string; value: string }[];
-}
-
-/**
  * Extract execution results from a mined TxEffect.
  */
-export function extractMinedData(
+export function extractFromTxEffect(
   effect: TxEffect,
-  txIndex: number
-): MinedTxData {
+  txIndex: number,
+): ExtractedMinedData {
   const ZERO = "0x" + "0".repeat(64);
 
   const noteHashes = effect.noteHashes
@@ -199,23 +151,25 @@ export function extractMinedData(
 
   const pdws = effect.publicDataWrites.filter(
     (w) =>
-      w.leafSlot.toString() !== ZERO || w.value.toString() !== ZERO
+      w.leafSlot.toString() !== ZERO || w.value.toString() !== ZERO,
   );
 
   const privateLogTotalSize = effect.privateLogs.reduce(
     (acc, log) => acc + log.emittedLength,
-    0
+    0,
   );
 
   const publicLogTotalSize = effect.publicLogs.reduce(
     (acc, log) => acc + log.fields.length,
-    0
+    0,
   );
+
+  const executionResult = EXECUTION_RESULTS[effect.revertCode.getCode()];
 
   return {
     txHash: effect.txHash.toString(),
     txIndex,
-    revertCode: effect.revertCode.getCode(),
+    executionResult,
     actualFee: effect.transactionFee.toString(),
     numPublicDataWrites: pdws.length,
     numPublicLogs: effect.publicLogs.length,
@@ -227,5 +181,23 @@ export function extractMinedData(
       leafSlot: w.leafSlot.toString(),
       value: w.value.toString(),
     })),
+  };
+}
+
+/**
+ * Extract status reconciliation data from a TxReceipt.
+ */
+export function extractFromReceipt(receipt: TxReceipt): ExtractedReceiptData {
+  return {
+    txHash: receipt.txHash.toString(),
+    status: receipt.status,
+    executionResult: receipt.executionResult ?? null,
+    error: receipt.error ?? null,
+    blockNumber:
+      receipt.blockNumber != null ? Number(receipt.blockNumber) : null,
+    transactionFee:
+      receipt.transactionFee != null
+        ? receipt.transactionFee.toString()
+        : null,
   };
 }

@@ -39,7 +39,7 @@ export function Dashboard() {
           <StatLabel>Transactions</StatLabel>
         </StatCard>
         <StatCard>
-          <StatValue>{stats?.lastIndexedBlock?.toLocaleString() ?? "—"}</StatValue>
+          <StatValue>{stats?.proposedBlock?.toLocaleString() ?? "—"}</StatValue>
           <StatLabel>Last Block</StatLabel>
         </StatCard>
         <StatCard>
@@ -48,7 +48,7 @@ export function Dashboard() {
         </StatCard>
         <StatCard>
           <StatValue>{detail?.run?.numOutliers ?? "—"}</StatValue>
-          <StatLabel>Noise Txs</StatLabel>
+          <StatLabel>Outlier Txs</StatLabel>
         </StatCard>
       </Grid>
 

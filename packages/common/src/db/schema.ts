@@ -15,10 +15,22 @@ import {
 
 // ── Enums ────────────────────────────────────────────────
 
+// Matches TxStatus from @aztec/stdlib/tx
 export const txStatusEnum = pgEnum("tx_status", [
+  "dropped",
   "pending",
-  "mined",
+  "proposed",
+  "checkpointed",
+  "proven",
   "finalized",
+]);
+
+// Matches TxExecutionResult from @aztec/stdlib/tx
+export const txExecutionResultEnum = pgEnum("tx_execution_result", [
+  "success",
+  "app_logic_reverted",
+  "teardown_reverted",
+  "both_reverted",
 ]);
 
 // ── Networks ──────────────────────────────────────────────
@@ -38,7 +50,16 @@ export const syncCursors = pgTable("sync_cursors", {
   networkId: text("network_id")
     .references(() => networks.id)
     .notNull(),
-  lastBlockNumber: bigint("last_block_number", { mode: "number" })
+  proposedBlock: bigint("proposed_block", { mode: "number" })
+    .notNull()
+    .default(0),
+  checkpointedBlock: bigint("checkpointed_block", { mode: "number" })
+    .notNull()
+    .default(0),
+  provenBlock: bigint("proven_block", { mode: "number" })
+    .notNull()
+    .default(0),
+  finalizedBlock: bigint("finalized_block", { mode: "number" })
     .notNull()
     .default(0),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -80,13 +101,16 @@ export const transactions = pgTable(
     txHash: text("tx_hash").notNull(),
     status: txStatusEnum("status").notNull().default("pending"),
 
-    // ── Filled on mine ──
+    // ── Execution result (filled on propose) ──
+    executionResult: txExecutionResultEnum("execution_result"),
+    error: text("error"), // from TxReceipt, drop/revert descriptions
+
+    // ── Block context (filled on propose) ──
     blockNumber: bigint("block_number", { mode: "number" }),
     txIndex: integer("tx_index"),
-    revertCode: integer("revert_code").default(0),
-    actualFee: text("actual_fee"), // from TxEffect, string for bigint precision
+    actualFee: text("actual_fee"), // string for bigint precision
 
-    // ── Shape counts (from private kernel public inputs) ──
+    // ── Shape counts (from private kernel public inputs, available at pending) ──
     numNoteHashes: integer("num_note_hashes").notNull().default(0),
     numNullifiers: integer("num_nullifiers").notNull().default(0),
     numL2ToL1Msgs: integer("num_l2_to_l1_msgs").notNull().default(0),
@@ -95,13 +119,13 @@ export const transactions = pgTable(
       .notNull()
       .default(0),
 
-    // ── Gas settings (from full Tx) ──
+    // ── Gas settings (from full Tx object, available at pending) ──
     gasLimitDa: bigint("gas_limit_da", { mode: "number" }),
     gasLimitL2: bigint("gas_limit_l2", { mode: "number" }),
     maxFeePerDaGas: bigint("max_fee_per_da_gas", { mode: "number" }),
     maxFeePerL2Gas: bigint("max_fee_per_l2_gas", { mode: "number" }),
 
-    // ── Public call structure ──
+    // ── Public call structure (from full Tx object, available at pending) ──
     numSetupCalls: integer("num_setup_calls").notNull().default(0),
     numAppCalls: integer("num_app_calls").notNull().default(0),
     hasTeardown: boolean("has_teardown").notNull().default(false),
@@ -109,27 +133,33 @@ export const transactions = pgTable(
       .notNull()
       .default(0),
 
-    // ── Queryable metadata (not in feature vector) ──
+    // ── Queryable metadata ──
     feePayer: text("fee_payer"),
     expirationTimestamp: bigint("expiration_timestamp", { mode: "number" }),
 
     // ── Structured data (JSONB) ──
-    // [{contractAddress, functionSelector, msgSender, isStaticCall, phase, calldataSize}]
+    // [{contractAddress, functionSelector, msgSender, isStaticCall, phase, calldataSize, calldata}]
     publicCalls: jsonb("public_calls"),
     // [{recipient, senderContract}]
     l2ToL1MsgDetails: jsonb("l2_to_l1_msg_details"),
 
-    // ── Filled on mine: execution results ──
+    // ── Execution results (filled on propose, from TxEffect) ──
     numPublicDataWrites: integer("num_public_data_writes").default(0),
     numPublicLogs: integer("num_public_logs").default(0),
     privateLogTotalSize: integer("private_log_total_size").default(0),
     publicLogTotalSize: integer("public_log_total_size").default(0),
 
-    // ── Raw data ──
-    rawTx: jsonb("raw_tx"),
+    // ── Raw data preservation ──
+    rawTx: jsonb("raw_tx"), // full Tx object from mempool (if captured)
+    rawTxEffect: jsonb("raw_tx_effect"), // full TxEffect from block
 
+    // ── Data source tracking ──
+    hasPendingData: boolean("has_pending_data").notNull().default(false),
+
+    // ── Timestamps ──
+    firstSeenAt: timestamp("first_seen_at").defaultNow().notNull(),
+    proposedAt: timestamp("proposed_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
-    minedAt: timestamp("mined_at"),
   },
   (t) => [
     unique("txs_network_hash").on(t.networkId, t.txHash),

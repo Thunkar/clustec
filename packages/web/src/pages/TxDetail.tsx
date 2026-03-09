@@ -19,6 +19,7 @@ import {
   Card,
   SectionTitle,
   Table,
+  TableWrapper,
   Mono,
   Truncate,
   Loading,
@@ -283,6 +284,7 @@ function PublicCallsSection({
     <>
       <SectionTitle>Public Calls ({calls.length})</SectionTitle>
       <Card style={{ padding: 0, overflow: "hidden", marginBottom: theme.spacing.md }}>
+        <TableWrapper>
         <Table>
           <thead>
             <tr>
@@ -382,6 +384,7 @@ function PublicCallsSection({
             })}
           </tbody>
         </Table>
+        </TableWrapper>
       </Card>
     </>
   );
@@ -392,7 +395,10 @@ function PublicCallsSection({
 function StatusBadge({ status }: { status: string }) {
   const color =
     status === "finalized" ? theme.colors.success
-    : status === "mined" ? theme.colors.accent
+    : status === "proven" ? theme.colors.success
+    : status === "checkpointed" ? theme.colors.accent
+    : status === "proposed" ? theme.colors.accent
+    : status === "dropped" ? theme.colors.danger
     : theme.colors.warning;
   return <Badge color={color}>{status}</Badge>;
 }
@@ -469,7 +475,7 @@ export function TxDetail() {
           <FieldLabel>Hash</FieldLabel>
           <FieldValue>{tx.txHash}</FieldValue>
         </Field>
-        <Flex gap="48px">
+        <Flex gap="24px" wrap>
           <Field>
             <FieldLabel>Status</FieldLabel>
             <FieldValue><StatusBadge status={tx.status} /></FieldValue>
@@ -486,18 +492,24 @@ export function TxDetail() {
               <FieldValue>{tx.txIndex}</FieldValue>
             </Field>
           )}
-          {tx.revertCode != null && (
+          {tx.executionResult != null && (
             <Field>
-              <FieldLabel>Revert</FieldLabel>
+              <FieldLabel>Execution Result</FieldLabel>
               <FieldValue>
-                {tx.revertCode === 0 ? (
-                  <Badge color={theme.colors.success}>OK</Badge>
+                {tx.executionResult === "success" ? (
+                  <Badge color={theme.colors.success}>Success</Badge>
                 ) : (
                   <Badge color={theme.colors.danger}>
-                    Reverted ({tx.revertCode})
+                    {tx.executionResult.replace(/_/g, " ")}
                   </Badge>
                 )}
               </FieldValue>
+            </Field>
+          )}
+          {tx.error && (
+            <Field>
+              <FieldLabel>Error</FieldLabel>
+              <FieldValue style={{ color: theme.colors.danger }}>{tx.error}</FieldValue>
             </Field>
           )}
           {privacySet ? (
@@ -582,7 +594,7 @@ export function TxDetail() {
         <>
           <SectionTitle>Gas Settings</SectionTitle>
           <Card style={{ marginBottom: theme.spacing.md }}>
-            <Flex gap="48px">
+            <Flex gap="24px" wrap>
               {tx.gasLimitDa != null && (
                 <Field>
                   <FieldLabel>Gas Limit (DA)</FieldLabel>
@@ -648,6 +660,7 @@ export function TxDetail() {
           <div>
             <SectionTitle>Nullifiers ({nullifiers.length})</SectionTitle>
             <Card style={{ padding: 0, overflow: "hidden" }}>
+              <TableWrapper>
               <Table>
                 <thead>
                   <tr>
@@ -666,6 +679,7 @@ export function TxDetail() {
                   ))}
                 </tbody>
               </Table>
+              </TableWrapper>
             </Card>
           </div>
         )}
@@ -673,6 +687,7 @@ export function TxDetail() {
           <div>
             <SectionTitle>Note Hashes ({noteHashes.length})</SectionTitle>
             <Card style={{ padding: 0, overflow: "hidden" }}>
+              <TableWrapper>
               <Table>
                 <thead>
                   <tr>
@@ -691,6 +706,7 @@ export function TxDetail() {
                   ))}
                 </tbody>
               </Table>
+              </TableWrapper>
             </Card>
           </div>
         )}
@@ -702,6 +718,7 @@ export function TxDetail() {
             Public Data Writes ({publicDataWrites.length})
           </SectionTitle>
           <Card style={{ padding: 0, overflow: "hidden" }}>
+            <TableWrapper>
             <Table>
               <thead>
                 <tr>
@@ -747,6 +764,7 @@ export function TxDetail() {
                 ))}
               </tbody>
             </Table>
+            </TableWrapper>
           </Card>
         </>
       )}
@@ -762,6 +780,7 @@ export function TxDetail() {
             Similar Transactions ({similarTxs.length})
           </SectionTitle>
           <Card style={{ padding: 0, overflow: "hidden" }}>
+            <TableWrapper>
             <Table>
               <thead>
                 <tr>
@@ -771,6 +790,16 @@ export function TxDetail() {
                   <th>Note Hashes</th>
                   <th>Nullifiers</th>
                   <th>Public Data Writes</th>
+                  <th>Private Logs</th>
+                  <th>Public Logs</th>
+                  <th>Contract Class Logs</th>
+                  <th>L2→L1 Messages</th>
+                  <th>Setup Calls</th>
+                  <th>App Calls</th>
+                  <th>Teardown</th>
+                  <th>Calldata Size</th>
+                  <th>Gas Limit (DA)</th>
+                  <th>Gas Limit (L2)</th>
                   <th>Fee Payer</th>
                   <th>Outlier Score</th>
                 </tr>
@@ -794,16 +823,37 @@ export function TxDetail() {
                     <td>{stx.numNoteHashes}</td>
                     <td>{stx.numNullifiers}</td>
                     <td>{stx.numPublicDataWrites ?? "\u2014"}</td>
-                    <td>{stx.feePayer ? resolveAddress(stx.feePayer) : "\u2014"}</td>
+                    <td>{stx.numPrivateLogs}</td>
+                    <td>{stx.numPublicLogs ?? "\u2014"}</td>
+                    <td>{stx.numContractClassLogs}</td>
+                    <td>{stx.numL2ToL1Msgs}</td>
+                    <td>{stx.numSetupCalls}</td>
+                    <td>{stx.numAppCalls}</td>
+                    <td>{stx.hasTeardown ? "Yes" : "No"}</td>
+                    <td>{stx.totalPublicCalldataSize}</td>
+                    <td>{stx.gasLimitDa != null ? stx.gasLimitDa.toLocaleString() : "\u2014"}</td>
+                    <td>{stx.gasLimitL2 != null ? stx.gasLimitL2.toLocaleString() : "\u2014"}</td>
                     <td>
-                      {stx.outlierScore != null
-                        ? `${(stx.outlierScore * 100).toFixed(1)}%`
-                        : "\u2014"}
+                      <Mono style={{ fontSize: "10px" }}>
+                        {stx.feePayer ? resolveAddress(stx.feePayer) : "\u2014"}
+                      </Mono>
+                    </td>
+                    <td>
+                      {stx.outlierScore != null ? (
+                        <Badge color={
+                          stx.outlierScore > 0.5 ? theme.colors.danger
+                            : stx.outlierScore > 0.2 ? theme.colors.warning
+                              : theme.colors.success
+                        }>
+                          {(stx.outlierScore * 100).toFixed(1)}%
+                        </Badge>
+                      ) : "\u2014"}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </Table>
+            </TableWrapper>
           </Card>
         </>
       )}

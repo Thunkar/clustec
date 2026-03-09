@@ -1,4 +1,4 @@
-"""Full analysis pipeline: load features → scale → UMAP → HDBSCAN → store."""
+"""Full analysis pipeline: load features → Gower distance → UMAP → HDBSCAN → store."""
 
 import json
 from datetime import datetime, timezone
@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 import numpy as np
 import psycopg
 
-from .features import load_features, scale_features
+from .features import load_features, gower_distance_matrix
 from .umap_proj import compute_umap
 from .clustering import run_hdbscan
 
@@ -23,29 +23,29 @@ def run_pipeline(
 
     Returns a summary dict with cluster/outlier counts.
     """
-    # 1. Load features
-    vectors, tx_ids, tx_hashes = load_features(conn, network_id)
+    # 1. Load features (numeric + categorical)
+    numeric, categoricals, tx_ids, _ = load_features(conn, network_id)
     if len(tx_ids) < min_cluster_size:
         return {
             "error": f"Not enough transactions ({len(tx_ids)}) for clustering (need >= {min_cluster_size})",
             "num_txs": len(tx_ids),
         }
 
-    # 2. Scale
-    scaled = scale_features(vectors)
+    # 2. Compute Gower distance matrix (handles mixed numeric + categorical)
+    dist_matrix = gower_distance_matrix(numeric, categoricals)
 
-    # 3. UMAP projection
+    # 3. UMAP projection (precomputed distance)
     embedding = compute_umap(
-        scaled,
+        dist_matrix,
         n_components=n_components,
         n_neighbors=min(n_neighbors, len(tx_ids) - 1),
         min_dist=min_dist,
+        metric="precomputed",
     )
 
-    # 4. Cluster on the scaled feature vectors (not the UMAP embedding,
-    #    which is lossy and intended only for visualization)
+    # 4. Cluster on the Gower distance matrix
     labels, membership_scores, outlier_scores = run_hdbscan(
-        scaled, min_cluster_size=min_cluster_size
+        dist_matrix, min_cluster_size=min_cluster_size, metric="precomputed"
     )
 
     # 5. Store results
@@ -57,6 +57,7 @@ def run_pipeline(
         "n_neighbors": n_neighbors,
         "min_dist": min_dist,
         "n_components": n_components,
+        "distance": "gower",
     }
 
     with conn.cursor() as cur:

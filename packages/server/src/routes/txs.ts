@@ -20,6 +20,10 @@ const SORT_COLUMNS: Record<string, AnyColumn> = {
   numNoteHashes: transactions.numNoteHashes,
   numNullifiers: transactions.numNullifiers,
   numPublicDataWrites: transactions.numPublicDataWrites,
+  numPrivateLogs: transactions.numPrivateLogs,
+  numPublicLogs: transactions.numPublicLogs,
+  numContractClassLogs: transactions.numContractClassLogs,
+  numL2ToL1Msgs: transactions.numL2ToL1Msgs,
   actualFee: transactions.actualFee,
   feePayer: transactions.feePayer,
   status: transactions.status,
@@ -50,7 +54,7 @@ export function registerTxRoutes(app: FastifyInstance, db: Db) {
     // Build conditions
     const conditions = [eq(transactions.networkId, id)];
     if (status) {
-      conditions.push(eq(transactions.status, status as "pending" | "mined" | "finalized"));
+      conditions.push(eq(transactions.status, status as typeof transactions.status.enumValues[number]));
     }
     if (feePayer) {
       conditions.push(eq(transactions.feePayer, feePayer));
@@ -222,7 +226,7 @@ export function registerTxRoutes(app: FastifyInstance, db: Db) {
       };
     }
 
-    // Find similar transactions
+    // Find similar transactions — return all feature-vector-relevant fields
     let similarTxs: {
       txHash: string;
       blockNumber: number | null;
@@ -230,6 +234,16 @@ export function registerTxRoutes(app: FastifyInstance, db: Db) {
       numNoteHashes: number;
       numNullifiers: number;
       numPublicDataWrites: number | null;
+      numL2ToL1Msgs: number;
+      numPrivateLogs: number;
+      numPublicLogs: number | null;
+      numContractClassLogs: number;
+      numSetupCalls: number;
+      numAppCalls: number;
+      hasTeardown: boolean;
+      totalPublicCalldataSize: number;
+      gasLimitDa: number | null;
+      gasLimitL2: number | null;
       feePayer: string | null;
       outlierScore: number | null;
     }[] = [];
@@ -243,6 +257,16 @@ export function registerTxRoutes(app: FastifyInstance, db: Db) {
           numNoteHashes: transactions.numNoteHashes,
           numNullifiers: transactions.numNullifiers,
           numPublicDataWrites: transactions.numPublicDataWrites,
+          numL2ToL1Msgs: transactions.numL2ToL1Msgs,
+          numPrivateLogs: transactions.numPrivateLogs,
+          numPublicLogs: transactions.numPublicLogs,
+          numContractClassLogs: transactions.numContractClassLogs,
+          numSetupCalls: transactions.numSetupCalls,
+          numAppCalls: transactions.numAppCalls,
+          hasTeardown: transactions.hasTeardown,
+          totalPublicCalldataSize: transactions.totalPublicCalldataSize,
+          gasLimitDa: transactions.gasLimitDa,
+          gasLimitL2: transactions.gasLimitL2,
           feePayer: transactions.feePayer,
           outlierScore: clusterMemberships.outlierScore,
         })

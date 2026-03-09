@@ -35,7 +35,10 @@ export interface NetworkStats {
   network: Network;
   blockCount: string;
   txCount: string;
-  lastIndexedBlock: number;
+  proposedBlock: number;
+  checkpointedBlock: number;
+  provenBlock: number;
+  finalizedBlock: number;
 }
 
 export interface Block {
@@ -50,14 +53,18 @@ export interface Block {
   totalManaUsed: string | null;
 }
 
+export type TxStatus = "dropped" | "pending" | "proposed" | "checkpointed" | "proven" | "finalized";
+export type TxExecutionResult = "success" | "app_logic_reverted" | "teardown_reverted" | "both_reverted";
+
 export interface Transaction {
   id: number;
   networkId: string;
   txHash: string;
-  status: "pending" | "mined" | "finalized";
+  status: TxStatus;
+  executionResult: TxExecutionResult | null;
+  error: string | null;
   blockNumber: number | null;
   txIndex: number | null;
-  revertCode: number | null;
   actualFee: string | null;
   numNoteHashes: number;
   numNullifiers: number;
@@ -78,8 +85,10 @@ export interface Transaction {
   numPublicLogs: number | null;
   privateLogTotalSize: number | null;
   publicLogTotalSize: number | null;
+  hasPendingData: boolean;
+  firstSeenAt: string;
+  proposedAt: string | null;
   createdAt: string;
-  minedAt: string | null;
 }
 
 export interface ClusterRun {
@@ -198,6 +207,16 @@ export interface SimilarTx {
   numNoteHashes: number;
   numNullifiers: number;
   numPublicDataWrites: number | null;
+  numL2ToL1Msgs: number;
+  numPrivateLogs: number;
+  numPublicLogs: number | null;
+  numContractClassLogs: number;
+  numSetupCalls: number;
+  numAppCalls: number;
+  hasTeardown: boolean;
+  totalPublicCalldataSize: number;
+  gasLimitDa: number | null;
+  gasLimitL2: number | null;
   feePayer: string | null;
   outlierScore: number | null;
 }
@@ -234,6 +253,12 @@ export interface ClusterMember {
   numPublicLogs: number | null;
   numContractClassLogs: number;
   numL2ToL1Msgs: number;
+  numSetupCalls: number;
+  numAppCalls: number;
+  hasTeardown: boolean;
+  totalPublicCalldataSize: number;
+  gasLimitDa: number | null;
+  gasLimitL2: number | null;
 }
 
 // ── API functions ──

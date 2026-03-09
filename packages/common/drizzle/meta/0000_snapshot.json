@@ -1,5 +1,5 @@
 {
-  "id": "a57e68be-5ffa-4d71-89c0-1f87965df25f",
+  "id": "ab817709-9f46-4aeb-b4bb-c6797271928a",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -820,8 +820,29 @@
           "primaryKey": false,
           "notNull": true
         },
-        "last_block_number": {
-          "name": "last_block_number",
+        "proposed_block": {
+          "name": "proposed_block",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "checkpointed_block": {
+          "name": "checkpointed_block",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "proven_block": {
+          "name": "proven_block",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "finalized_block": {
+          "name": "finalized_block",
           "type": "bigint",
           "primaryKey": false,
           "notNull": true,
@@ -887,6 +908,19 @@
           "notNull": true,
           "default": "'pending'"
         },
+        "execution_result": {
+          "name": "execution_result",
+          "type": "tx_execution_result",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "error": {
+          "name": "error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "block_number": {
           "name": "block_number",
           "type": "bigint",
@@ -898,13 +932,6 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": false
-        },
-        "revert_code": {
-          "name": "revert_code",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "default": 0
         },
         "actual_fee": {
           "name": "actual_fee",
@@ -1057,18 +1084,38 @@
           "primaryKey": false,
           "notNull": false
         },
+        "raw_tx_effect": {
+          "name": "raw_tx_effect",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "has_pending_data": {
+          "name": "has_pending_data",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "first_seen_at": {
+          "name": "first_seen_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "proposed_at": {
+          "name": "proposed_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
-        },
-        "mined_at": {
-          "name": "mined_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {
@@ -1269,12 +1316,25 @@
     }
   },
   "enums": {
+    "public.tx_execution_result": {
+      "name": "tx_execution_result",
+      "schema": "public",
+      "values": [
+        "success",
+        "app_logic_reverted",
+        "teardown_reverted",
+        "both_reverted"
+      ]
+    },
     "public.tx_status": {
       "name": "tx_status",
       "schema": "public",
       "values": [
+        "dropped",
         "pending",
-        "mined",
+        "proposed",
+        "checkpointed",
+        "proven",
         "finalized"
       ]
     }

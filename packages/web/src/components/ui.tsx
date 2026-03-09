@@ -6,18 +6,32 @@ export const Card = styled.div`
   border: 1px solid ${theme.colors.border};
   border-radius: ${theme.radius.lg};
   padding: ${theme.spacing.lg};
+
+  @media (max-width: 600px) {
+    padding: ${theme.spacing.md};
+    border-radius: ${theme.radius.md};
+  }
 `;
 
 export const PageContainer = styled.div`
   max-width: 1400px;
   margin: 0 auto;
   padding: ${theme.spacing.lg};
+
+  @media (max-width: 600px) {
+    padding: ${theme.spacing.sm};
+  }
 `;
 
 export const PageTitle = styled.h1`
   font-size: ${theme.fontSize.xxl};
   font-weight: 700;
   margin-bottom: ${theme.spacing.lg};
+
+  @media (max-width: 600px) {
+    font-size: ${theme.fontSize.xl};
+    margin-bottom: ${theme.spacing.md};
+  }
 `;
 
 export const SectionTitle = styled.h2`
@@ -55,15 +69,22 @@ export const StatLabel = styled.div`
   margin-top: ${theme.spacing.xs};
 `;
 
+export const TableWrapper = styled.div`
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+`;
+
 export const Table = styled.table`
   width: 100%;
   border-collapse: collapse;
+  min-width: 600px;
 
   th, td {
     padding: ${theme.spacing.sm} ${theme.spacing.md};
     text-align: left;
     border-bottom: 1px solid ${theme.colors.border};
     font-size: ${theme.fontSize.sm};
+    white-space: nowrap;
   }
 
   th {
@@ -76,6 +97,13 @@ export const Table = styled.table`
 
   tr:hover td {
     background: ${theme.colors.bgHover};
+  }
+
+  @media (max-width: 600px) {
+    th, td {
+      padding: ${theme.spacing.xs} ${theme.spacing.sm};
+      font-size: ${theme.fontSize.xs};
+    }
   }
 `;
 
@@ -169,13 +197,18 @@ export const Truncate = styled(Mono)`
   text-overflow: ellipsis;
   white-space: nowrap;
   vertical-align: bottom;
+
+  @media (max-width: 600px) {
+    max-width: 100px;
+  }
 `;
 
-export const Flex = styled.div<{ gap?: string; align?: string; justify?: string }>`
+export const Flex = styled.div<{ gap?: string; align?: string; justify?: string; wrap?: boolean }>`
   display: flex;
   gap: ${(p) => p.gap ?? theme.spacing.md};
   align-items: ${(p) => p.align ?? "center"};
   justify-content: ${(p) => p.justify ?? "flex-start"};
+  flex-wrap: ${(p) => (p.wrap ? "wrap" : "nowrap")};
 `;
 
 export const Spinner = styled.div`

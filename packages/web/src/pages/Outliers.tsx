@@ -6,11 +6,11 @@ import { useClusterRuns, useClusterDetail, useClusterMembers, useOutliers } from
 import { useMyTxs } from "../stores/my-txs";
 import type { OutlierEntry, ClusterMember, ClusterSize } from "../lib/api";
 import {
-  PageContainer, PageTitle, Card, Table, Truncate, Loading, Badge, Flex, Button,
+  PageContainer, PageTitle, Card, Table, TableWrapper, Truncate, Loading, Badge, Flex, Button,
 } from "../components/ui";
 import { theme } from "../lib/theme";
 
-type MemberSortKey = "outlierScore" | "blockNumber" | "numNoteHashes" | "numNullifiers" | "numPublicDataWrites" | "numPrivateLogs" | "numPublicLogs" | "numContractClassLogs" | "numL2ToL1Msgs";
+type MemberSortKey = "outlierScore" | "blockNumber" | "numNoteHashes" | "numNullifiers" | "numPublicDataWrites" | "numPrivateLogs" | "numPublicLogs" | "numContractClassLogs" | "numL2ToL1Msgs" | "numSetupCalls" | "numAppCalls" | "totalPublicCalldataSize" | "gasLimitDa" | "gasLimitL2";
 type OverviewSortKey = "clusterId" | "count" | "avgOutlierScore";
 type SortDir = "asc" | "desc";
 
@@ -94,14 +94,14 @@ function ClusterMembersView({
       <BackButton onClick={onBack}>← Back to all clusters</BackButton>
       <Flex align="center" gap="12px" style={{ marginBottom: theme.spacing.md }}>
         <PageTitle style={{ margin: 0 }}>
-          {clusterId === -1 ? "Noise Transactions" : `Cluster ${clusterId}`}
+          {clusterId === -1 ? "Outlier Transactions" : `Cluster ${clusterId}`}
         </PageTitle>
         <Badge color={
           clusterSize === 1 ? theme.colors.danger
             : clusterSize <= 5 ? theme.colors.warning
               : theme.colors.success
         }>
-          {clusterSize} txs ({pct < 0.1 ? "<0.1%" : `${pct.toFixed(1)}%`} of network)
+          {clusterSize.toLocaleString()} txs ({pct < 0.1 ? "<0.1%" : `${pct.toFixed(1)}%`} of network)
         </Badge>
       </Flex>
       <p style={{ color: theme.colors.textMuted, marginBottom: theme.spacing.md, fontSize: theme.fontSize.sm }}>
@@ -111,6 +111,7 @@ function ClusterMembersView({
         }
       </p>
       <Card style={{ padding: 0, overflow: "hidden" }}>
+        <TableWrapper>
         <Table>
           <thead>
             <tr>
@@ -141,7 +142,23 @@ function ClusterMembersView({
                 Contract Class Logs{sortIndicator("numContractClassLogs")}
               </SortableHeader>
               <SortableHeader $active={sortKey === "numL2ToL1Msgs"} onClick={() => handleSort("numL2ToL1Msgs")}>
-                L2→L1 Msgs{sortIndicator("numL2ToL1Msgs")}
+                L2→L1 Messages{sortIndicator("numL2ToL1Msgs")}
+              </SortableHeader>
+              <SortableHeader $active={sortKey === "numSetupCalls"} onClick={() => handleSort("numSetupCalls")}>
+                Setup Calls{sortIndicator("numSetupCalls")}
+              </SortableHeader>
+              <SortableHeader $active={sortKey === "numAppCalls"} onClick={() => handleSort("numAppCalls")}>
+                App Calls{sortIndicator("numAppCalls")}
+              </SortableHeader>
+              <th>Teardown</th>
+              <SortableHeader $active={sortKey === "totalPublicCalldataSize"} onClick={() => handleSort("totalPublicCalldataSize")}>
+                Calldata Size{sortIndicator("totalPublicCalldataSize")}
+              </SortableHeader>
+              <SortableHeader $active={sortKey === "gasLimitDa"} onClick={() => handleSort("gasLimitDa")}>
+                Gas Limit (DA){sortIndicator("gasLimitDa")}
+              </SortableHeader>
+              <SortableHeader $active={sortKey === "gasLimitL2"} onClick={() => handleSort("gasLimitL2")}>
+                Gas Limit (L2){sortIndicator("gasLimitL2")}
               </SortableHeader>
               <th></th>
             </tr>
@@ -176,6 +193,12 @@ function ClusterMembersView({
                 <td>{m.numPublicLogs}</td>
                 <td>{m.numContractClassLogs}</td>
                 <td>{m.numL2ToL1Msgs}</td>
+                <td>{m.numSetupCalls}</td>
+                <td>{m.numAppCalls}</td>
+                <td>{m.hasTeardown ? "Yes" : "No"}</td>
+                <td>{m.totalPublicCalldataSize}</td>
+                <td>{m.gasLimitDa != null ? m.gasLimitDa.toLocaleString() : "—"}</td>
+                <td>{m.gasLimitL2 != null ? m.gasLimitL2.toLocaleString() : "—"}</td>
                 <td>
                   {isTracked(m.txHash) && <Badge color={theme.colors.warning}>Mine</Badge>}
                 </td>
@@ -183,6 +206,7 @@ function ClusterMembersView({
             ))}
           </tbody>
         </Table>
+        </TableWrapper>
       </Card>
       {totalPages > 1 && (
         <Flex justify="center" gap="12px" style={{ marginTop: theme.spacing.md }}>
@@ -226,7 +250,7 @@ export function Outliers() {
     const m = new Map<number, number>();
     if (detail?.clusterSizes) {
       for (const c of detail.clusterSizes) {
-        m.set(c.clusterId, c.clusterId === -1 ? 1 : Number(c.count));
+        m.set(c.clusterId, Number(c.count));
       }
     }
     return m;
@@ -235,16 +259,20 @@ export function Outliers() {
   const sorted = useMemo(() => {
     if (!detail?.clusterSizes) return [];
     return [...detail.clusterSizes].sort((a, b) => {
+      // Outliers (clusterId === -1) always appear first
+      if (a.clusterId === -1 && b.clusterId !== -1) return -1;
+      if (b.clusterId === -1 && a.clusterId !== -1) return 1;
+
       let av: number, bv: number;
       switch (sortKey) {
         case "clusterId":
           av = a.clusterId; bv = b.clusterId; break;
         case "count":
-          av = a.clusterId === -1 ? 1 : Number(a.count);
-          bv = b.clusterId === -1 ? 1 : Number(b.count); break;
+          av = Number(a.count);
+          bv = Number(b.count); break;
         case "avgOutlierScore":
-          av = a.clusterId === -1 ? -1 : (a.avgOutlierScore ?? 0);
-          bv = b.clusterId === -1 ? -1 : (b.avgOutlierScore ?? 0); break;
+          av = a.avgOutlierScore ?? 0;
+          bv = b.avgOutlierScore ?? 0; break;
       }
       return sortDir === "asc" ? av - bv : bv - av;
     });
@@ -289,6 +317,7 @@ export function Outliers() {
       ) : (
         <>
           <Card style={{ padding: 0, overflow: "hidden" }}>
+            <TableWrapper>
             <Table>
               <thead>
                 <tr>
@@ -307,7 +336,8 @@ export function Outliers() {
               </thead>
               <tbody>
                 {paged.map((c) => {
-                  const size = c.clusterId === -1 ? 1 : Number(c.count);
+                  const size = Number(c.count);
+                  const isOutlier = c.clusterId === -1;
                   const pct = totalTxs > 0 ? (size / totalTxs) * 100 : 0;
                   return (
                     <tr
@@ -316,8 +346,8 @@ export function Outliers() {
                       onClick={() => setSearchParams({ cluster: String(c.clusterId) })}
                     >
                       <td>
-                        {c.clusterId === -1 ? (
-                          <Badge color={theme.colors.outlier}>Noise ({c.count} txs)</Badge>
+                        {isOutlier ? (
+                          <Badge color={theme.colors.outlier}>Outliers ({size.toLocaleString()} txs)</Badge>
                         ) : (
                           <Badge color={theme.colors.cluster[c.clusterId % theme.colors.cluster.length]}>
                             Cluster {c.clusterId}
@@ -326,18 +356,18 @@ export function Outliers() {
                       </td>
                       <td>
                         <Badge color={
-                          size === 1 ? theme.colors.danger
+                          isOutlier ? theme.colors.danger
                             : size <= 5 ? theme.colors.warning
                               : theme.colors.success
                         }>
-                          {size === 1 && c.clusterId === -1 ? `1 each (${c.count} txs)` : size.toLocaleString()}
+                          {isOutlier ? `1 each (${size.toLocaleString()} txs)` : size.toLocaleString()}
                         </Badge>
                       </td>
                       <td style={{ color: pct < 1 ? theme.colors.danger : theme.colors.textMuted }}>
                         {pct < 0.1 ? "<0.1%" : `${pct.toFixed(1)}%`}
                       </td>
                       <td>
-                        {c.clusterId === -1 ? (
+                        {isOutlier ? (
                           <span style={{ color: theme.colors.textMuted }}>—</span>
                         ) : (
                           <span>
@@ -351,11 +381,11 @@ export function Outliers() {
                       </td>
                       <td>
                         <Badge color={
-                          size === 1 ? theme.colors.danger
+                          isOutlier || size === 1 ? theme.colors.danger
                             : size <= 3 ? theme.colors.warning
                               : theme.colors.success
                         }>
-                          {size === 1 ? "Critical" : size <= 3 ? "High" : size <= 10 ? "Medium" : "Low"}
+                          {isOutlier || size === 1 ? "Critical" : size <= 3 ? "High" : size <= 10 ? "Medium" : "Low"}
                         </Badge>
                       </td>
                     </tr>
@@ -363,6 +393,7 @@ export function Outliers() {
                 })}
               </tbody>
             </Table>
+            </TableWrapper>
           </Card>
           {totalPages > 1 && (
             <Flex justify="center" gap="12px" style={{ marginTop: theme.spacing.md }}>

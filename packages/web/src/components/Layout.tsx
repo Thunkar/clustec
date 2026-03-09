@@ -1,21 +1,44 @@
+import { useState } from "react";
 import styled from "@emotion/styled";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { theme } from "../lib/theme";
 import { useNetworks } from "../api/hooks";
 import { useNetworkStore } from "../stores/network";
-import { Select, Flex } from "./ui";
+import { Select } from "./ui";
 
 const Shell = styled.div`
   display: flex;
   min-height: 100vh;
 `;
 
-const Sidebar = styled.nav`
+const Overlay = styled.div<{ visible: boolean }>`
+  display: none;
+
+  @media (max-width: 768px) {
+    display: ${(p) => (p.visible ? "block" : "none")};
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 90;
+  }
+`;
+
+const Sidebar = styled.nav<{ open: boolean }>`
   width: 220px;
   background: ${theme.colors.bgCard};
   border-right: 1px solid ${theme.colors.border};
   padding: ${theme.spacing.lg} 0;
   flex-shrink: 0;
+
+  @media (max-width: 768px) {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 100;
+    transform: ${(p) => (p.open ? "translateX(0)" : "translateX(-100%)")};
+    transition: transform 0.2s ease;
+  }
 `;
 
 const Logo = styled.div`
@@ -51,6 +74,40 @@ const NetworkSelector = styled.div`
 const Main = styled.main`
   flex: 1;
   overflow-x: hidden;
+  min-width: 0;
+`;
+
+const MobileHeader = styled.div`
+  display: none;
+
+  @media (max-width: 768px) {
+    display: flex;
+    align-items: center;
+    gap: ${theme.spacing.md};
+    padding: ${theme.spacing.sm} ${theme.spacing.md};
+    background: ${theme.colors.bgCard};
+    border-bottom: 1px solid ${theme.colors.border};
+    position: sticky;
+    top: 0;
+    z-index: 50;
+  }
+`;
+
+const HamburgerButton = styled.button`
+  background: none;
+  border: none;
+  color: ${theme.colors.text};
+  font-size: 24px;
+  cursor: pointer;
+  padding: ${theme.spacing.xs};
+  line-height: 1;
+`;
+
+const MobileLogo = styled.span`
+  font-size: ${theme.fontSize.md};
+  font-weight: 800;
+  color: ${theme.colors.primary};
+  letter-spacing: -0.5px;
 `;
 
 const navItems = [
@@ -65,10 +122,14 @@ export function Layout() {
   const location = useLocation();
   const { data: networks } = useNetworks();
   const { selectedNetwork, setNetwork } = useNetworkStore();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const closeSidebar = () => setSidebarOpen(false);
 
   return (
     <Shell>
-      <Sidebar>
+      <Overlay visible={sidebarOpen} onClick={closeSidebar} />
+      <Sidebar open={sidebarOpen}>
         <Logo>clustec</Logo>
         <NetworkSelector>
           <Select
@@ -88,12 +149,19 @@ export function Layout() {
             key={item.path}
             to={item.path}
             active={location.pathname === item.path}
+            onClick={closeSidebar}
           >
             {item.label}
           </NavItem>
         ))}
       </Sidebar>
       <Main>
+        <MobileHeader>
+          <HamburgerButton onClick={() => setSidebarOpen(true)}>
+            &#9776;
+          </HamburgerButton>
+          <MobileLogo>clustec</MobileLogo>
+        </MobileHeader>
         <Outlet />
       </Main>
     </Shell>

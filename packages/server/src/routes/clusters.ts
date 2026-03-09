@@ -70,6 +70,12 @@ export function registerClusterRoutes(app: FastifyInstance, db: Db) {
           numPublicLogs: transactions.numPublicLogs,
           numContractClassLogs: transactions.numContractClassLogs,
           numL2ToL1Msgs: transactions.numL2ToL1Msgs,
+          numSetupCalls: transactions.numSetupCalls,
+          numAppCalls: transactions.numAppCalls,
+          hasTeardown: transactions.hasTeardown,
+          totalPublicCalldataSize: transactions.totalPublicCalldataSize,
+          gasLimitDa: transactions.gasLimitDa,
+          gasLimitL2: transactions.gasLimitL2,
         })
         .from(clusterMemberships)
         .innerJoin(transactions, eq(transactions.id, clusterMemberships.txId))
@@ -168,7 +174,7 @@ export function registerClusterRoutes(app: FastifyInstance, db: Db) {
       // Enrich with privacy set size
       const outliers = rows.map((row) => ({
         ...row,
-        // Noise points each have a privacy set of 1
+        // Outlier points each have a privacy set of 1
         clusterSize: row.clusterId === -1 ? 1 : (clusterSizeMap.get(row.clusterId) ?? 1),
         // Outlier score is only meaningful within a cluster
         outlierScore: row.clusterId === -1 ? null : row.outlierScore,

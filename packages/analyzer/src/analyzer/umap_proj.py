@@ -10,6 +10,7 @@ def compute_umap(
     n_neighbors: int = 15,
     min_dist: float = 0.1,
     metric: str = "euclidean",
+    random_state: int | None = None,
 ) -> np.ndarray:
     """Project high-dimensional feature vectors to 2D/3D via UMAP.
 
@@ -19,6 +20,7 @@ def compute_umap(
         n_neighbors: controls local vs global structure
         min_dist: minimum distance between points in embedding
         metric: distance metric
+        random_state: seed for reproducibility
 
     Returns:
         (N, n_components) array of projected coordinates
@@ -29,6 +31,7 @@ def compute_umap(
         min_dist=min_dist,
         metric=metric,
         init="random",
+        random_state=random_state,
         n_jobs=-1,
     )
     return reducer.fit_transform(data)

@@ -1,39 +1,36 @@
-import type { ExtractedPendingTx } from "./extractor.js";
+import type { ExtractedPendingData } from "./types.js";
 
 /**
- * Computes a raw feature vector for a pending transaction.
- * Stored as-is; normalization/scaling happens in the Python analyzer.
+ * Computes a feature vector from pending transaction data.
+ * Contains both numeric and categorical features; the Python
+ * analyzer uses Gower distance to handle mixed types.
  *
- * All dimensions are available for every indexed tx because we only
- * index txs caught from the mempool (full Tx objects).
- *
- * Dimensions (18):
- *  0: numNoteHashes
- *  1: numNullifiers
- *  2: numL2ToL1Msgs
- *  3: numPrivateLogs
- *  4: numContractClassLogs
- *  5: gasLimitDa
- *  6: gasLimitL2
- *  7: maxFeePerDaGas
- *  8: maxFeePerL2Gas
- *  9: numSetupCalls
- * 10: numAppCalls
- * 11: hasTeardown (0/1)
- * 12: totalPublicCalldataSize
- * 13: numPublicCalls (total across all phases)
- * 14: hasFeePayer (0/1) — whether a fee payer contract is used
- * 15: numL2ToL1MsgDetails
- * 16: numStaticCalls
- * 17: numDistinctContracts
+ * Dimensions (14):
+ *  0:  numNoteHashes           (numeric)
+ *  1:  numNullifiers           (numeric)
+ *  2:  numL2ToL1Msgs           (numeric)
+ *  3:  numPrivateLogs          (numeric)
+ *  4:  numContractClassLogs    (numeric)
+ *  5:  gasLimitDa              (numeric)
+ *  6:  gasLimitL2              (numeric)
+ *  7:  maxFeePerDaGas          (numeric)
+ *  8:  maxFeePerL2Gas          (numeric)
+ *  9:  numSetupCalls           (numeric)
+ * 10:  numAppCalls             (numeric)
+ * 11:  totalPublicCalldataSize (numeric)
+ * 12:  expirationDelta         (numeric) — expirationTimestamp - anchorBlockTimestamp
+ * 13:  feePayer                (categorical) — AztecAddress of fee payer
  */
-export const FEATURE_DIM = 18;
+export const NUMERIC_DIM = 13;
+export const FEATURE_DIM = 14;
 
-export function computeFeatureVector(tx: ExtractedPendingTx): number[] {
-  const numStaticCalls = tx.publicCalls.filter((c) => c.isStaticCall).length;
-  const distinctContracts = new Set(
-    tx.publicCalls.map((c) => c.contractAddress)
-  ).size;
+export type FeatureVector = (number | string)[];
+
+export function computeFeatureVector(tx: ExtractedPendingData): FeatureVector {
+  const expirationDelta =
+    tx.expirationTimestamp != null && tx.anchorBlockTimestamp != null
+      ? tx.expirationTimestamp - tx.anchorBlockTimestamp
+      : 0;
 
   return [
     tx.numNoteHashes,
@@ -47,12 +44,8 @@ export function computeFeatureVector(tx: ExtractedPendingTx): number[] {
     tx.maxFeePerL2Gas ?? 0,
     tx.numSetupCalls,
     tx.numAppCalls,
-    tx.hasTeardown ? 1 : 0,
     tx.totalPublicCalldataSize,
-    tx.publicCalls.length,
-    tx.feePayer ? 1 : 0,
-    tx.l2ToL1MsgDetails.length,
-    numStaticCalls,
-    distinctContracts,
+    expirationDelta,
+    tx.feePayer,
   ];
 }

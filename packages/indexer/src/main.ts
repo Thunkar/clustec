@@ -5,8 +5,9 @@ import { createAztecNodeClient } from "@aztec/aztec.js/node";
 import { L2BlockStream } from "@aztec/stdlib/block";
 import { eq } from "drizzle-orm";
 import { createDb, networks, syncCursors } from "@clustec/common";
-import { MempoolPoller } from "./mempool-poller.js";
-import { BlockHandler } from "./block-handler.js";
+import { BlockProcessor } from "./block-processor.js";
+import { MempoolWatcher } from "./mempool-watcher.js";
+import { reconcileOnStartup } from "./startup-reconciler.js";
 
 interface NetworkConfig {
   id: string;
@@ -78,34 +79,45 @@ async function main() {
     });
     await db.insert(syncCursors).values({
       networkId: config.id,
-      lastBlockNumber: 0,
+      proposedBlock: 0,
+      checkpointedBlock: 0,
+      provenBlock: 0,
+      finalizedBlock: 0,
     });
     console.log(`[${config.id}] Network registered in DB.`);
   }
 
-  // 1. Mempool poller — catches pending txs with full Tx data
-  const mempoolPoller = new MempoolPoller(
+  // 1. Reconcile non-finalized txs before starting streams
+  console.log(`[${config.id}] Running startup reconciliation...`);
+  await reconcileOnStartup(config.id, node, db);
+  console.log(`[${config.id}] Startup reconciliation complete.`);
+
+  // 2. Mempool watcher — catches pending txs with full Tx data
+  const mempoolWatcher = new MempoolWatcher(
     config.id,
     node,
     db,
     config.mempoolPollIntervalMs ?? 500
   );
 
-  // 2. Block stream — updates tx status (mined/finalized) and handles reorgs
-  // BlockHandler extends L2TipsMemoryStore, so it serves as both the local
-  // data provider (tip tracking) and the event handler (DB updates).
-  const blockHandler = new BlockHandler(config.id, db);
+  // 3. Block stream — processes blocks (source of truth) and status lifecycle
+  const blockProcessor = new BlockProcessor(config.id, db);
 
-  const blockStream = new L2BlockStream(node, blockHandler, blockHandler, undefined, {
-    pollIntervalMS: config.blockPollIntervalMs ?? 2000,
-    skipFinalized: true,
-    ignoreCheckpoints: true,
-  });
+  const blockStream = new L2BlockStream(
+    node,
+    blockProcessor,
+    blockProcessor,
+    undefined,
+    {
+      pollIntervalMS: config.blockPollIntervalMs ?? 2000,
+      skipFinalized: true,
+    }
+  );
 
   // Graceful shutdown
   const shutdown = async () => {
     console.log(`\n[${config.id}] Shutting down...`);
-    mempoolPoller.stop();
+    mempoolWatcher.stop();
     await blockStream.stop();
     process.exit(0);
   };
@@ -113,10 +125,10 @@ async function main() {
   process.on("SIGTERM", shutdown);
 
   // Start both concurrently
-  mempoolPoller.start();
+  mempoolWatcher.start();
   blockStream.start();
 
-  console.log(`[${config.id}] Indexer running (mempool + block stream).`);
+  console.log(`[${config.id}] Indexer running (mempool watcher + block stream).`);
 
   // Keep process alive
   await new Promise(() => {});

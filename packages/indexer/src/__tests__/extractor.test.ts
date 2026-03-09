@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { extractMinedData } from "../extractor.js";
+import { extractFromTxEffect } from "../extractor.js";
 
-// Minimal mock that satisfies TxEffect shape for extractMinedData
+// Minimal mock that satisfies TxEffect shape for extractFromTxEffect
 function makeMockTxEffect(overrides: {
   noteHashes?: number;
   nullifiers?: number;
@@ -43,14 +43,14 @@ function makeMockTxEffect(overrides: {
   } as any;
 }
 
-describe("extractMinedData", () => {
+describe("extractFromTxEffect", () => {
   it("extracts basic mined data", () => {
     const effect = makeMockTxEffect();
-    const result = extractMinedData(effect, 0);
+    const result = extractFromTxEffect(effect, 0);
 
     expect(result.txHash).toBe("0xabcdef");
     expect(result.txIndex).toBe(0);
-    expect(result.revertCode).toBe(0);
+    expect(result.executionResult).toBe("success");
     expect(result.actualFee).toBe("0x1000");
     expect(result.numPublicDataWrites).toBe(0);
     expect(result.numPublicLogs).toBe(0);
@@ -63,7 +63,7 @@ describe("extractMinedData", () => {
 
   it("counts public data writes", () => {
     const effect = makeMockTxEffect({ publicDataWrites: 4 });
-    const result = extractMinedData(effect, 2);
+    const result = extractFromTxEffect(effect, 2);
 
     expect(result.txIndex).toBe(2);
     expect(result.numPublicDataWrites).toBe(4);
@@ -72,7 +72,7 @@ describe("extractMinedData", () => {
 
   it("extracts individual note hashes and nullifiers", () => {
     const effect = makeMockTxEffect({ noteHashes: 3, nullifiers: 2 });
-    const result = extractMinedData(effect, 0);
+    const result = extractFromTxEffect(effect, 0);
 
     expect(result.noteHashes).toHaveLength(3);
     expect(result.nullifiers).toHaveLength(2);
@@ -83,7 +83,7 @@ describe("extractMinedData", () => {
       privateLogs: 2,
       publicLogs: 3,
     });
-    const result = extractMinedData(effect, 0);
+    const result = extractFromTxEffect(effect, 0);
 
     expect(result.numPublicLogs).toBe(3);
     expect(result.privateLogTotalSize).toBe(30); // 2 * 15
@@ -96,7 +96,7 @@ describe("extractMinedData", () => {
       privateLogs: 4,
       publicLogs: 6,
     });
-    const result = extractMinedData(effect, 7);
+    const result = extractFromTxEffect(effect, 7);
 
     expect(result.txIndex).toBe(7);
     expect(result.numPublicDataWrites).toBe(10);

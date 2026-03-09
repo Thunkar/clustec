@@ -10,13 +10,15 @@ def run_hdbscan(
     data: np.ndarray,
     min_cluster_size: int = 5,
     min_samples: int | None = None,
+    metric: str = "euclidean",
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Run HDBSCAN clustering on the data.
 
     Args:
-        data: (N, D) array of scaled feature vectors
+        data: (N, D) feature vectors or (N, N) precomputed distance matrix
         min_cluster_size: minimum cluster size
         min_samples: minimum samples for core points (defaults to min_cluster_size)
+        metric: distance metric ("euclidean" or "precomputed")
 
     Returns:
         labels: cluster labels (-1 = outlier)
@@ -26,6 +28,7 @@ def run_hdbscan(
     clusterer = hdbscan.HDBSCAN(
         min_cluster_size=min_cluster_size,
         min_samples=min_samples,
+        metric=metric,
         core_dist_n_jobs=-1,
     )
 

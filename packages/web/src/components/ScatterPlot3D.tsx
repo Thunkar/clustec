@@ -113,7 +113,7 @@ interface PointCloudProps {
 function PointCloud({ points, trackedHashes, onClusterClick, onOutlierClick }: PointCloudProps) {
   const outlierMeshRef = useRef<THREE.InstancedMesh>(null);
   const blobMeshRef = useRef<THREE.InstancedMesh>(null);
-  const { camera, pointer, size: canvasSize } = useThree();
+  const { camera, pointer, size: canvasSize, gl } = useThree();
   const raycaster = useMemo(() => new THREE.Raycaster(), []);
   const [hoveredOutlierIdx, setHoveredOutlierIdx] = useState<number | null>(null);
   const [hoveredBlobIdx, setHoveredBlobIdx] = useState<number | null>(null);
@@ -298,13 +298,25 @@ function PointCloud({ points, trackedHashes, onClusterClick, onOutlierClick }: P
     if (hoveredBlobIdx !== null) setHoveredBlobIdx(null);
   });
 
-  const handleClick = useCallback(() => {
-    if (hoveredOutlierIdx !== null && onOutlierClick) {
-      onOutlierClick(points[hoveredOutlierIdx]);
-    } else if (hoveredBlobIdx !== null && onClusterClick) {
-      onClusterClick(blobs[hoveredBlobIdx].clusterId);
-    }
-  }, [hoveredOutlierIdx, hoveredBlobIdx, onOutlierClick, onClusterClick, points, blobs]);
+  // Update cursor based on hover state
+  useEffect(() => {
+    const canvas = gl.domElement;
+    canvas.style.cursor = (hoveredOutlierIdx !== null || hoveredBlobIdx !== null) ? "pointer" : "grab";
+  }, [hoveredOutlierIdx, hoveredBlobIdx, gl]);
+
+  // Use a canvas-level click handler so clicks work even on empty space near blobs
+  useEffect(() => {
+    const canvas = gl.domElement;
+    const handleClick = () => {
+      if (hoveredOutlierIdx !== null && onOutlierClick) {
+        onOutlierClick(points[hoveredOutlierIdx]);
+      } else if (hoveredBlobIdx !== null && onClusterClick) {
+        onClusterClick(blobs[hoveredBlobIdx].clusterId);
+      }
+    };
+    canvas.addEventListener("click", handleClick);
+    return () => canvas.removeEventListener("click", handleClick);
+  }, [hoveredOutlierIdx, hoveredBlobIdx, onOutlierClick, onClusterClick, points, blobs, gl]);
 
   const hoveredOutlier = hoveredOutlierIdx !== null ? points[hoveredOutlierIdx] : null;
   const hoveredBlob = hoveredBlobIdx !== null ? blobs[hoveredBlobIdx] : null;
@@ -327,7 +339,7 @@ function PointCloud({ points, trackedHashes, onClusterClick, onOutlierClick }: P
   }, [hoveredBlobIdx, blobs]);
 
   return (
-    <group onClick={handleClick}>
+    <group>
       {/* Cluster blobs — instanced transparent spheres */}
       {blobs.length > 0 && (
         <instancedMesh

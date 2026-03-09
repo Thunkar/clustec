@@ -9,6 +9,7 @@ import {
   PageTitle,
   Card,
   Table,
+  TableWrapper,
   Truncate,
   Loading,
   Flex,
@@ -52,13 +53,16 @@ const PaginationInfo = styled.span`
   font-size: ${theme.fontSize.xs};
 `;
 
-type SortKey = "createdAt" | "blockNumber" | "numNoteHashes" | "numNullifiers" | "numPublicDataWrites" | "actualFee" | "status";
+type SortKey = "createdAt" | "blockNumber" | "numNoteHashes" | "numNullifiers" | "numPublicDataWrites" | "numPrivateLogs" | "numPublicLogs" | "numContractClassLogs" | "numL2ToL1Msgs" | "actualFee" | "status";
 type SortOrder = "asc" | "desc";
 
 function StatusBadge({ status }: { status: string }) {
   const color =
     status === "finalized" ? theme.colors.success
-    : status === "mined" ? theme.colors.accent
+    : status === "proven" ? theme.colors.success
+    : status === "checkpointed" ? theme.colors.accent
+    : status === "proposed" ? theme.colors.accent
+    : status === "dropped" ? theme.colors.danger
     : theme.colors.warning;
   return <Badge color={color}>{status}</Badge>;
 }
@@ -126,8 +130,11 @@ export function Transactions() {
         />
         <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
           <option value="">All statuses</option>
+          <option value="dropped">Dropped</option>
           <option value="pending">Pending</option>
-          <option value="mined">Mined</option>
+          <option value="proposed">Proposed</option>
+          <option value="checkpointed">Checkpointed</option>
+          <option value="proven">Proven</option>
           <option value="finalized">Finalized</option>
         </Select>
         {isFetching && (
@@ -138,6 +145,7 @@ export function Transactions() {
       </Toolbar>
 
       <Card style={{ padding: 0, overflow: "hidden" }}>
+        <TableWrapper>
         <Table>
           <thead>
             <tr>
@@ -150,15 +158,27 @@ export function Transactions() {
               </SortHeader>
               <th>Fee Payer</th>
               <SortHeader active={sort === "numNoteHashes"} onClick={() => toggleSort("numNoteHashes")}>
-                Notes{sortIndicator("numNoteHashes")}
+                Note Hashes{sortIndicator("numNoteHashes")}
               </SortHeader>
               <SortHeader active={sort === "numNullifiers"} onClick={() => toggleSort("numNullifiers")}>
                 Nullifiers{sortIndicator("numNullifiers")}
               </SortHeader>
               <SortHeader active={sort === "numPublicDataWrites"} onClick={() => toggleSort("numPublicDataWrites")}>
-                PDWs{sortIndicator("numPublicDataWrites")}
+                Public Data Writes{sortIndicator("numPublicDataWrites")}
               </SortHeader>
-              <th>Calls</th>
+              <SortHeader active={sort === "numPrivateLogs"} onClick={() => toggleSort("numPrivateLogs")}>
+                Private Logs{sortIndicator("numPrivateLogs")}
+              </SortHeader>
+              <SortHeader active={sort === "numPublicLogs"} onClick={() => toggleSort("numPublicLogs")}>
+                Public Logs{sortIndicator("numPublicLogs")}
+              </SortHeader>
+              <SortHeader active={sort === "numContractClassLogs"} onClick={() => toggleSort("numContractClassLogs")}>
+                Contract Class Logs{sortIndicator("numContractClassLogs")}
+              </SortHeader>
+              <SortHeader active={sort === "numL2ToL1Msgs"} onClick={() => toggleSort("numL2ToL1Msgs")}>
+                L2→L1 Messages{sortIndicator("numL2ToL1Msgs")}
+              </SortHeader>
+              <th>Public Calls</th>
               <SortHeader active={sort === "actualFee"} onClick={() => toggleSort("actualFee")}>
                 Fee{sortIndicator("actualFee")}
               </SortHeader>
@@ -188,6 +208,10 @@ export function Transactions() {
                 <td>{tx.numNoteHashes}</td>
                 <td>{tx.numNullifiers}</td>
                 <td>{tx.numPublicDataWrites ?? "\u2014"}</td>
+                <td>{tx.numPrivateLogs}</td>
+                <td>{tx.numPublicLogs ?? "\u2014"}</td>
+                <td>{tx.numContractClassLogs}</td>
+                <td>{tx.numL2ToL1Msgs}</td>
                 <td>
                   <span style={{ fontSize: theme.fontSize.xs }}>
                     {tx.numSetupCalls + tx.numAppCalls + (tx.hasTeardown ? 1 : 0)}
@@ -212,16 +236,17 @@ export function Transactions() {
             ))}
             {data?.data.length === 0 && (
               <tr>
-                <td colSpan={10} style={{ textAlign: "center", color: theme.colors.textMuted, padding: theme.spacing.lg }}>
+                <td colSpan={14} style={{ textAlign: "center", color: theme.colors.textMuted, padding: theme.spacing.lg }}>
                   No transactions found
                 </td>
               </tr>
             )}
           </tbody>
         </Table>
+        </TableWrapper>
       </Card>
 
-      <Flex justify="space-between" style={{ marginTop: theme.spacing.md, alignItems: "center" }}>
+      <Flex justify="space-between" wrap style={{ marginTop: theme.spacing.md, alignItems: "center" }}>
         <PaginationInfo>
           {total.toLocaleString()} transaction{total !== 1 ? "s" : ""}
         </PaginationInfo>

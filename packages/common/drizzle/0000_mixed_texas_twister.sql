@@ -1,4 +1,5 @@
-CREATE TYPE "public"."tx_status" AS ENUM('pending', 'mined', 'finalized');--> statement-breakpoint
+CREATE TYPE "public"."tx_execution_result" AS ENUM('success', 'app_logic_reverted', 'teardown_reverted', 'both_reverted');--> statement-breakpoint
+CREATE TYPE "public"."tx_status" AS ENUM('dropped', 'pending', 'proposed', 'checkpointed', 'proven', 'finalized');--> statement-breakpoint
 CREATE TABLE "blocks" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"network_id" text NOT NULL,
@@ -91,7 +92,10 @@ CREATE TABLE "public_data_writes" (
 CREATE TABLE "sync_cursors" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"network_id" text NOT NULL,
-	"last_block_number" bigint DEFAULT 0 NOT NULL,
+	"proposed_block" bigint DEFAULT 0 NOT NULL,
+	"checkpointed_block" bigint DEFAULT 0 NOT NULL,
+	"proven_block" bigint DEFAULT 0 NOT NULL,
+	"finalized_block" bigint DEFAULT 0 NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
@@ -100,9 +104,10 @@ CREATE TABLE "transactions" (
 	"network_id" text NOT NULL,
 	"tx_hash" text NOT NULL,
 	"status" "tx_status" DEFAULT 'pending' NOT NULL,
+	"execution_result" "tx_execution_result",
+	"error" text,
 	"block_number" bigint,
 	"tx_index" integer,
-	"revert_code" integer DEFAULT 0,
 	"actual_fee" text,
 	"num_note_hashes" integer DEFAULT 0 NOT NULL,
 	"num_nullifiers" integer DEFAULT 0 NOT NULL,
@@ -126,8 +131,11 @@ CREATE TABLE "transactions" (
 	"private_log_total_size" integer DEFAULT 0,
 	"public_log_total_size" integer DEFAULT 0,
 	"raw_tx" jsonb,
+	"raw_tx_effect" jsonb,
+	"has_pending_data" boolean DEFAULT false NOT NULL,
+	"first_seen_at" timestamp DEFAULT now() NOT NULL,
+	"proposed_at" timestamp,
 	"created_at" timestamp DEFAULT now() NOT NULL,
-	"mined_at" timestamp,
 	CONSTRAINT "txs_network_hash" UNIQUE("network_id","tx_hash")
 );
 --> statement-breakpoint

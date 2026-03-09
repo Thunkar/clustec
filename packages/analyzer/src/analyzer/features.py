@@ -1,19 +1,29 @@
-"""Load and prepare feature vectors from the database."""
+"""Load feature vectors and compute Gower distance matrix.
+
+The feature vector is a mixed-type array: 13 numeric dimensions followed
+by 1 categorical dimension (fee payer address).  Gower distance handles
+both types correctly — range-normalized Manhattan for numeric features,
+simple matching (0 = same, 1 = different) for categorical.
+"""
 
 import json
 
 import numpy as np
 import psycopg
-from sklearn.preprocessing import StandardScaler
+
+# Layout: 13 numeric + 1 categorical (fee payer)
+NUMERIC_DIM = 13
+CATEGORICAL_START = 13
 
 
 def load_features(
     conn: psycopg.Connection, network_id: str
-) -> tuple[np.ndarray, list[int], list[str]]:
+) -> tuple[np.ndarray, list[str], list[int], list[str]]:
     """Load feature vectors for a network.
 
     Returns:
-        vectors: (N, D) array of feature vectors
+        numeric: (N, 13) array of numeric features
+        categoricals: list of N fee payer strings
         tx_ids: list of transaction DB IDs
         tx_hashes: list of transaction hashes
     """
@@ -31,29 +41,56 @@ def load_features(
         rows = cur.fetchall()
 
     if not rows:
-        return np.array([]), [], []
+        return np.array([]), [], [], []
 
     tx_ids = [r[0] for r in rows]
     tx_hashes = [r[1] for r in rows]
     raw_vectors = [json.loads(r[2]) if isinstance(r[2], str) else r[2] for r in rows]
 
-    # 18-dim feature vector from mempool-first indexer:
-    #  0: numNoteHashes       1: numNullifiers        2: numL2ToL1Msgs
-    #  3: numPrivateLogs      4: numContractClassLogs  5: gasLimitDa
-    #  6: gasLimitL2          7: maxFeePerDaGas        8: maxFeePerL2Gas
-    #  9: numSetupCalls      10: numAppCalls          11: hasTeardown
-    # 12: totalPublicCalldataSize  13: numPublicCalls  14: hasFeePayer
-    # 15: numL2ToL1MsgDetails     16: numStaticCalls   17: numDistinctContracts
-    FEATURE_DIM = 18
-    raw_vectors = [v[:FEATURE_DIM] for v in raw_vectors]
-    vectors = np.array(raw_vectors, dtype=np.float64)
+    numeric = np.array(
+        [v[:NUMERIC_DIM] for v in raw_vectors], dtype=np.float64
+    )
+    categoricals = [str(v[CATEGORICAL_START]) for v in raw_vectors]
 
-    return vectors, tx_ids, tx_hashes
+    return numeric, categoricals, tx_ids, tx_hashes
 
 
-def scale_features(vectors: np.ndarray) -> np.ndarray:
-    """Standardize features to zero mean and unit variance."""
-    if vectors.shape[0] < 2:
-        return vectors
-    scaler = StandardScaler()
-    return scaler.fit_transform(vectors)
+def gower_distance_matrix(
+    numeric: np.ndarray, categoricals: list[str]
+) -> np.ndarray:
+    """Compute a Gower distance matrix for mixed numeric + categorical data.
+
+    Gower distance between two samples is the average of per-feature
+    distances:
+      - Numeric: |x_i - x_j| / range_i  (range-normalized Manhattan)
+      - Categorical: 0 if same, 1 if different
+
+    Returns:
+        (N, N) symmetric distance matrix with zeros on the diagonal.
+    """
+    n = numeric.shape[0]
+    n_num = numeric.shape[1] if numeric.ndim == 2 else 0
+    n_cat = 1  # fee payer
+    total_features = n_num + n_cat
+
+    # Numeric contribution: range-normalize each column
+    if n_num > 0:
+        ranges = np.ptp(numeric, axis=0)
+        # Constant features (range=0) contribute 0 distance
+        ranges[ranges == 0] = 1.0
+        normed = numeric / ranges
+
+        # Pairwise Manhattan distance on normalized features
+        num_dist = np.zeros((n, n), dtype=np.float64)
+        for f in range(n_num):
+            col = normed[:, f]
+            num_dist += np.abs(col[:, None] - col[None, :])
+    else:
+        num_dist = np.zeros((n, n), dtype=np.float64)
+
+    # Categorical contribution: simple matching (0 = same, 1 = different)
+    cat_arr = np.array(categoricals)
+    cat_dist = (cat_arr[:, None] != cat_arr[None, :]).astype(np.float64)
+
+    # Gower = average of all per-feature distances
+    return (num_dist + cat_dist) / total_features
