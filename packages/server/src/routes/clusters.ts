@@ -25,10 +25,11 @@ export function registerClusterRoutes(app: FastifyInstance, db: Db) {
     async (request) => {
       const runId = parseInt(request.params.runId, 10);
 
+      const { id } = request.params;
       const [run] = await db
         .select()
         .from(clusterRuns)
-        .where(eq(clusterRuns.id, runId))
+        .where(and(eq(clusterRuns.id, runId), eq(clusterRuns.networkId, id)))
         .limit(1);
 
       if (!run) return { error: "Cluster run not found" };
@@ -53,8 +54,17 @@ export function registerClusterRoutes(app: FastifyInstance, db: Db) {
   app.get<{ Params: { id: string; runId: string; clusterId: string } }>(
     "/api/networks/:id/clusters/:runId/:clusterId",
     async (request) => {
+      const { id } = request.params;
       const runId = parseInt(request.params.runId, 10);
       const clusterId = parseInt(request.params.clusterId, 10);
+
+      // Validate the run belongs to this network
+      const [run] = await db
+        .select({ id: clusterRuns.id })
+        .from(clusterRuns)
+        .where(and(eq(clusterRuns.id, runId), eq(clusterRuns.networkId, id)))
+        .limit(1);
+      if (!run) return { clusterId, members: [] };
 
       const members = await db
         .select({
@@ -97,7 +107,16 @@ export function registerClusterRoutes(app: FastifyInstance, db: Db) {
   app.get<{ Params: { id: string; runId: string } }>(
     "/api/networks/:id/clusters/:runId/umap",
     async (request) => {
+      const { id } = request.params;
       const runId = parseInt(request.params.runId, 10);
+
+      // Validate the run belongs to this network
+      const [run] = await db
+        .select({ id: clusterRuns.id })
+        .from(clusterRuns)
+        .where(and(eq(clusterRuns.id, runId), eq(clusterRuns.networkId, id)))
+        .limit(1);
+      if (!run) return { runId, points: [] };
 
       const points = await db
         .select({
@@ -131,8 +150,17 @@ export function registerClusterRoutes(app: FastifyInstance, db: Db) {
   }>(
     "/api/networks/:id/clusters/:runId/outliers",
     async (request) => {
+      const { id } = request.params;
       const runId = parseInt(request.params.runId, 10);
       const limit = Math.min(parseInt(request.query.limit ?? "50", 10), 200);
+
+      // Validate the run belongs to this network
+      const [run] = await db
+        .select({ id: clusterRuns.id })
+        .from(clusterRuns)
+        .where(and(eq(clusterRuns.id, runId), eq(clusterRuns.networkId, id)))
+        .limit(1);
+      if (!run) return { runId, totalTxsAnalyzed: 0, outliers: [] };
 
       // Total tx count for this run
       const [totalRow] = await db
