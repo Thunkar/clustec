@@ -177,7 +177,7 @@ export function Outliers() {
   if (selectedCluster !== null) {
     const clusterSize = clusterSizeMap.get(selectedCluster) ?? 0;
     return (
-      <PageContainer style={{ maxWidth: "none", padding: theme.spacing.md }}>
+      <PageContainer>
         <ClusterMembersView
           clusterId={selectedCluster}
           runId={latestRunId}

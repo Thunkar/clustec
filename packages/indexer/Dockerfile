@@ -1,17 +1,7 @@
-FROM node:24-slim
-RUN corepack enable && corepack prepare yarn@4.9.1 --activate
+ARG BASE_IMAGE=thunkar/clustec-base:latest
+FROM ${BASE_IMAGE}
 
-WORKDIR /app
-
-# ── Layer 1: Node deps (changes when package.json/lockfile change) ──
-COPY package.json yarn.lock .yarnrc.yml ./
-COPY packages/common/package.json packages/common/
-COPY packages/indexer/package.json packages/indexer/
-COPY packages/server/package.json packages/server/
-COPY packages/web/package.json packages/web/
-RUN yarn install --immutable
-
-# ── Layer 2: Build source (changes on code edits) ──
+# ── Build source ──
 COPY tsconfig.base.json ./
 COPY packages/common/ packages/common/
 COPY packages/indexer/ packages/indexer/

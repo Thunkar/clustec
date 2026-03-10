@@ -482,7 +482,7 @@ const VB_H_NO_LABELS = 120;
 
 // ── Public components ──
 
-export interface PrivacyFootprintProps {
+export interface TxFingerprintProps {
   vector: (number | string)[];
   maxValues?: number[];
   width?: number;
@@ -493,43 +493,73 @@ export interface PrivacyFootprintProps {
   className?: string;
 }
 
-export function PrivacyFootprint({
+export function TxFingerprint({
   vector,
   maxValues,
   color = theme.colors.primary,
   showLabels = false,
   compact = false,
   className,
-}: PrivacyFootprintProps) {
+}: TxFingerprintProps) {
   const vbH = compact
     ? VB_H_COMPACT
     : showLabels
       ? VB_H_LABELS
       : VB_H_NO_LABELS;
+  const vbHMobile = VB_H_NO_LABELS;
   const layout = computeLayout(vector.length, VB_W, vbH, showLabels);
+  const layoutMobile = computeLayout(vector.length, VB_W, vbHMobile, false);
+
+  if (!showLabels) {
+    return (
+      <ResponsiveSvg
+        viewBox={`0 0 ${VB_W} ${vbH}`}
+        preserveAspectRatio="xMidYMid meet"
+        className={className}
+      >
+        <line
+          x1={PAD_X} y1={layout.centerY} x2={VB_W - PAD_X} y2={layout.centerY}
+          stroke={theme.colors.border} strokeWidth={0.5} strokeDasharray="4 3"
+        />
+        {renderBars({ vector, maxValues, layout, color, id: "fp", showLabels: false })}
+      </ResponsiveSvg>
+    );
+  }
 
   return (
-    <ResponsiveSvg
-      viewBox={`0 0 ${VB_W} ${vbH}`}
-      preserveAspectRatio="xMidYMid meet"
-      className={className}
-    >
-      {showLabels && renderGroupLabelsAndSeparators(layout)}
-      <line
-        x1={PAD_X}
-        y1={layout.centerY}
-        x2={VB_W - PAD_X}
-        y2={layout.centerY}
-        stroke={theme.colors.border}
-        strokeWidth={0.5}
-        strokeDasharray="4 3"
-      />
-      {renderBars({ vector, maxValues, layout, color, id: "fp", showLabels })}
-    </ResponsiveSvg>
+    <div className={className}>
+      {/* Desktop: SVG with rotated text labels */}
+      <DesktopOnly>
+        <ResponsiveSvg
+          viewBox={`0 0 ${VB_W} ${vbH}`}
+          preserveAspectRatio="xMidYMid meet"
+        >
+          {renderGroupLabelsAndSeparators(layout)}
+          <line
+            x1={PAD_X} y1={layout.centerY} x2={VB_W - PAD_X} y2={layout.centerY}
+            stroke={theme.colors.border} strokeWidth={0.5} strokeDasharray="4 3"
+          />
+          {renderBars({ vector, maxValues, layout, color, id: "fp", showLabels: true })}
+        </ResponsiveSvg>
+      </DesktopOnly>
+      {/* Mobile: bars only, no labels */}
+      <MobileOnly>
+        <ResponsiveSvg
+          viewBox={`0 0 ${VB_W} ${vbHMobile}`}
+          preserveAspectRatio="xMidYMid meet"
+        >
+          <line
+            x1={PAD_X} y1={layoutMobile.centerY} x2={VB_W - PAD_X} y2={layoutMobile.centerY}
+            stroke={theme.colors.border} strokeWidth={0.5} strokeDasharray="4 3"
+          />
+          {renderBars({ vector, maxValues, layout: layoutMobile, color, id: "fp-m", showLabels: false })}
+        </ResponsiveSvg>
+      </MobileOnly>
+    </div>
   );
 }
 
-export interface FootprintCompareProps {
+export interface FingerprintCompareProps {
   vectorA: (number | string)[];
   vectorB: (number | string)[];
   maxValues?: number[];
@@ -542,7 +572,7 @@ export interface FootprintCompareProps {
   className?: string;
 }
 
-export function FootprintCompare({
+export function FingerprintCompare({
   vectorA,
   vectorB,
   maxValues,
@@ -553,36 +583,64 @@ export function FootprintCompare({
   showLabels = false,
   compact = false,
   className,
-}: FootprintCompareProps) {
+}: FingerprintCompareProps) {
   const vbH = compact ? VB_H_COMPACT : showLabels ? VB_H_LABELS : VB_H_NO_LABELS;
   const layout = computeLayout(vectorA.length, VB_W, vbH, showLabels);
 
+  if (!showLabels) {
+    return (
+      <ResponsiveSvg
+        viewBox={`0 0 ${VB_W} ${vbH}`}
+        preserveAspectRatio="xMidYMid meet"
+        className={className}
+      >
+        <line
+          x1={PAD_X} y1={layout.centerY} x2={VB_W - PAD_X} y2={layout.centerY}
+          stroke={theme.colors.border} strokeWidth={0.5} strokeDasharray="4 3"
+        />
+        {renderComparisonBars({ vectorA, vectorB, maxValues, layout, colorA, colorB, labelA, labelB, showLabels: false })}
+      </ResponsiveSvg>
+    );
+  }
+
+  const vbHMobile = VB_H_NO_LABELS;
+  const layoutMobile = computeLayout(vectorA.length, VB_W, vbHMobile, false);
+
   return (
-    <ResponsiveSvg
-      viewBox={`0 0 ${VB_W} ${vbH}`}
-      preserveAspectRatio="xMidYMid meet"
-      className={className}
-    >
-      {showLabels && renderGroupLabelsAndSeparators(layout)}
-      <line
-        x1={PAD_X}
-        y1={layout.centerY}
-        x2={VB_W - PAD_X}
-        y2={layout.centerY}
-        stroke={theme.colors.border}
-        strokeWidth={0.5}
-        strokeDasharray="4 3"
-      />
-      {renderComparisonBars({
-        vectorA, vectorB, maxValues, layout,
-        colorA, colorB, labelA, labelB, showLabels,
-      })}
-    </ResponsiveSvg>
+    <div className={className}>
+      {/* Desktop */}
+      <DesktopOnly>
+        <ResponsiveSvg
+          viewBox={`0 0 ${VB_W} ${vbH}`}
+          preserveAspectRatio="xMidYMid meet"
+        >
+          {renderGroupLabelsAndSeparators(layout)}
+          <line
+            x1={PAD_X} y1={layout.centerY} x2={VB_W - PAD_X} y2={layout.centerY}
+            stroke={theme.colors.border} strokeWidth={0.5} strokeDasharray="4 3"
+          />
+          {renderComparisonBars({ vectorA, vectorB, maxValues, layout, colorA, colorB, labelA, labelB, showLabels: true })}
+        </ResponsiveSvg>
+      </DesktopOnly>
+      {/* Mobile: bars only */}
+      <MobileOnly>
+        <ResponsiveSvg
+          viewBox={`0 0 ${VB_W} ${vbHMobile}`}
+          preserveAspectRatio="xMidYMid meet"
+        >
+          <line
+            x1={PAD_X} y1={layoutMobile.centerY} x2={VB_W - PAD_X} y2={layoutMobile.centerY}
+            stroke={theme.colors.border} strokeWidth={0.5} strokeDasharray="4 3"
+          />
+          {renderComparisonBars({ vectorA, vectorB, maxValues, layout: layoutMobile, colorA, colorB, labelA, labelB, showLabels: false })}
+        </ResponsiveSvg>
+      </MobileOnly>
+    </div>
   );
 }
 
 /** Hook to export SVG as PNG data URL */
-export function useFootprintSnapshot(
+export function useFingerprintSnapshot(
   svgRef: React.RefObject<SVGSVGElement | null>,
 ) {
   return useCallback(
@@ -615,58 +673,75 @@ export function useFootprintSnapshot(
   );
 }
 
-export function SnapshotableFootprint({
+export function SnapshotableFingerprint({
   vector,
   maxValues,
   color = theme.colors.primary,
   showLabels = true,
   label,
   className,
-}: PrivacyFootprintProps & { label?: string }) {
+}: TxFingerprintProps & { label?: string }) {
   const svgRef = useRef<SVGSVGElement>(null);
-  const snapshot = useFootprintSnapshot(svgRef);
+  const snapshot = useFingerprintSnapshot(svgRef);
 
   const handleDownload = useCallback(async () => {
     const dataUrl = await snapshot(3);
     const a = document.createElement("a");
     a.href = dataUrl;
     a.download = label
-      ? `privacy-footprint-${label}.png`
-      : "privacy-footprint.png";
+      ? `tx-fingerprint-${label}.png`
+      : "tx-fingerprint.png";
     a.click();
   }, [snapshot, label]);
 
   const vbH = showLabels ? VB_H_LABELS : VB_H_NO_LABELS;
+  const vbHCompact = VB_H_NO_LABELS;
   const layout = computeLayout(vector.length, VB_W, vbH, showLabels);
+  const layoutCompact = computeLayout(vector.length, VB_W, vbHCompact, false);
 
   return (
     <SnapshotWrapper className={className}>
-      <ResponsiveSvg
-        ref={svgRef}
-        viewBox={`0 0 ${VB_W} ${vbH}`}
-        preserveAspectRatio="xMidYMid meet"
-        xmlns="http://www.w3.org/2000/svg"
-      >
-        <rect width={VB_W} height={vbH} fill={theme.colors.bgCard} rx="8" />
-        {showLabels && renderGroupLabelsAndSeparators(layout)}
-        <line
-          x1={PAD_X}
-          y1={layout.centerY}
-          x2={VB_W - PAD_X}
-          y2={layout.centerY}
-          stroke={theme.colors.border}
-          strokeWidth={0.5}
-          strokeDasharray="4 3"
-        />
-        {renderBars({
-          vector,
-          maxValues,
-          layout,
-          color,
-          id: "snap",
-          showLabels,
-        })}
-      </ResponsiveSvg>
+      {/* Desktop: full SVG with labels */}
+      <DesktopOnly>
+        <ResponsiveSvg
+          ref={svgRef}
+          viewBox={`0 0 ${VB_W} ${vbH}`}
+          preserveAspectRatio="xMidYMid meet"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <rect width={VB_W} height={vbH} fill={theme.colors.bgCard} rx="8" />
+          {showLabels && renderGroupLabelsAndSeparators(layout)}
+          <line
+            x1={PAD_X}
+            y1={layout.centerY}
+            x2={VB_W - PAD_X}
+            y2={layout.centerY}
+            stroke={theme.colors.border}
+            strokeWidth={0.5}
+            strokeDasharray="4 3"
+          />
+          {renderBars({ vector, maxValues, layout, color, id: "snap", showLabels })}
+        </ResponsiveSvg>
+      </DesktopOnly>
+      {/* Mobile: bars only, no labels */}
+      <MobileOnly>
+        <ResponsiveSvg
+          viewBox={`0 0 ${VB_W} ${vbHCompact}`}
+          preserveAspectRatio="xMidYMid meet"
+        >
+          <rect width={VB_W} height={vbHCompact} fill={theme.colors.bgCard} rx="8" />
+          <line
+            x1={PAD_X}
+            y1={layoutCompact.centerY}
+            x2={VB_W - PAD_X}
+            y2={layoutCompact.centerY}
+            stroke={theme.colors.border}
+            strokeWidth={0.5}
+            strokeDasharray="4 3"
+          />
+          {renderBars({ vector, maxValues, layout: layoutCompact, color, id: "snap-m", showLabels: false })}
+        </ResponsiveSvg>
+      </MobileOnly>
       <DownloadButton onClick={handleDownload} title="Download as PNG">
         <DownloadIcon />
       </DownloadButton>
@@ -675,6 +750,19 @@ export function SnapshotableFootprint({
 }
 
 // ── Styled ──
+
+const DesktopOnly = styled.div`
+  @media (max-width: 600px) {
+    display: none;
+  }
+`;
+
+const MobileOnly = styled.div`
+  display: none;
+  @media (max-width: 600px) {
+    display: block;
+  }
+`;
 
 const ResponsiveSvg = styled.svg`
   display: block;

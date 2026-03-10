@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { useLabels } from "../api/hooks";
 import { useNetworkStore } from "../stores/network";
 import { abbreviateHex } from "../components/TxTable";
@@ -25,4 +25,22 @@ export function useAddressResolver() {
   );
 
   return resolve;
+}
+
+/**
+ * Returns a Set of lowercase addresses that have labels.
+ */
+export function useLabeledAddresses(): Set<string> {
+  const { selectedNetwork } = useNetworkStore();
+  const { data: labels } = useLabels(selectedNetwork);
+
+  return useMemo(() => {
+    const set = new Set<string>();
+    if (labels) {
+      for (const l of labels) {
+        set.add(l.address.toLowerCase());
+      }
+    }
+    return set;
+  }, [labels]);
 }

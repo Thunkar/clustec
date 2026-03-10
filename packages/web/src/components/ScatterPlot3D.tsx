@@ -14,7 +14,7 @@ const Container = styled.div`
   background: ${theme.colors.bg};
 
   @media (max-width: 768px) {
-    min-height: 50vh;
+    height: 400px !important;
   }
 `;
 
@@ -455,7 +455,7 @@ export function ScatterPlot3D({ points, height = 500, onClusterClick, onOutlierC
 
   return (
     <Container style={{ height }}>
-      <Canvas camera={{ position: [10, 7, 10], fov: 45 }}>
+      <Canvas camera={{ position: [10, 7, 10], fov: 45 }} style={{ minHeight: 300 }}>
         <ambientLight intensity={0.4} />
         <directionalLight position={[10, 15, 10]} intensity={1.2} />
         <directionalLight position={[-5, -5, -5]} intensity={0.3} />

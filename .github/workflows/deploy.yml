@@ -5,40 +5,10 @@ on:
     branches: [main]
 
 jobs:
-  build-and-test:
-    runs-on: ubuntu-latest
+  base-image:
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "24"
-
-      - name: Enable Corepack
-        run: corepack enable
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-
-      - name: Install dependencies
-        run: yarn install --immutable
-
-      - name: Build
-        run: yarn build
-
-      - name: Test (TypeScript)
-        run: yarn turbo run test
-
-      - name: Test (Python analyzer)
-        run: cd packages/analyzer && uv run pytest tests/ -v
-
-  docker:
-    needs: build-and-test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: docker/setup-qemu-action@v3
 
       - uses: docker/setup-buildx-action@v3
 
@@ -47,38 +17,53 @@ jobs:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build & push server
+      - name: Build & push base image
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: packages/server/Dockerfile
-          platforms: linux/amd64,linux/arm64
+          file: Dockerfile.base
+          platforms: linux/arm64
           push: true
-          tags: thunkar/clustec-server:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          tags: thunkar/clustec-base:latest
+          cache-from: type=registry,ref=thunkar/clustec-base:buildcache
+          cache-to: type=registry,ref=thunkar/clustec-base:buildcache,mode=max
 
-      - name: Build & push indexer
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: packages/indexer/Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: thunkar/clustec-indexer:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+  docker:
+    needs: base-image
+    runs-on: ubuntu-24.04-arm
+    strategy:
+      matrix:
+        include:
+          - service: server
+            file: packages/server/Dockerfile
+            image: thunkar/clustec-server
+          - service: indexer
+            file: packages/indexer/Dockerfile
+            image: thunkar/clustec-indexer
+          - service: web
+            file: packages/web/Dockerfile
+            image: thunkar/clustec-web
+    steps:
+      - uses: actions/checkout@v4
 
-      - name: Build & push web
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build & push ${{ matrix.service }}
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: packages/web/Dockerfile
-          platforms: linux/amd64,linux/arm64
+          file: ${{ matrix.file }}
+          platforms: linux/arm64
           push: true
-          tags: thunkar/clustec-web:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          tags: ${{ matrix.image }}:latest
+          build-args: BASE_IMAGE=thunkar/clustec-base:latest
+          cache-from: type=registry,ref=${{ matrix.image }}:buildcache
+          cache-to: type=registry,ref=${{ matrix.image }}:buildcache,mode=max
 
   deploy:
     needs: docker

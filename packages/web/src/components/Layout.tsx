@@ -5,6 +5,7 @@ import { theme } from "../lib/theme";
 import { useNetworks } from "../api/hooks";
 import { useNetworkStore } from "../stores/network";
 import { Select } from "./ui";
+import { ClustecLogo } from "./Logo";
 
 const Shell = styled.div`
   display: flex;
@@ -41,12 +42,19 @@ const Sidebar = styled.nav<{ open: boolean }>`
   }
 `;
 
-const Logo = styled.div`
+const LogoWrapper = styled.div`
+  display: flex;
+  align-items: center;
+  gap: ${theme.spacing.sm};
+  padding: 0 ${theme.spacing.lg};
+  margin-bottom: ${theme.spacing.lg};
+`;
+
+const LogoText = styled.span`
   font-size: ${theme.fontSize.lg};
   font-weight: 800;
   color: ${theme.colors.primary};
-  padding: 0 ${theme.spacing.lg};
-  margin-bottom: ${theme.spacing.lg};
+  margin-left: 5px;
   letter-spacing: -0.5px;
 `;
 
@@ -58,7 +66,8 @@ const NavItem = styled(Link)<{ active?: boolean }>`
   font-size: ${theme.fontSize.sm};
   font-weight: ${(p) => (p.active ? 600 : 400)};
   background: ${(p) => (p.active ? theme.colors.bgHover : "transparent")};
-  border-left: 3px solid ${(p) => (p.active ? theme.colors.primary : "transparent")};
+  border-left: 3px solid
+    ${(p) => (p.active ? theme.colors.primary : "transparent")};
 
   &:hover {
     background: ${theme.colors.bgHover};
@@ -130,7 +139,10 @@ export function Layout() {
     <Shell>
       <Overlay visible={sidebarOpen} onClick={closeSidebar} />
       <Sidebar open={sidebarOpen}>
-        <Logo>clustec</Logo>
+        <LogoWrapper>
+          <ClustecLogo size={32} />
+          <LogoText>Clustec</LogoText>
+        </LogoWrapper>
         <NetworkSelector>
           <Select
             value={selectedNetwork}
@@ -160,6 +172,7 @@ export function Layout() {
           <HamburgerButton onClick={() => setSidebarOpen(true)}>
             &#9776;
           </HamburgerButton>
+          <ClustecLogo size={24} />
           <MobileLogo>clustec</MobileLogo>
         </MobileHeader>
         <Outlet />

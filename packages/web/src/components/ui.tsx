@@ -5,18 +5,16 @@ export const Card = styled.div`
   background: ${theme.colors.bgCard};
   border: 1px solid ${theme.colors.border};
   border-radius: ${theme.radius.lg};
-  padding: ${theme.spacing.lg};
+  padding: ${theme.spacing.md};
 
   @media (max-width: 600px) {
-    padding: ${theme.spacing.md};
+    padding: ${theme.spacing.sm};
     border-radius: ${theme.radius.md};
   }
 `;
 
 export const PageContainer = styled.div`
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: ${theme.spacing.lg};
+  padding: ${theme.spacing.md};
 
   @media (max-width: 600px) {
     padding: ${theme.spacing.sm};
@@ -24,13 +22,13 @@ export const PageContainer = styled.div`
 `;
 
 export const PageTitle = styled.h1`
-  font-size: ${theme.fontSize.xxl};
+  font-size: ${theme.fontSize.xl};
   font-weight: 700;
-  margin-bottom: ${theme.spacing.lg};
+  margin-bottom: ${theme.spacing.md};
 
   @media (max-width: 600px) {
-    font-size: ${theme.fontSize.xl};
-    margin-bottom: ${theme.spacing.md};
+    font-size: ${theme.fontSize.lg};
+    margin-bottom: ${theme.spacing.sm};
   }
 `;
 
@@ -56,6 +54,7 @@ export const Grid = styled.div<{ columns?: number }>`
 
 export const StatCard = styled(Card)`
   text-align: center;
+  padding: ${theme.spacing.md};
 
   @media (max-width: 600px) {
     padding: ${theme.spacing.sm};
@@ -93,7 +92,8 @@ export const Table = styled.table`
   border-collapse: collapse;
   min-width: 600px;
 
-  th, td {
+  th,
+  td {
     padding: ${theme.spacing.sm} ${theme.spacing.md};
     text-align: left;
     border-bottom: 1px solid ${theme.colors.border};
@@ -114,7 +114,8 @@ export const Table = styled.table`
   }
 
   @media (max-width: 600px) {
-    th, td {
+    th,
+    td {
       padding: ${theme.spacing.xs} ${theme.spacing.sm};
       font-size: ${theme.fontSize.xs};
     }
@@ -131,7 +132,9 @@ export const Badge = styled.span<{ color?: string }>`
   color: ${(p) => p.color ?? theme.colors.primary};
 `;
 
-export const Button = styled.button<{ variant?: "primary" | "ghost" | "danger" }>`
+export const Button = styled.button<{
+  variant?: "primary" | "ghost" | "danger";
+}>`
   padding: ${theme.spacing.sm} ${theme.spacing.md};
   border-radius: ${theme.radius.md};
   font-size: ${theme.fontSize.sm};
@@ -217,7 +220,12 @@ export const Truncate = styled(Mono)`
   }
 `;
 
-export const Flex = styled.div<{ gap?: string; align?: string; justify?: string; wrap?: boolean }>`
+export const Flex = styled.div<{
+  gap?: string;
+  align?: string;
+  justify?: string;
+  wrap?: boolean;
+}>`
   display: flex;
   gap: ${(p) => p.gap ?? theme.spacing.md};
   align-items: ${(p) => p.align ?? "center"};
@@ -232,7 +240,11 @@ export const Spinner = styled.div`
   border-top-color: ${theme.colors.primary};
   border-radius: 50%;
   animation: spin 0.6s linear infinite;
-  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
 `;
 
 export const Loading = () => (

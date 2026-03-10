@@ -12,6 +12,7 @@ import {
   contractLabels,
   buildSlotLookup,
 } from "@clustec/common";
+import type { FeePricingService } from "../services/fee-pricing.ts";
 
 // Allowed sort columns and directions
 const SORT_COLUMNS: Record<string, AnyColumn> = {
@@ -36,7 +37,7 @@ const SORT_COLUMNS: Record<string, AnyColumn> = {
   status: transactions.status,
 };
 
-export function registerTxRoutes(app: FastifyInstance, db: Db) {
+export function registerTxRoutes(app: FastifyInstance, db: Db, feePricing?: Map<string, FeePricingService>) {
   app.get<{
     Params: { id: string };
     Querystring: {
@@ -402,6 +403,12 @@ export function registerTxRoutes(app: FastifyInstance, db: Db) {
       ? (Number(feePayerCount.count) / Number(totalCount.count)) * 100
       : 0;
 
+    // Estimate tx cost in USD via L1 rollup contract + ETH price
+    const feeService = feePricing?.get(id);
+    const feePricingData = tx.actualFee
+      ? await feeService?.estimateTxCostUsd(tx.actualFee) ?? null
+      : null;
+
     return {
       tx,
       featureVector: fv?.vector ?? null,
@@ -416,6 +423,7 @@ export function registerTxRoutes(app: FastifyInstance, db: Db) {
       contractClassLogDetails,
       publicAddresses,
       feePayerPct,
+      feePricingData,
     };
   });
 

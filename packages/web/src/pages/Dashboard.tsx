@@ -50,7 +50,7 @@ const Legend = styled.div`
 const DashboardContainer = styled(PageContainer)`
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 56px);
+  height: 100vh;
   overflow: hidden;
 
   @media (max-width: 768px) {

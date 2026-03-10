@@ -4,7 +4,7 @@ import styled from "@emotion/styled";
 import { useNetworkStore } from "../stores/network";
 import { useTxDetail, useTxGraph } from "../api/hooks";
 import { useMyTxs } from "../stores/my-txs";
-import { useAddressResolver } from "../hooks/useAddressResolver";
+import { useAddressResolver, useLabeledAddresses } from "../hooks/useAddressResolver";
 import type {
   PrivateLogDetail,
   ContractClassLogDetail,
@@ -26,9 +26,9 @@ import {
 } from "../components/ui";
 import { theme } from "../lib/theme";
 import {
-  SnapshotableFootprint,
-  FootprintCompare,
-} from "../components/PrivacyFootprint";
+  SnapshotableFingerprint,
+  FingerprintCompare,
+} from "../components/TxFingerprint";
 import { abbreviateHex } from "../components/TxTable";
 
 // ── Styled components ──
@@ -245,6 +245,15 @@ const SimilarTxHeader = styled.div`
 `;
 
 /** Convert a SimilarTx row into a feature vector array matching the 15-dim layout */
+/** Format a very small number using scientific notation when needed */
+function formatSmallNumber(n: number): string {
+  if (n === 0) return "0";
+  const abs = Math.abs(n);
+  if (abs >= 0.01) return n.toFixed(4);
+  if (abs >= 1e-6) return n.toFixed(8);
+  return n.toExponential(2);
+}
+
 function similarTxToVector(tx: SimilarTx): (number | string)[] {
   // Prefer the stored feature vector (has correct expirationDelta etc.)
   if (tx.featureVector) return tx.featureVector;
@@ -507,6 +516,7 @@ function SlotTimelines({
 function PublicCallsSection({
   calls,
   resolveAddress,
+  labeledAddresses,
 }: {
   calls: {
     phase: string;
@@ -520,6 +530,7 @@ function PublicCallsSection({
     contractType: string | null;
   }[];
   resolveAddress: (addr: string) => string;
+  labeledAddresses: Set<string>;
 }) {
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
 
@@ -612,8 +623,7 @@ function PublicCallsSection({
                       <CalldataCell colSpan={6}>
                         <div style={{ maxHeight: "160px", overflowY: "auto" }}>
                           {c.calldata.map((field, j) => {
-                            const resolved = resolveAddress(field);
-                            const isKnown = resolved !== field;
+                            const isLabeled = labeledAddresses.has(field.toLowerCase());
                             return (
                               <div
                                 key={j}
@@ -639,7 +649,7 @@ function PublicCallsSection({
                                     wordBreak: "break-all",
                                   }}
                                 >
-                                  {isKnown ? (
+                                  {isLabeled ? (
                                     <>
                                       <Badge
                                         color={theme.colors.accent}
@@ -647,7 +657,7 @@ function PublicCallsSection({
                                       >
                                         addr
                                       </Badge>{" "}
-                                      {resolved}
+                                      {resolveAddress(field)}
                                     </>
                                   ) : (
                                     field
@@ -938,6 +948,7 @@ export function TxDetail() {
   const { data, isLoading, isError } = useTxDetail(selectedNetwork, hash ?? "");
   const { isTracked, add, remove } = useMyTxs();
   const resolveAddress = useAddressResolver();
+  const labeledAddresses = useLabeledAddresses();
   const [activeTab, setActiveTab] = useState<"details" | "similar">("details");
   const sortedSimilarTxs = useMemo(
     () => data ? [...data.similarTxs].sort((a, b) => (b.outlierScore ?? 0) - (a.outlierScore ?? 0)) : [],
@@ -1143,6 +1154,13 @@ export function TxDetail() {
             <FieldLabel>Actual Fee</FieldLabel>
             <FieldValue>
               {Number(tx.actualFee).toLocaleString()} mana
+              {data.feePricingData && (
+                <span style={{ marginLeft: 8, opacity: 0.7 }}>
+                  ≈ {formatSmallNumber(data.feePricingData.costUsd)} USD
+                  ({formatSmallNumber(data.feePricingData.costEth)} ETH
+                  @ ${data.feePricingData.ethUsdPrice.toLocaleString()}/ETH)
+                </span>
+              )}
             </FieldValue>
           </Field>
         )}
@@ -1180,14 +1198,14 @@ export function TxDetail() {
         )}
       </Card>
 
-      {/* ── Privacy Footprint ── */}
+      {/* ── Transaction Fingerprint ── */}
       {featureVector && (
         <>
           <SectionTitle style={{ marginTop: theme.spacing.lg }}>
-            Privacy Footprint
+            Transaction Fingerprint
           </SectionTitle>
           <Card>
-            <SnapshotableFootprint
+            <SnapshotableFingerprint
               vector={featureVector}
               showLabels
               label={tx.txHash.slice(0, 10)}
@@ -1241,6 +1259,7 @@ export function TxDetail() {
               <PublicCallsSection
                 calls={publicCalls}
                 resolveAddress={resolveAddress}
+                labeledAddresses={labeledAddresses}
               />
             </>
           )}
@@ -1352,7 +1371,7 @@ export function TxDetail() {
                     </Badge>
                   )}
                 </SimilarTxHeader>
-                <FootprintCompare
+                <FingerprintCompare
                   vectorA={featureVector}
                   vectorB={similarTxToVector(stx)}
                   labelA="This TX"

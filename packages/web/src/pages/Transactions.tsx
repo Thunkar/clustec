@@ -76,7 +76,7 @@ export function Transactions() {
   if (isLoading && !data) return <Loading />;
 
   return (
-    <PageContainer style={{ maxWidth: "none", padding: theme.spacing.md }}>
+    <PageContainer>
       <PageTitle>Transactions</PageTitle>
 
       <Toolbar>
