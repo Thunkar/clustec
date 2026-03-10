@@ -255,6 +255,14 @@ export interface PrivacySet {
   outlierScore: number | null;
 }
 
+export interface FeePricingData {
+  costUsd: number;
+  costEth: number;
+  costFpa: number;
+  ethUsdPrice: number;
+  ethPerFeeAssetE12: string;
+}
+
 export interface TxDetail {
   tx: Transaction;
   featureVector: (number | string)[] | null;
@@ -269,6 +277,7 @@ export interface TxDetail {
   contractClassLogDetails: ContractClassLogDetail[];
   publicAddresses: PublicAddress[];
   feePayerPct: number;
+  feePricingData: FeePricingData | null;
 }
 
 export interface ClusterMember {

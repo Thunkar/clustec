@@ -10,6 +10,7 @@ import {
   ProtocolContractAddress,
   protocolContractNames,
 } from "@aztec/protocol-contracts";
+import { FeePricingService } from "./services/fee-pricing.ts";
 
 interface ContractEntry {
   address: string;
@@ -19,6 +20,8 @@ interface ContractEntry {
 
 interface NetworkConfig {
   id: string;
+  nodeUrl?: string;
+  chainId?: number;
   contracts?: ContractEntry[];
 }
 
@@ -31,10 +34,10 @@ const PROTOCOL_CONTRACTS: ContractEntry[] = protocolContractNames.map(
 );
 
 /**
- * Load contract labels from network config files in configs/networks/.
- * Returns a map of networkId → contract entries.
+ * Load network config files from configs/networks/.
+ * Returns a map of networkId → full config.
  */
-function loadNetworkContracts(): Map<string, ContractEntry[]> {
+function loadNetworkConfigs(): Map<string, NetworkConfig> {
   const configDir = join(
     import.meta.dirname,
     "..",
@@ -43,15 +46,15 @@ function loadNetworkContracts(): Map<string, ContractEntry[]> {
     "configs",
     "networks"
   );
-  const result = new Map<string, ContractEntry[]>();
+  const result = new Map<string, NetworkConfig>();
 
   try {
     const files = readdirSync(configDir).filter((f) => f.endsWith(".json"));
     for (const file of files) {
       const raw = readFileSync(join(configDir, file), "utf-8");
       const config = JSON.parse(raw) as NetworkConfig;
-      if (config.id && config.contracts) {
-        result.set(config.id, config.contracts);
+      if (config.id) {
+        result.set(config.id, config);
       }
     }
   } catch {
@@ -59,6 +62,30 @@ function loadNetworkContracts(): Map<string, ContractEntry[]> {
   }
 
   return result;
+}
+
+/**
+ * Fetch L1 info (rollup address and chain ID) from an Aztec node via getNodeInfo.
+ * Uses a single-shot fetch to avoid the SDK client's aggressive retry behavior.
+ */
+async function fetchL1Info(nodeUrl: string): Promise<{ rollupAddress: string; l1ChainId: number } | null> {
+  try {
+    const res = await fetch(nodeUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", method: "node_getNodeInfo", params: [], id: 1 }),
+      signal: AbortSignal.timeout(5000),
+    });
+    const data = (await res.json()) as {
+      result?: { l1ChainId?: number; l1ContractAddresses?: { rollupAddress?: string } };
+    };
+    const rollupAddress = data.result?.l1ContractAddresses?.rollupAddress;
+    const l1ChainId = data.result?.l1ChainId;
+    if (!rollupAddress || l1ChainId == null) return null;
+    return { rollupAddress, l1ChainId };
+  } catch {
+    return null;
+  }
 }
 
 const port = parseInt(process.env.PORT ?? "3002", 10);
@@ -90,12 +117,28 @@ async function main() {
     }
   });
 
-  registerRoutes(app, db);
+  // Load per-network config files
+  const networkConfigs = loadNetworkConfigs();
+
+  // Initialize fee pricing services per network
+  const l1RpcUrl = process.env.L1_RPC_URL;
+  const feePricing = new Map<string, FeePricingService>();
+
+  for (const [id, config] of networkConfigs) {
+    if (!config.nodeUrl) continue;
+    const l1Info = await fetchL1Info(config.nodeUrl);
+    if (!l1Info) continue;
+    const service = new FeePricingService(l1RpcUrl, l1Info.l1ChainId);
+    service.init(l1Info.rollupAddress);
+    if (service.enabled) {
+      feePricing.set(id, service);
+      app.log.info({ network: id, rollupAddress: l1Info.rollupAddress, l1ChainId: l1Info.l1ChainId }, "Fee pricing enabled");
+    }
+  }
+
+  registerRoutes(app, db, feePricing);
 
   await app.listen({ port, host });
-
-  // Load per-network contract labels from config files
-  const networkContracts = loadNetworkContracts();
 
   // Wait for the indexer to register networks (they start in parallel via docker-compose).
   // Retry a few times with increasing delay before giving up.
@@ -115,9 +158,9 @@ async function main() {
     const allContracts = [...PROTOCOL_CONTRACTS];
 
     // Network-specific contracts from config
-    const extra = networkContracts.get(networkId);
-    if (extra) {
-      allContracts.push(...extra);
+    const config = networkConfigs.get(networkId);
+    if (config?.contracts) {
+      allContracts.push(...config.contracts);
     }
 
     for (const contract of allContracts) {
