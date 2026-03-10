@@ -29,7 +29,7 @@ export function useTxs(
 ) {
   return useQuery({
     queryKey: ["networks", networkId, "txs", page, filters],
-    queryFn: () => api.getTxs(networkId, page, 50, filters),
+    queryFn: () => api.getTxs(networkId, page, 25, filters),
     enabled: !!networkId,
     placeholderData: (prev) => prev,
   });

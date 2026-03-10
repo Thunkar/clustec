@@ -35,6 +35,8 @@ const PieCard = styled(Card)`
 
   @media (max-width: 768px) {
     justify-content: center;
+    padding: ${theme.spacing.sm};
+    gap: ${theme.spacing.sm};
   }
 `;
 
@@ -63,6 +65,38 @@ const PlotSection = styled.div`
   display: flex;
   flex-direction: column;
   min-height: 0;
+
+  @media (max-width: 768px) {
+    margin-top: ${theme.spacing.sm};
+  }
+`;
+
+const PlotCaption = styled.p`
+  color: ${theme.colors.textMuted};
+  margin-bottom: ${theme.spacing.sm};
+  font-size: ${theme.fontSize.xs};
+
+  @media (max-width: 768px) {
+    display: none;
+  }
+`;
+
+const PieChartBox = styled.div`
+  flex-shrink: 0;
+  width: 150px;
+  height: 150px;
+
+  @media (max-width: 768px) {
+    width: 90px;
+    height: 90px;
+  }
+`;
+
+const MobileTitle = styled(PageTitle)`
+  @media (max-width: 768px) {
+    font-size: ${theme.fontSize.lg};
+    margin-bottom: ${theme.spacing.sm};
+  }
 `;
 
 export function Dashboard() {
@@ -104,7 +138,7 @@ export function Dashboard() {
 
   return (
     <DashboardContainer>
-      <PageTitle>Dashboard</PageTitle>
+      <MobileTitle>Dashboard</MobileTitle>
 
       <TopRow>
         <Grid columns={2} style={{ flex: 1 }}>
@@ -131,17 +165,17 @@ export function Dashboard() {
 
         {pieData.length > 0 && (
           <PieCard>
-            <div style={{ flexShrink: 0, width: 120, height: 120 }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
+            <PieChartBox>
+              <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
                   <Pie
                     data={pieData}
                     dataKey="value"
                     nameKey="name"
                     cx="50%"
                     cy="50%"
-                    outerRadius={55}
-                    innerRadius={28}
+                    outerRadius="90%"
+                    innerRadius="45%"
                   >
                     {pieData.map((_, i) => (
                       <Cell key={i} fill={theme.colors.cluster[i % theme.colors.cluster.length]} />
@@ -155,7 +189,7 @@ export function Dashboard() {
                   />
                 </PieChart>
               </ResponsiveContainer>
-            </div>
+            </PieChartBox>
             <Legend>
               <StatLabel style={{ marginBottom: theme.spacing.xs }}>Fee Payers</StatLabel>
               {pieData.map((d, i) => (
@@ -173,9 +207,9 @@ export function Dashboard() {
       {/* 3D UMAP Projection */}
       {umapData?.points && umapData.points.length > 0 && (
         <PlotSection>
-          <p style={{ color: theme.colors.textMuted, marginBottom: theme.spacing.sm, fontSize: theme.fontSize.xs }}>
+          <PlotCaption>
             3D cluster visualization. Drag to rotate, scroll to zoom, click a point to view.
-          </p>
+          </PlotCaption>
           <Card style={{ padding: theme.spacing.sm, overflow: "hidden", flex: 1, minHeight: 400 }}>
             <ScatterPlot3D
               points={umapData.points}

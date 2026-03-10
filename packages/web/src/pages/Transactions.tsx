@@ -9,7 +9,7 @@ import {
 import { TxTable, type TxSortKey, type SortDir } from "../components/TxTable";
 import { theme } from "../lib/theme";
 
-const LIMIT = 50;
+const LIMIT = 25;
 
 const Toolbar = styled.div`
   display: flex;

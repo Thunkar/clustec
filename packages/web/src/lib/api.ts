@@ -221,6 +221,7 @@ export interface SimilarTx {
   expirationTimestamp: number | null;
   feePayer: string;
   outlierScore: number | null;
+  featureVector: (number | string)[] | null;
 }
 
 export interface PrivateLogDetail {

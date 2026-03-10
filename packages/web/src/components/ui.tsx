@@ -49,24 +49,38 @@ export const Grid = styled.div<{ columns?: number }>`
     grid-template-columns: repeat(2, 1fr);
   }
   @media (max-width: 600px) {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, 1fr);
+    gap: ${theme.spacing.sm};
   }
 `;
 
 export const StatCard = styled(Card)`
   text-align: center;
+
+  @media (max-width: 600px) {
+    padding: ${theme.spacing.sm};
+  }
 `;
 
 export const StatValue = styled.div`
   font-size: ${theme.fontSize.xl};
   font-weight: 700;
   color: ${theme.colors.primary};
+
+  @media (max-width: 600px) {
+    font-size: ${theme.fontSize.lg};
+  }
 `;
 
 export const StatLabel = styled.div`
   font-size: ${theme.fontSize.sm};
   color: ${theme.colors.textMuted};
   margin-top: ${theme.spacing.xs};
+
+  @media (max-width: 600px) {
+    font-size: ${theme.fontSize.xs};
+    margin-top: 2px;
+  }
 `;
 
 export const TableWrapper = styled.div`
