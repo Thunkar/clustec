@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import type { AnyColumn } from "drizzle-orm";
-import { eq, desc, asc, and, ne, or, sql, ilike } from "drizzle-orm";
+import { eq, desc, and, ne, or, sql, ilike } from "drizzle-orm";
 import {
   type Db,
   transactions,
@@ -56,7 +56,10 @@ export function registerTxRoutes(app: FastifyInstance, db: Db) {
     const { feePayer, status, search } = request.query;
 
     const sortCol = SORT_COLUMNS[request.query.sort ?? ""] ?? transactions.createdAt;
-    const sortDir = request.query.order === "asc" ? asc : desc;
+    // Push nulls to bottom regardless of sort direction
+    const sortOrder = request.query.order === "asc"
+      ? sql`${sortCol} ASC NULLS LAST`
+      : sql`${sortCol} DESC NULLS LAST`;
 
     // Build conditions
     const conditions = [eq(transactions.networkId, id)];
@@ -122,7 +125,7 @@ export function registerTxRoutes(app: FastifyInstance, db: Db) {
         .select(listColumns)
         .from(transactions)
         .where(where)
-        .orderBy(sortDir(sortCol))
+        .orderBy(sortOrder)
         .limit(limit)
         .offset(offset),
       db
@@ -268,7 +271,7 @@ export function registerTxRoutes(app: FastifyInstance, db: Db) {
       };
     }
 
-    // Find similar transactions — return all feature-vector-relevant fields
+    // Find similar transactions with their stored feature vectors
     let similarTxs: {
       txHash: string;
       blockNumber: number | null;
@@ -289,6 +292,7 @@ export function registerTxRoutes(app: FastifyInstance, db: Db) {
       expirationTimestamp: number | null;
       feePayer: string;
       outlierScore: number | null;
+      featureVector: unknown;
     }[] = [];
 
     if (latestMembership && latestMembership.clusterId !== -1) {
@@ -313,9 +317,11 @@ export function registerTxRoutes(app: FastifyInstance, db: Db) {
           expirationTimestamp: transactions.expirationTimestamp,
           feePayer: transactions.feePayer,
           outlierScore: clusterMemberships.outlierScore,
+          featureVector: featureVectors.vector,
         })
         .from(clusterMemberships)
         .innerJoin(transactions, eq(transactions.id, clusterMemberships.txId))
+        .leftJoin(featureVectors, eq(featureVectors.txId, transactions.id))
         .where(
           and(
             eq(clusterMemberships.runId, latestMembership.runId),

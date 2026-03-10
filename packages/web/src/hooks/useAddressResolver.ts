@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import { useLabels } from "../api/hooks";
 import { useNetworkStore } from "../stores/network";
+import { abbreviateHex } from "../components/TxTable";
 
 /**
  * Returns a function that resolves an address to its label if one exists.
@@ -11,14 +12,14 @@ export function useAddressResolver() {
   const { data: labels } = useLabels(selectedNetwork);
 
   const resolve = useCallback(
-    (address: string, truncate = true): string => {
+    (address: string): string => {
       const label = labels?.find(
         (l) => l.address.toLowerCase() === address.toLowerCase()
       );
       if (label) {
-        return `${label.label} (${address.slice(0, 10)}...)`;
+        return `${label.label} (${abbreviateHex(address)})`;
       }
-      return truncate ? address : address;
+      return abbreviateHex(address);
     },
     [labels]
   );

@@ -12,6 +12,10 @@ const Container = styled.div`
   border-radius: ${theme.radius.md};
   overflow: hidden;
   background: ${theme.colors.bg};
+
+  @media (max-width: 768px) {
+    min-height: 50vh;
+  }
 `;
 
 const TooltipContent = styled.div`

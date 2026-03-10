@@ -47,6 +47,7 @@ const CompactTable = styled(Table)`
     font-size: ${theme.fontSize.xs};
     white-space: nowrap;
     padding: 8px 6px;
+    text-align: center;
   }
 
   tbody td {
@@ -137,7 +138,7 @@ export function TxTable({
             {header("maxFeePerL2Gas", "Fee/L2")}
             {header("numSetupCalls", "Setup")}
             {header("numAppCalls", "App")}
-            {header("totalPublicCalldataSize", "Calldata")}
+            {header("totalPublicCalldataSize", "Calldata Size")}
             {header("feePayer", "Fee Payer")}
             {showOutlierScore && header("outlierScore", "Outlier")}
           </tr>
