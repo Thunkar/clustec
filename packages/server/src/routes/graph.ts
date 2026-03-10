@@ -88,7 +88,10 @@ export function registerGraphRoutes(app: FastifyInstance, db: Db) {
       ? await db
           .select({ feePayer: transactions.feePayer, publicCalls: transactions.publicCalls })
           .from(transactions)
-          .where(sql`${transactions.id} IN (${sql.join(txIds.map((id) => sql`${id}`), sql`, `)})`)
+          .where(and(
+            eq(transactions.networkId, id),
+            sql`${transactions.id} IN (${sql.join(txIds.map((tid) => sql`${tid}`), sql`, `)})`
+          ))
       : [];
     const knownAddresses = writerTxs.flatMap((t) => {
       const addrs: string[] = [];

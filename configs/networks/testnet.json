@@ -1,0 +1,9 @@
+{
+  "id": "testnet",
+  "name": "Testnet",
+  "nodeUrl": "https://rpc.testnet.aztec-labs.com",
+  "chainId": 11155111,
+  "pollIntervalMs": 500,
+  "batchSize": 200,
+  "enabled": true
+}

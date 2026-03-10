@@ -173,7 +173,7 @@ export function Layout() {
             &#9776;
           </HamburgerButton>
           <ClustecLogo size={24} />
-          <MobileLogo>clustec</MobileLogo>
+          <MobileLogo>Clustec</MobileLogo>
         </MobileHeader>
         <Outlet />
       </Main>
