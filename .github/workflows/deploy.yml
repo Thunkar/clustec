@@ -27,7 +27,7 @@ jobs:
         run: yarn build
 
       - name: Test (TypeScript)
-        run: turbo run test
+        run: yarn turbo run test
 
       - name: Test (Python analyzer)
         run: cd packages/analyzer && uv run pytest tests/ -v
