@@ -14,7 +14,7 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "tsx src/db/migrate.ts"
+    "db:migrate": "node --experimental-transform-types src/db/migrate.ts"
   },
   "dependencies": {
     "@aztec/foundation": "4.0.0-devnet.2-patch.3",
@@ -26,7 +26,6 @@
   "devDependencies": {
     "@types/node": "^22",
     "drizzle-kit": "^0.31",
-    "tsx": "^4",
     "typescript": "^5.7"
   }
 }

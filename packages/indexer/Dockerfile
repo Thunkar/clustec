@@ -17,4 +17,4 @@ COPY packages/common/ packages/common/
 COPY packages/indexer/ packages/indexer/
 RUN yarn workspace @clustec/common build && yarn workspace @clustec/indexer build
 
-CMD ["node", "--import", "tsx/esm", "packages/indexer/src/main.ts", "--config", "/app/config.json"]
+CMD ["node", "--experimental-transform-types", "packages/indexer/src/main.ts", "--config", "/app/config.json"]

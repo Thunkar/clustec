@@ -1,0 +1,1 @@
+ALTER TABLE "transactions" ADD COLUMN "anchor_block_timestamp" bigint;

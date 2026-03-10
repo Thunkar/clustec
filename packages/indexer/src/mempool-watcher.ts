@@ -4,7 +4,7 @@ import {
   transactions,
   contractInteractions,
 } from "@clustec/common";
-import { extractFromTx } from "./extractor.js";
+import { extractFromTx } from "./extractor.ts";
 
 export class MempoolWatcher {
   private running = false;
@@ -87,6 +87,7 @@ export class MempoolWatcher {
           totalPublicCalldataSize: extracted.totalPublicCalldataSize,
           feePayer: extracted.feePayer,
           expirationTimestamp: extracted.expirationTimestamp,
+          anchorBlockTimestamp: extracted.anchorBlockTimestamp,
           publicCalls: extracted.publicCalls,
           l2ToL1MsgDetails: extracted.l2ToL1MsgDetails,
           rawTx: JSON.parse(JSON.stringify(tx)),

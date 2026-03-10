@@ -147,6 +147,16 @@ const SortableHeader = styled.th<{ active?: boolean }>`
   }
 `;
 
+/** Format a seconds delta as a human-readable string (e.g. "24h 0m") */
+function formatDelta(seconds: number): string {
+  if (seconds < 0) return `-${formatDelta(-seconds)}`;
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m`;
+  return `${seconds}s`;
+}
+
 const FeatureRow = styled.div`
   display: flex;
   justify-content: space-between;
@@ -663,6 +673,11 @@ export function TxDetail() {
             <FieldLabel>Expiration</FieldLabel>
             <FieldValue>
               {new Date(tx.expirationTimestamp * 1000).toLocaleString()}
+              {tx.anchorBlockTimestamp != null && tx.anchorBlockTimestamp !== 0 && (
+                <span style={{ color: theme.colors.textMuted, fontSize: theme.fontSize.xs, marginLeft: "8px" }}>
+                  (delta: {formatDelta(tx.expirationTimestamp - tx.anchorBlockTimestamp)})
+                </span>
+              )}
             </FieldValue>
           </Field>
         )}

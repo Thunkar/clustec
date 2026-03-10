@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { extractFromTxEffect } from "../extractor.js";
+import { extractFromTxEffect } from "../extractor.ts";
 
 // Minimal mock that satisfies TxEffect shape for extractFromTxEffect
 function makeMockTxEffect(overrides: {

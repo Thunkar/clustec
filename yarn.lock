@@ -1068,7 +1068,6 @@ __metadata:
     drizzle-kit: "npm:^0.31"
     drizzle-orm: "npm:^0.45"
     postgres: "npm:^3.4"
-    tsx: "npm:^4"
     typescript: "npm:^5.7"
   languageName: unknown
   linkType: soft
@@ -1084,7 +1083,6 @@ __metadata:
     "@types/node": "npm:^22"
     drizzle-orm: "npm:^0.45"
     postgres: "npm:^3.4"
-    tsx: "npm:^4"
     typescript: "npm:^5.7"
     vitest: "npm:^3"
   languageName: unknown
@@ -1103,7 +1101,6 @@ __metadata:
     pino-http: "npm:^10"
     pino-pretty: "npm:^13"
     postgres: "npm:^3.4"
-    tsx: "npm:^4"
     typescript: "npm:^5.7"
     vitest: "npm:^3"
   languageName: unknown
@@ -4769,7 +4766,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"esbuild@npm:^0.27.0, esbuild@npm:~0.27.0":
+"esbuild@npm:^0.27.0":
   version: 0.27.3
   resolution: "esbuild@npm:0.27.3"
   dependencies:
@@ -5375,7 +5372,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"get-tsconfig@npm:^4.7.0, get-tsconfig@npm:^4.7.5":
+"get-tsconfig@npm:^4.7.0":
   version: 4.13.6
   resolution: "get-tsconfig@npm:4.13.6"
   dependencies:
@@ -8072,22 +8069,6 @@ __metadata:
   version: 1.0.6
   resolution: "tsscmp@npm:1.0.6"
   checksum: 10c0/2f79a9455e7e3e8071995f98cdf3487ccfc91b760bec21a9abb4d90519557eafaa37246e87c92fa8bf3fef8fd30cfd0cc3c4212bb929baa9fb62494bfa4d24b2
-  languageName: node
-  linkType: hard
-
-"tsx@npm:^4":
-  version: 4.21.0
-  resolution: "tsx@npm:4.21.0"
-  dependencies:
-    esbuild: "npm:~0.27.0"
-    fsevents: "npm:~2.3.3"
-    get-tsconfig: "npm:^4.7.5"
-  dependenciesMeta:
-    fsevents:
-      optional: true
-  bin:
-    tsx: dist/cli.mjs
-  checksum: 10c0/f5072923cd8459a1f9a26df87823a2ab5754641739d69df2a20b415f61814322b751fa6be85db7c6ec73cf68ba8fac2fd1cfc76bdb0aa86ded984d84d5d2126b
   languageName: node
   linkType: hard
 

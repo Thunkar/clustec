@@ -1,6 +1,6 @@
-export * from "./db/index.js";
+export * from "./db/index.ts";
 export {
   computePublicDataTreeLeafSlot,
   buildSlotLookup,
   type SlotPreimage,
-} from "./slots.js";
+} from "./slots.ts";

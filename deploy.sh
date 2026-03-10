@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ─── Usage ────────────────────────────────────────────────────────────
+# Deploys to a remote server: uploads configs, pulls images, restarts services.
+# Images must already be pushed (run build:docker first).
+#
+# Usage:
+#   ./deploy.sh --host 1.2.3.4
+#   ./deploy.sh --host 1.2.3.4 --tag v1.2.0 --key ~/.ssh/id_ed25519
+
 usage() {
   cat <<EOF
 Usage: $0 [options]
@@ -12,34 +18,29 @@ Options:
   --port PORT         SSH port                              [default: 22]
   --key  KEY          Path to SSH private key               [optional]
   --dir  DIR          Remote directory for deployment       [default: /opt/clustec]
-  --platform PLAT     Docker build platform                 [default: linux/amd64]
+  --tag  TAG          Image tag to deploy                   [default: latest]
   -h, --help          Show this help message
-
-Example:
-  $0 --host 192.168.1.100 --user deploy --key ~/.ssh/id_ed25519
 EOF
   exit 0
 }
 
-# ─── Defaults ─────────────────────────────────────────────────────────
 SSH_HOST=""
 SSH_USER="root"
 SSH_PORT="22"
 SSH_KEY=""
 REMOTE_DIR="/opt/clustec"
-PLATFORM="linux/amd64"
+IMAGE_TAG="latest"
 
-# ─── Parse args ───────────────────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --host)     SSH_HOST="$2";     shift 2 ;;
-    --user)     SSH_USER="$2";     shift 2 ;;
-    --port)     SSH_PORT="$2";     shift 2 ;;
-    --key)      SSH_KEY="$2";      shift 2 ;;
-    --dir)      REMOTE_DIR="$2";   shift 2 ;;
-    --platform) PLATFORM="$2";    shift 2 ;;
-    -h|--help)  usage ;;
-    *)          echo "Unknown option: $1"; usage ;;
+    --host) SSH_HOST="$2";    shift 2 ;;
+    --user) SSH_USER="$2";    shift 2 ;;
+    --port) SSH_PORT="$2";    shift 2 ;;
+    --key)  SSH_KEY="$2";     shift 2 ;;
+    --dir)  REMOTE_DIR="$2";  shift 2 ;;
+    --tag)  IMAGE_TAG="$2";   shift 2 ;;
+    -h|--help) usage ;;
+    *) echo "Unknown option: $1"; usage ;;
   esac
 done
 
@@ -47,6 +48,12 @@ if [[ -z "$SSH_HOST" ]]; then
   echo "Error: --host is required"
   usage
 fi
+
+IMAGES=(
+  "thunkar/clustec-server:$IMAGE_TAG"
+  "thunkar/clustec-indexer:$IMAGE_TAG"
+  "thunkar/clustec-web:$IMAGE_TAG"
+)
 
 # ─── SSH / SCP helpers ───────────────────────────────────────────────
 SSH_OPTS="-o StrictHostKeyChecking=accept-new -p $SSH_PORT"
@@ -65,78 +72,41 @@ send() {
 }
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-IMAGES_TAR="$SCRIPT_DIR/.deploy-images.tar.gz"
 
-# ─── Step 1: Build images locally ────────────────────────────────────
-echo "==> Building Docker images for $PLATFORM..."
-
-docker build --platform "$PLATFORM" \
-  -f packages/server/Dockerfile \
-  -t clustec-server:latest \
-  "$SCRIPT_DIR"
-
-docker build --platform "$PLATFORM" \
-  -f packages/indexer/Dockerfile \
-  -t clustec-indexer:latest \
-  "$SCRIPT_DIR"
-
-docker build --platform "$PLATFORM" \
-  -f packages/web/Dockerfile \
-  -t clustec-web:latest \
-  "$SCRIPT_DIR"
-
-# ─── Step 2: Save images to tar.gz ───────────────────────────────────
-echo "==> Saving images to archive..."
-docker save clustec-server:latest clustec-indexer:latest clustec-web:latest \
-  | gzip > "$IMAGES_TAR"
-
-SIZE=$(du -h "$IMAGES_TAR" | cut -f1)
-echo "    Archive: $SIZE"
-
-# ─── Step 3: Wait for cloud-init + ensure Docker ──────────────────
+# ─── 1. Check remote ─────────────────────────────────────────────────
 echo "==> Waiting for server to be ready..."
 remote "command -v cloud-init >/dev/null 2>&1 && { echo 'Waiting for cloud-init...'; cloud-init status --wait; } || true"
 
-echo "==> Checking Docker on remote..."
 remote "docker compose version" || {
   echo "Error: 'docker compose' not available on remote."
-  echo "  Install docker-compose-plugin or wait for cloud-init to finish."
   exit 1
 }
 
-# ─── Step 4: Prepare remote directory ────────────────────────────────
-echo "==> Preparing remote directory $REMOTE_DIR..."
+# ─── 2. Upload configs ───────────────────────────────────────────────
+echo "==> Uploading configs..."
 remote "mkdir -p $REMOTE_DIR/configs/networks"
 
-# ─── Step 5: Transfer files ──────────────────────────────────────────
-echo "==> Uploading images archive..."
-send "$IMAGES_TAR" "$REMOTE_DIR/images.tar.gz"
-
-echo "==> Uploading compose, Caddyfile, and configs..."
 send "$SCRIPT_DIR/docker-compose.yml"  "$REMOTE_DIR/docker-compose.yml"
 send "$SCRIPT_DIR/Caddyfile"           "$REMOTE_DIR/Caddyfile"
 send "$SCRIPT_DIR/.env.example"        "$REMOTE_DIR/.env.example"
 
-# Upload network configs
 for f in "$SCRIPT_DIR"/configs/networks/*.json; do
   [ -f "$f" ] && send "$f" "$REMOTE_DIR/configs/networks/$(basename "$f")"
 done
 
-# ─── Step 6: Load images on remote ──────────────────────────────────
-echo "==> Loading images on remote..."
-remote "docker load -i $REMOTE_DIR/images.tar.gz"
+# ─── 3. Pull images ──────────────────────────────────────────────────
+echo "==> Pulling images (tag: $IMAGE_TAG)..."
+for img in "${IMAGES[@]}"; do
+  remote "docker pull $img"
+done
 
-# ─── Step 7: Create .env if missing ─────────────────────────────────
+# ─── 4. Set IMAGE_TAG in .env ────────────────────────────────────────
 remote "[ -f $REMOTE_DIR/.env ] || cp $REMOTE_DIR/.env.example $REMOTE_DIR/.env"
+remote "grep -q '^IMAGE_TAG=' $REMOTE_DIR/.env 2>/dev/null && sed -i 's|^IMAGE_TAG=.*|IMAGE_TAG=$IMAGE_TAG|' $REMOTE_DIR/.env || echo 'IMAGE_TAG=$IMAGE_TAG' >> $REMOTE_DIR/.env"
 
-# ─── Step 8: Start services ─────────────────────────────────────────
+# ─── 5. Restart services ─────────────────────────────────────────────
 echo "==> Starting services..."
 remote "cd $REMOTE_DIR && docker compose up -d"
-
-# ─── Step 9: Cleanup ────────────────────────────────────────────────
-echo "==> Cleaning up..."
-rm -f "$IMAGES_TAR"
-remote "rm -f $REMOTE_DIR/images.tar.gz"
 
 echo ""
 echo "==> Deploy complete!"

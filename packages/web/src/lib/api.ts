@@ -81,6 +81,7 @@ export interface Transaction {
   totalPublicCalldataSize: number;
   feePayer: string;
   expirationTimestamp: number | null;
+  anchorBlockTimestamp: number | null;
   numPublicDataWrites: number | null;
   numPublicLogs: number | null;
   privateLogTotalSize: number | null;

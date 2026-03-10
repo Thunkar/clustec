@@ -136,6 +136,7 @@ export const transactions = pgTable(
     // ── Queryable metadata ──
     feePayer: text("fee_payer").notNull(),
     expirationTimestamp: bigint("expiration_timestamp", { mode: "number" }),
+    anchorBlockTimestamp: bigint("anchor_block_timestamp", { mode: "number" }),
 
     // ── Structured data (JSONB) ──
     // [{contractAddress, functionSelector, msgSender, isStaticCall, phase, calldataSize, calldata}]

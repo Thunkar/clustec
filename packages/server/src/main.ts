@@ -4,8 +4,8 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import Fastify from "fastify";
 import { createDb, networks, contractLabels } from "@clustec/common";
-import { registerRoutes } from "./routes/index.js";
-import { startAnalysisScheduler } from "./routes/analyze.js";
+import { registerRoutes } from "./routes/index.ts";
+import { startAnalysisScheduler } from "./routes/analyze.ts";
 import {
   ProtocolContractAddress,
   protocolContractNames,
