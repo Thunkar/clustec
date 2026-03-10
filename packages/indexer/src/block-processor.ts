@@ -15,8 +15,8 @@ import {
   nullifiers,
   publicDataWrites,
 } from "@clustec/common";
-import { extractFromTx, extractFromTxEffect } from "./extractor.js";
-import { computeFeatureVector } from "./features.js";
+import { extractFromTx, extractFromTxEffect } from "./extractor.ts";
+import { computeFeatureVector } from "./features.ts";
 
 /**
  * Extends L2TipsMemoryStore so it acts as both the local data provider
@@ -120,6 +120,7 @@ export class BlockProcessor extends L2TipsMemoryStore {
             numAppCalls: transactions.numAppCalls,
             totalPublicCalldataSize: transactions.totalPublicCalldataSize,
             expirationTimestamp: transactions.expirationTimestamp,
+            anchorBlockTimestamp: transactions.anchorBlockTimestamp,
           })
           .from(transactions)
           .where(and(eq(transactions.networkId, this.networkId), eq(transactions.txHash, mined.txHash)))
@@ -159,6 +160,7 @@ export class BlockProcessor extends L2TipsMemoryStore {
             hasTeardown: extracted.hasTeardown,
             totalPublicCalldataSize: extracted.totalPublicCalldataSize,
             expirationTimestamp: extracted.expirationTimestamp,
+            anchorBlockTimestamp: extracted.anchorBlockTimestamp,
             publicCalls: extracted.publicCalls,
             l2ToL1MsgDetails: extracted.l2ToL1MsgDetails,
             hasPendingData: true,
@@ -264,7 +266,7 @@ export class BlockProcessor extends L2TipsMemoryStore {
           totalPublicCalldataSize: existing?.totalPublicCalldataSize ?? (pf?.totalPublicCalldataSize as number) ?? 0,
           feePayer,
           expirationTimestamp: existing?.expirationTimestamp ?? (pf?.expirationTimestamp as number | null) ?? null,
-          anchorBlockTimestamp: null,
+          anchorBlockTimestamp: existing?.anchorBlockTimestamp ?? (pf?.anchorBlockTimestamp as number | null) ?? null,
         });
         await this.db
           .insert(featureVectors)

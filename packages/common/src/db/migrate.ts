@@ -1,7 +1,7 @@
-import { loadEnv } from "../env.js";
+import { loadEnv } from "../env.ts";
 loadEnv();
 import { migrate } from "drizzle-orm/postgres-js/migrator";
-import { createDb } from "./client.js";
+import { createDb } from "./client.ts";
 
 async function main() {
   const db = createDb();

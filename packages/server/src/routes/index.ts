@@ -1,12 +1,12 @@
 import type { FastifyInstance } from "fastify";
 import type { Db } from "@clustec/common";
-import { registerNetworkRoutes } from "./networks.js";
-import { registerBlockRoutes } from "./blocks.js";
-import { registerTxRoutes } from "./txs.js";
-import { registerClusterRoutes } from "./clusters.js";
-import { registerLabelRoutes } from "./labels.js";
-import { registerAnalyzeRoutes } from "./analyze.js";
-import { registerGraphRoutes } from "./graph.js";
+import { registerNetworkRoutes } from "./networks.ts";
+import { registerBlockRoutes } from "./blocks.ts";
+import { registerTxRoutes } from "./txs.ts";
+import { registerClusterRoutes } from "./clusters.ts";
+import { registerLabelRoutes } from "./labels.ts";
+import { registerAnalyzeRoutes } from "./analyze.ts";
+import { registerGraphRoutes } from "./graph.ts";
 
 export function registerRoutes(app: FastifyInstance, db: Db) {
   registerNetworkRoutes(app, db);

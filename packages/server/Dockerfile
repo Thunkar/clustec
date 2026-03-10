@@ -37,4 +37,4 @@ COPY configs/ configs/
 
 ENV NODE_ENV=production
 
-CMD ["node", "--import", "tsx/esm", "packages/server/src/main.ts"]
+CMD ["node", "--experimental-transform-types", "packages/server/src/main.ts"]

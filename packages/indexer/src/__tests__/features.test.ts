@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeFeatureVector, FEATURE_DIM, NUMERIC_DIM, type FeatureInput } from "../features.js";
+import { computeFeatureVector, FEATURE_DIM, NUMERIC_DIM, type FeatureInput } from "../features.ts";
 
 function makeTx(overrides: Partial<FeatureInput> = {}): FeatureInput {
   return {

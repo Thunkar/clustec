@@ -8,7 +8,7 @@ import {
   nullifiers,
   publicDataWrites,
 } from "@clustec/common";
-import { extractFromTxEffect, extractFromReceipt } from "./extractor.js";
+import { extractFromTxEffect, extractFromReceipt } from "./extractor.ts";
 
 const STATUS_ORDER: Record<string, number> = {
   dropped: 0,

@@ -5,7 +5,7 @@ import type {
   ExtractedReceiptData,
   PublicCallInfo,
   L2ToL1MsgInfo,
-} from "./types.js";
+} from "./types.ts";
 
 const ZERO_ADDR_66 = "0x" + "0".repeat(64);
 const ZERO_ETH_ADDR = "0x" + "0".repeat(40);

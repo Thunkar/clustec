@@ -6,9 +6,9 @@ import { createAztecNodeClient } from "@aztec/aztec.js/node";
 import { L2BlockStream } from "@aztec/stdlib/block";
 import { eq } from "drizzle-orm";
 import { createDb, networks, syncCursors } from "@clustec/common";
-import { BlockProcessor } from "./block-processor.js";
-import { MempoolWatcher } from "./mempool-watcher.js";
-import { startReconciler } from "./reconciler.js";
+import { BlockProcessor } from "./block-processor.ts";
+import { MempoolWatcher } from "./mempool-watcher.ts";
+import { startReconciler } from "./reconciler.ts";
 
 interface NetworkConfig {
   id: string;
