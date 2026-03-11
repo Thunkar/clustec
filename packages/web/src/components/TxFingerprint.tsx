@@ -36,10 +36,10 @@ const GROUPS = [
   { start: 14, end: 14, label: "Identity" },
 ];
 
-const GROUP_GAP = 10;
-const PAD_X = 10;
-const PAD_TOP = 16;
-const PAD_BOT = 46;
+const GROUP_GAP = 6;
+const PAD_X = 6;
+const PAD_TOP = 14;
+const PAD_BOT = 50;
 const ZERO_COLOR = "#555570"; // visible muted color for zero-value stubs
 
 function hashToUnit(s: string): number {
@@ -80,7 +80,7 @@ function normalizeNumeric(
     10: 4,          // numSetupCalls
     11: 4,          // numAppCalls
     12: 10_000,     // totalPublicCalldataSize
-    13: 100_000,    // expirationDelta (seconds)
+    13: 172_800,    // expirationDelta (seconds) — 48h max
   };
   const cap = caps[index] ?? 1;
   return Math.min(value / cap, 1);
@@ -161,7 +161,7 @@ function renderBars({
   showLabels: boolean;
 }) {
   const { centerY, maxBarH, barW, barX } = layout;
-  const r = 3;
+  const r = 2;
   const ZERO_H = 2;
   const elements: React.ReactElement[] = [];
 
@@ -312,7 +312,7 @@ function renderComparisonBars({
   showLabels: boolean;
 }) {
   const { centerY, maxBarH, barW, barX } = layout;
-  const r = 3;
+  const r = 2;
   const ZERO_H = 2;
   const elements: React.ReactElement[] = [];
 
@@ -475,10 +475,10 @@ function renderGroupLabelsAndSeparators(
 
 // ── Viewbox dimensions ──
 
-const VB_W = 700;
-const VB_H_LABELS = 210;
-const VB_H_COMPACT = 130;
-const VB_H_NO_LABELS = 120;
+const VB_W = 500;
+const VB_H_LABELS = 200;
+const VB_H_COMPACT = 100;
+const VB_H_NO_LABELS = 90;
 
 // ── Public components ──
 
@@ -752,26 +752,34 @@ export function SnapshotableFingerprint({
 // ── Styled ──
 
 const DesktopOnly = styled.div`
-  @media (max-width: 600px) {
+  flex: 1;
+  min-height: 0;
+  @media (max-width: 768px) {
     display: none;
   }
 `;
 
 const MobileOnly = styled.div`
   display: none;
-  @media (max-width: 600px) {
-    display: block;
+  @media (max-width: 768px) {
+    display: flex;
+    flex: 1;
+    min-height: 0;
   }
 `;
 
 const ResponsiveSvg = styled.svg`
   display: block;
   width: 100%;
-  height: auto;
+  height: 100%;
 `;
 
 const SnapshotWrapper = styled.div`
   position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
 
   &:hover button {
     opacity: 1;
