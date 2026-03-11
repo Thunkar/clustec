@@ -4,7 +4,10 @@ import styled from "@emotion/styled";
 import { useNetworkStore } from "../stores/network";
 import { useTxDetail, useTxGraph } from "../api/hooks";
 import { useMyTxs } from "../stores/my-txs";
-import { useAddressResolver, useLabeledAddresses } from "../hooks/useAddressResolver";
+import {
+  useAddressResolver,
+  useLabeledAddresses,
+} from "../hooks/useAddressResolver";
 import type {
   PrivateLogDetail,
   PublicLogDetail,
@@ -208,7 +211,8 @@ const Tab = styled.button<{ active?: boolean }>`
   padding: ${theme.spacing.sm} ${theme.spacing.md};
   background: none;
   border: none;
-  border-bottom: 2px solid ${(p) => (p.active ? theme.colors.primary : "transparent")};
+  border-bottom: 2px solid
+    ${(p) => (p.active ? theme.colors.primary : "transparent")};
   margin-bottom: -2px;
   font-size: ${theme.fontSize.sm};
   font-weight: 600;
@@ -217,6 +221,73 @@ const Tab = styled.button<{ active?: boolean }>`
 
   &:hover {
     color: ${theme.colors.primary};
+  }
+`;
+
+const TopColumns = styled.div`
+  display: flex;
+  gap: ${theme.spacing.md};
+  align-items: stretch;
+
+  @media (max-width: 1400px) {
+    flex-direction: column;
+  }
+`;
+
+const TopColumnLeft = styled.div`
+  flex: 3 1 0%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+`;
+
+const TopColumnRight = styled.div`
+  flex: 7 1 0%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+
+  @media (max-width: 1400px) {
+    width: 100%;
+  }
+`;
+
+const FingerprintInner = styled.div`
+  display: flex;
+  gap: ${theme.spacing.sm};
+  align-items: stretch;
+  flex: 1;
+  min-height: 0;
+
+  @media (max-width: 1400px) {
+    flex-direction: column;
+  }
+`;
+
+const FingerprintChartCol = styled.div`
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+`;
+
+const FingerprintValuesCol = styled.div`
+  flex: 0 0 350px;
+  min-width: 0;
+  max-height: 400px;
+  overflow-y: auto;
+
+  @media (max-width: 1400px) {
+    display: none;
+  }
+`;
+
+const FingerprintValuesMobile = styled.div`
+  display: none;
+
+  @media (max-width: 1400px) {
+    display: block;
   }
 `;
 
@@ -434,7 +505,11 @@ function SlotTimelines({
   const blockRange = maxBlock - minBlock || 1;
 
   return (
-    <Collapsible title="Public Data Writes" count={data.slots.length} defaultOpen={false}>
+    <Collapsible
+      title="Public Data Writes"
+      count={data.slots.length}
+      defaultOpen={false}
+    >
       <p
         style={{
           color: theme.colors.textMuted,
@@ -614,7 +689,9 @@ function PublicCallsSection({
                       <CalldataCell colSpan={6}>
                         <div style={{ maxHeight: "160px", overflowY: "auto" }}>
                           {c.calldata.map((field, j) => {
-                            const isLabeled = labeledAddresses.has(field.toLowerCase());
+                            const isLabeled = labeledAddresses.has(
+                              field.toLowerCase(),
+                            );
                             return (
                               <div
                                 key={j}
@@ -933,7 +1010,11 @@ function ContractClassLogsSection({
   if (logs.length === 0) return null;
 
   return (
-    <Collapsible title="Contract Class Logs" count={logs.length} defaultOpen={false}>
+    <Collapsible
+      title="Contract Class Logs"
+      count={logs.length}
+      defaultOpen={false}
+    >
       <Card style={{ padding: 0, overflow: "hidden" }}>
         <TableWrapper>
           <Table>
@@ -1003,9 +1084,16 @@ export function TxDetail() {
   const { isTracked, add, remove } = useMyTxs();
   const resolveAddress = useAddressResolver();
   const labeledAddresses = useLabeledAddresses();
-  const [activeTab, setActiveTab] = useState<"details" | "similar" | "public">("details");
+  const [activeTab, setActiveTab] = useState<"details" | "similar" | "public">(
+    "details",
+  );
   const sortedSimilarTxs = useMemo(
-    () => data ? [...data.similarTxs].sort((a, b) => (b.outlierScore ?? 0) - (a.outlierScore ?? 0)) : [],
+    () =>
+      data
+        ? [...data.similarTxs].sort(
+            (a, b) => (b.outlierScore ?? 0) - (a.outlierScore ?? 0),
+          )
+        : [],
     [data],
   );
 
@@ -1046,8 +1134,8 @@ export function TxDetail() {
 
   return (
     <PageContainer>
-      <Flex justify="space-between">
-        <PageTitle>Transaction</PageTitle>
+      <Flex justify="space-between" style={{ marginBottom: theme.spacing.md }}>
+        <PageTitle style={{ marginBottom: 0 }}>Transaction</PageTitle>
         <Button
           variant={tracked ? "danger" : "primary"}
           onClick={() => (tracked ? remove(tx.txHash) : add(tx.txHash))}
@@ -1056,238 +1144,238 @@ export function TxDetail() {
         </Button>
       </Flex>
 
-      {/* ── Overview (merged with gas settings) ── */}
-      <Card style={{ marginBottom: theme.spacing.md }}>
-        <Field>
-          <FieldLabel>Hash</FieldLabel>
-          <FieldValue>{tx.txHash}</FieldValue>
-        </Field>
-        <Flex gap="24px" wrap>
-          <Field>
-            <FieldLabel>Status</FieldLabel>
-            <FieldValue>
-              <StatusBadge status={tx.status} />
-            </FieldValue>
-          </Field>
-          {tx.blockNumber != null && (
+      {/* ── Overview + Fingerprint side-by-side ── */}
+      <TopColumns>
+        <TopColumnLeft>
+          <Card style={{ flex: 1 }}>
             <Field>
-              <FieldLabel>Block</FieldLabel>
-              <FieldValue>{tx.blockNumber.toLocaleString()}</FieldValue>
+              <FieldLabel>Hash</FieldLabel>
+              <FieldValue>{abbreviateHex(tx.txHash)}</FieldValue>
             </Field>
-          )}
-          {tx.txIndex != null && (
-            <Field>
-              <FieldLabel>Index</FieldLabel>
-              <FieldValue>{tx.txIndex}</FieldValue>
-            </Field>
-          )}
-          {tx.executionResult != null && (
-            <Field>
-              <FieldLabel>Execution Result</FieldLabel>
-              <FieldValue>
-                {tx.executionResult === "success" ? (
-                  <Badge color={theme.colors.success}>Success</Badge>
-                ) : (
-                  <Badge color={theme.colors.danger}>
-                    {tx.executionResult.replace(/_/g, " ")}
-                  </Badge>
-                )}
-              </FieldValue>
-            </Field>
-          )}
-          {tx.error && (
-            <Field>
-              <FieldLabel>Error</FieldLabel>
-              <FieldValue style={{ color: theme.colors.danger }}>
-                {tx.error}
-              </FieldValue>
-            </Field>
-          )}
-          {privacySet ? (
-            <>
+            <Flex gap="24px" wrap>
               <Field>
-                <FieldLabel>Privacy Set Size</FieldLabel>
+                <FieldLabel>Status</FieldLabel>
                 <FieldValue>
-                  <Badge
-                    color={
-                      privacySet.clusterSize === 1
-                        ? theme.colors.danger
-                        : privacySet.clusterSize <= 5
-                          ? theme.colors.warning
-                          : theme.colors.success
-                    }
-                  >
-                    {privacySet.clusterSize === 1
-                      ? "1 (unique)"
-                      : `${privacySet.clusterSize.toLocaleString()} txs`}
-                  </Badge>
+                  <StatusBadge status={tx.status} />
                 </FieldValue>
               </Field>
-              <Field>
-                <FieldLabel>% of Network</FieldLabel>
-                <FieldValue>
-                  {privacySetPct < 0.1
-                    ? "<0.1%"
-                    : `${privacySetPct.toFixed(1)}%`}
-                  <span
-                    style={{
-                      color: theme.colors.textMuted,
-                      fontSize: theme.fontSize.xs,
-                      marginLeft: "4px",
-                    }}
-                  >
-                    ({privacySet.totalTxsAnalyzed.toLocaleString()} total)
-                  </span>
-                </FieldValue>
-              </Field>
-              {privacySet.outlierScore != null && (
+              {tx.blockNumber != null && (
                 <Field>
-                  <FieldLabel>Outlier Score</FieldLabel>
+                  <FieldLabel>Block</FieldLabel>
+                  <FieldValue>{tx.blockNumber.toLocaleString()}</FieldValue>
+                </Field>
+              )}
+              {tx.txIndex != null && (
+                <Field>
+                  <FieldLabel>Index</FieldLabel>
+                  <FieldValue>{tx.txIndex}</FieldValue>
+                </Field>
+              )}
+              {tx.executionResult != null && (
+                <Field>
+                  <FieldLabel>Execution Result</FieldLabel>
                   <FieldValue>
-                    {(privacySet.outlierScore * 100).toFixed(1)}%
+                    {tx.executionResult === "success" ? (
+                      <Badge color={theme.colors.success}>Success</Badge>
+                    ) : (
+                      <Badge color={theme.colors.danger}>
+                        {tx.executionResult.replace(/_/g, " ")}
+                      </Badge>
+                    )}
                   </FieldValue>
                 </Field>
               )}
-            </>
-          ) : (
+              {tx.error && (
+                <Field>
+                  <FieldLabel>Error</FieldLabel>
+                  <FieldValue style={{ color: theme.colors.danger }}>
+                    {tx.error}
+                  </FieldValue>
+                </Field>
+              )}
+              {privacySet ? (
+                <>
+                  <Field>
+                    <FieldLabel>Privacy Set Size</FieldLabel>
+                    <FieldValue>
+                      <Badge
+                        color={
+                          privacySet.clusterSize === 1
+                            ? theme.colors.danger
+                            : privacySet.clusterSize <= 5
+                              ? theme.colors.warning
+                              : theme.colors.success
+                        }
+                      >
+                        {privacySet.clusterSize === 1
+                          ? "1 (unique)"
+                          : `${privacySet.clusterSize.toLocaleString()} txs`}
+                      </Badge>
+                    </FieldValue>
+                  </Field>
+                  <Field>
+                    <FieldLabel>% of Network</FieldLabel>
+                    <FieldValue>
+                      {privacySetPct < 0.1
+                        ? "<0.1%"
+                        : `${privacySetPct.toFixed(1)}%`}
+                      <span
+                        style={{
+                          color: theme.colors.textMuted,
+                          fontSize: theme.fontSize.xs,
+                          marginLeft: "4px",
+                        }}
+                      >
+                        ({privacySet.totalTxsAnalyzed.toLocaleString()} total)
+                      </span>
+                    </FieldValue>
+                  </Field>
+                  {privacySet.outlierScore != null && (
+                    <Field>
+                      <FieldLabel>Outlier Score</FieldLabel>
+                      <FieldValue>
+                        {(privacySet.outlierScore * 100).toFixed(1)}%
+                      </FieldValue>
+                    </Field>
+                  )}
+                </>
+              ) : (
+                <Field>
+                  <FieldLabel>Privacy Set</FieldLabel>
+                  <FieldValue>
+                    <Badge color={theme.colors.textMuted}>
+                      Not yet analyzed
+                    </Badge>
+                  </FieldValue>
+                </Field>
+              )}
+            </Flex>
+            {tx.expirationTimestamp != null && tx.expirationTimestamp !== 0 && (
+              <Field>
+                <FieldLabel>Expiration</FieldLabel>
+                <FieldValue>
+                  {new Date(tx.expirationTimestamp * 1000).toLocaleString()}
+                  {tx.anchorBlockTimestamp != null &&
+                    tx.anchorBlockTimestamp !== 0 && (
+                      <span
+                        style={{
+                          color: theme.colors.textMuted,
+                          fontSize: theme.fontSize.xs,
+                          marginLeft: "8px",
+                        }}
+                      >
+                        (delta:{" "}
+                        {formatDelta(
+                          tx.expirationTimestamp - tx.anchorBlockTimestamp,
+                        )}
+                        )
+                      </span>
+                    )}
+                </FieldValue>
+              </Field>
+            )}
             <Field>
-              <FieldLabel>Privacy Set</FieldLabel>
+              <FieldLabel>Fee Payer</FieldLabel>
               <FieldValue>
-                <Badge color={theme.colors.textMuted}>Not yet analyzed</Badge>
+                {resolveAddress(tx.feePayer)}
+                <span
+                  style={{
+                    color: theme.colors.textMuted,
+                    fontSize: theme.fontSize.xs,
+                    marginLeft: "8px",
+                  }}
+                >
+                  ({feePayerPct < 0.1 ? "<0.1" : feePayerPct.toFixed(1)}% of
+                  network txs)
+                </span>
               </FieldValue>
             </Field>
-          )}
-        </Flex>
-        {tx.expirationTimestamp != null && tx.expirationTimestamp !== 0 && (
-          <Field>
-            <FieldLabel>Expiration</FieldLabel>
-            <FieldValue>
-              {new Date(tx.expirationTimestamp * 1000).toLocaleString()}
-              {tx.anchorBlockTimestamp != null &&
-                tx.anchorBlockTimestamp !== 0 && (
-                  <span
-                    style={{
-                      color: theme.colors.textMuted,
-                      fontSize: theme.fontSize.xs,
-                      marginLeft: "8px",
-                    }}
-                  >
-                    (delta:{" "}
-                    {formatDelta(
-                      tx.expirationTimestamp - tx.anchorBlockTimestamp,
-                    )}
-                    )
-                  </span>
-                )}
-            </FieldValue>
-          </Field>
-        )}
-        <Field>
-          <FieldLabel>Fee Payer</FieldLabel>
-          <FieldValue>
-            {resolveAddress(tx.feePayer)}
-            <span
-              style={{
-                color: theme.colors.textMuted,
-                fontSize: theme.fontSize.xs,
-                marginLeft: "8px",
-              }}
-            >
-              ({feePayerPct < 0.1 ? "<0.1" : feePayerPct.toFixed(1)}% of network
-              txs)
-            </span>
-          </FieldValue>
-        </Field>
-        {tx.actualFee && (
-          <Field>
-            <FieldLabel>Actual Fee</FieldLabel>
-            <FieldValue>
-              {Number(tx.actualFee).toLocaleString()} mana
-              {data.feePricingData && (
-                <span style={{ marginLeft: 8, opacity: 0.7 }}>
-                  ≈ {formatSmallNumber(data.feePricingData.costUsd)} USD
-                  ({formatSmallNumber(data.feePricingData.costEth)} ETH
-                  @ ${data.feePricingData.ethUsdPrice.toLocaleString()}/ETH)
-                </span>
-              )}
-            </FieldValue>
-          </Field>
-        )}
-        {/* Gas settings inline */}
-        {(tx.gasLimitDa ||
-          tx.gasLimitL2 ||
-          tx.maxFeePerDaGas ||
-          tx.maxFeePerL2Gas) && (
-          <Flex gap="24px" wrap>
-            {tx.gasLimitDa != null && (
+            {tx.actualFee && (
               <Field>
-                <FieldLabel>Gas Limit (DA)</FieldLabel>
-                <FieldValue>{tx.gasLimitDa.toLocaleString()}</FieldValue>
+                <FieldLabel>Actual Fee</FieldLabel>
+                <FieldValue>
+                  {Number(tx.actualFee).toLocaleString()} mana
+                  {data.feePricingData && (
+                    <span style={{ marginLeft: 8, opacity: 0.7 }}>
+                      ≈ {formatSmallNumber(data.feePricingData.costUsd)} USD (
+                      {formatSmallNumber(data.feePricingData.costEth)} ETH @ $
+                      {data.feePricingData.ethUsdPrice.toLocaleString()}/ETH)
+                    </span>
+                  )}
+                </FieldValue>
               </Field>
             )}
-            {tx.gasLimitL2 != null && (
-              <Field>
-                <FieldLabel>Gas Limit (L2)</FieldLabel>
-                <FieldValue>{tx.gasLimitL2.toLocaleString()}</FieldValue>
-              </Field>
-            )}
-            {tx.maxFeePerDaGas != null && (
-              <Field>
-                <FieldLabel>Max Fee/DA Gas</FieldLabel>
-                <FieldValue>{tx.maxFeePerDaGas.toLocaleString()}</FieldValue>
-              </Field>
-            )}
-            {tx.maxFeePerL2Gas != null && (
-              <Field>
-                <FieldLabel>Max Fee/L2 Gas</FieldLabel>
-                <FieldValue>{tx.maxFeePerL2Gas.toLocaleString()}</FieldValue>
-              </Field>
-            )}
-          </Flex>
-        )}
-      </Card>
-
-      {/* ── Transaction Fingerprint ── */}
-      {featureVector && (
-        <>
-          <SectionTitle style={{ marginTop: theme.spacing.lg }}>
-            Transaction Fingerprint
-          </SectionTitle>
-          <Card>
-            <SnapshotableFingerprint
-              vector={featureVector}
-              showLabels
-              label={tx.txHash.slice(0, 10)}
-            />
-            <Collapsible title="Raw Values" defaultOpen={false}>
-              {FEATURE_LABELS.map((label, i) => (
-                <FeatureRow key={i}>
-                  <FeatureName>{label}</FeatureName>
-                  <FeatureValue>
-                    {i === 14
-                      ? resolveAddress(String(featureVector[i]))
-                      : typeof featureVector[i] === "number"
-                        ? (featureVector[i] as number).toLocaleString()
-                        : String(featureVector[i])}
-                  </FeatureValue>
-                </FeatureRow>
-              ))}
-            </Collapsible>
           </Card>
-        </>
-      )}
+        </TopColumnLeft>
+
+        {featureVector && (
+          <TopColumnRight>
+            <Card style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+              <FieldLabel>Transaction Fingerprint</FieldLabel>
+              <FingerprintInner>
+                <FingerprintChartCol>
+                  <SnapshotableFingerprint
+                    vector={featureVector}
+                    showLabels
+                    label={tx.txHash.slice(0, 10)}
+                  />
+                </FingerprintChartCol>
+                <FingerprintValuesCol>
+                  {FEATURE_LABELS.map((label, i) => (
+                    <FeatureRow key={i}>
+                      <FeatureName>{label}</FeatureName>
+                      <FeatureValue>
+                        {i === 14
+                          ? resolveAddress(String(featureVector[i]))
+                          : typeof featureVector[i] === "number"
+                            ? (featureVector[i] as number).toLocaleString()
+                            : String(featureVector[i])}
+                      </FeatureValue>
+                    </FeatureRow>
+                  ))}
+                </FingerprintValuesCol>
+              </FingerprintInner>
+              <FingerprintValuesMobile>
+                <Collapsible title="Raw Values" defaultOpen={false}>
+                  {FEATURE_LABELS.map((label, i) => (
+                    <FeatureRow key={i}>
+                      <FeatureName>{label}</FeatureName>
+                      <FeatureValue>
+                        {i === 14
+                          ? resolveAddress(String(featureVector[i]))
+                          : typeof featureVector[i] === "number"
+                            ? (featureVector[i] as number).toLocaleString()
+                            : String(featureVector[i])}
+                      </FeatureValue>
+                    </FeatureRow>
+                  ))}
+                </Collapsible>
+              </FingerprintValuesMobile>
+            </Card>
+          </TopColumnRight>
+        )}
+      </TopColumns>
 
       {/* ── Tabs: Similar Txs / Tx Effects ── */}
       <TabBar>
         {featureVector && sortedSimilarTxs.length > 0 && (
-          <Tab active={activeTab === "similar"} onClick={() => setActiveTab("similar")}>
+          <Tab
+            active={activeTab === "similar"}
+            onClick={() => setActiveTab("similar")}
+          >
             Similar Txs ({sortedSimilarTxs.length})
           </Tab>
         )}
-        <Tab active={activeTab === "details"} onClick={() => setActiveTab("details")}>
+        <Tab
+          active={activeTab === "details"}
+          onClick={() => setActiveTab("details")}
+        >
           Tx Effects
         </Tab>
-        <Tab active={activeTab === "public"} onClick={() => setActiveTab("public")}>
+        <Tab
+          active={activeTab === "public"}
+          onClick={() => setActiveTab("public")}
+        >
           Public Activity ({publicAddresses.length + publicCalls.length})
         </Tab>
       </TabBar>
@@ -1295,7 +1383,11 @@ export function TxDetail() {
       {activeTab === "details" && (
         <>
           {noteHashes.length > 0 && (
-            <Collapsible title="Note Hashes" count={noteHashes.length} defaultOpen={false}>
+            <Collapsible
+              title="Note Hashes"
+              count={noteHashes.length}
+              defaultOpen={false}
+            >
               <Card style={{ padding: 0, overflow: "hidden" }}>
                 <TableWrapper>
                   <Table>
@@ -1321,7 +1413,11 @@ export function TxDetail() {
             </Collapsible>
           )}
           {nullifiers.length > 0 && (
-            <Collapsible title="Nullifiers" count={nullifiers.length} defaultOpen={false}>
+            <Collapsible
+              title="Nullifiers"
+              count={nullifiers.length}
+              defaultOpen={false}
+            >
               <Card style={{ padding: 0, overflow: "hidden" }}>
                 <TableWrapper>
                   <Table>
@@ -1408,9 +1504,14 @@ export function TxDetail() {
                 <SimilarTxHeader>
                   <Link
                     to={`/tx/${stx.txHash}`}
-                    style={{ color: theme.colors.primary, textDecoration: "none" }}
+                    style={{
+                      color: theme.colors.primary,
+                      textDecoration: "none",
+                    }}
                   >
-                    <Mono style={{ fontSize: "10px" }}>{abbreviateHex(stx.txHash)}</Mono>
+                    <Mono style={{ fontSize: "10px" }}>
+                      {abbreviateHex(stx.txHash)}
+                    </Mono>
                   </Link>
                   <StatusBadge status={stx.status} />
                   {stx.outlierScore != null && (
