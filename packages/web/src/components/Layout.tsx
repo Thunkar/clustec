@@ -124,7 +124,7 @@ const navItems = [
   { path: "/txs", label: "Transactions" },
   { path: "/privacy-sets", label: "Privacy Sets" },
   { path: "/labels", label: "Labels" },
-  { path: "/my-txs", label: "My Transactions" },
+  { path: "/murder-board", label: "Murder Board" },
 ];
 
 export function Layout() {

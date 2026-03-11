@@ -7,6 +7,7 @@ import { useMyTxs } from "../stores/my-txs";
 import { useAddressResolver, useLabeledAddresses } from "../hooks/useAddressResolver";
 import type {
   PrivateLogDetail,
+  PublicLogDetail,
   ContractClassLogDetail,
   PublicAddress,
   SimilarTx,
@@ -433,17 +434,7 @@ function SlotTimelines({
   const blockRange = maxBlock - minBlock || 1;
 
   return (
-    <>
-      <h3
-        style={{
-          fontSize: theme.fontSize.md,
-          fontWeight: 600,
-          marginBottom: theme.spacing.sm,
-          color: theme.colors.text,
-        }}
-      >
-        Storage Slots ({data.slots.length})
-      </h3>
+    <Collapsible title="Public Data Writes" count={data.slots.length} defaultOpen={false}>
       <p
         style={{
           color: theme.colors.textMuted,
@@ -507,7 +498,7 @@ function SlotTimelines({
           </SlotRow>
         ))}
       </Card>
-    </>
+    </Collapsible>
   );
 }
 
@@ -825,8 +816,7 @@ function PrivateLogsSection({ logs }: { logs: PrivateLogDetail[] }) {
   if (logs.length === 0) return null;
 
   return (
-    <div style={{ marginTop: theme.spacing.md }}>
-      <SectionTitle>Private Logs ({logs.length})</SectionTitle>
+    <Collapsible title="Private Logs" count={logs.length} defaultOpen={false}>
       <Card style={{ padding: 0, overflow: "hidden" }}>
         <TableWrapper>
           <Table>
@@ -857,7 +847,72 @@ function PrivateLogsSection({ logs }: { logs: PrivateLogDetail[] }) {
           </Table>
         </TableWrapper>
       </Card>
-    </div>
+    </Collapsible>
+  );
+}
+
+// ── Public Logs section ──
+
+function PublicLogsSection({
+  logs,
+  resolveAddress,
+}: {
+  logs: PublicLogDetail[];
+  resolveAddress: (addr: string) => string;
+}) {
+  const { sorted, toggleSort, indicator, sortKey } = useSortableTable(
+    logs,
+    "index",
+  );
+
+  if (logs.length === 0) return null;
+
+  return (
+    <Collapsible title="Public Logs" count={logs.length} defaultOpen={false}>
+      <Card style={{ padding: 0, overflow: "hidden" }}>
+        <TableWrapper>
+          <Table>
+            <thead>
+              <tr>
+                <SortableHeader
+                  active={sortKey === "index"}
+                  onClick={() => toggleSort("index")}
+                >
+                  #{indicator("index")}
+                </SortableHeader>
+                <SortableHeader
+                  active={sortKey === "contractAddress"}
+                  onClick={() => toggleSort("contractAddress")}
+                >
+                  Contract Address{indicator("contractAddress")}
+                </SortableHeader>
+                <SortableHeader
+                  active={sortKey === "emittedLength"}
+                  onClick={() => toggleSort("emittedLength")}
+                >
+                  Emitted Length{indicator("emittedLength")}
+                </SortableHeader>
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.map((log) => (
+                <tr key={log.index}>
+                  <td>{log.index}</td>
+                  <td>
+                    <Mono style={{ fontSize: "10px" }}>
+                      {log.contractAddress
+                        ? resolveAddress(log.contractAddress)
+                        : "\u2014"}
+                    </Mono>
+                  </td>
+                  <td>{log.emittedLength.toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        </TableWrapper>
+      </Card>
+    </Collapsible>
   );
 }
 
@@ -878,8 +933,7 @@ function ContractClassLogsSection({
   if (logs.length === 0) return null;
 
   return (
-    <div style={{ marginTop: theme.spacing.md }}>
-      <SectionTitle>Contract Class Logs ({logs.length})</SectionTitle>
+    <Collapsible title="Contract Class Logs" count={logs.length} defaultOpen={false}>
       <Card style={{ padding: 0, overflow: "hidden" }}>
         <TableWrapper>
           <Table>
@@ -936,7 +990,7 @@ function ContractClassLogsSection({
           </Table>
         </TableWrapper>
       </Card>
-    </div>
+    </Collapsible>
   );
 }
 
@@ -949,7 +1003,7 @@ export function TxDetail() {
   const { isTracked, add, remove } = useMyTxs();
   const resolveAddress = useAddressResolver();
   const labeledAddresses = useLabeledAddresses();
-  const [activeTab, setActiveTab] = useState<"details" | "similar">("details");
+  const [activeTab, setActiveTab] = useState<"details" | "similar" | "public">("details");
   const sortedSimilarTxs = useMemo(
     () => data ? [...data.similarTxs].sort((a, b) => (b.outlierScore ?? 0) - (a.outlierScore ?? 0)) : [],
     [data],
@@ -978,6 +1032,7 @@ export function TxDetail() {
     publicCalls,
     privacySet,
     privateLogDetails,
+    publicLogDetails,
     contractClassLogDetails,
     publicAddresses,
     feePayerPct,
@@ -988,12 +1043,6 @@ export function TxDetail() {
     privacySet && privacySet.totalTxsAnalyzed > 0
       ? (privacySet.clusterSize / privacySet.totalTxsAnalyzed) * 100
       : 0;
-
-  const hasTxEffects =
-    nullifiers.length > 0 ||
-    noteHashes.length > 0 ||
-    privateLogDetails.length > 0 ||
-    contractClassLogDetails.length > 0;
 
   return (
     <PageContainer>
@@ -1228,22 +1277,101 @@ export function TxDetail() {
         </>
       )}
 
-      {/* ── Tabs: This TX / Similar Txs ── */}
+      {/* ── Tabs: Similar Txs / Tx Effects ── */}
       <TabBar>
-        <Tab active={activeTab === "details"} onClick={() => setActiveTab("details")}>
-          This TX
-        </Tab>
         {featureVector && sortedSimilarTxs.length > 0 && (
           <Tab active={activeTab === "similar"} onClick={() => setActiveTab("similar")}>
             Similar Txs ({sortedSimilarTxs.length})
           </Tab>
         )}
+        <Tab active={activeTab === "details"} onClick={() => setActiveTab("details")}>
+          Tx Effects
+        </Tab>
+        <Tab active={activeTab === "public"} onClick={() => setActiveTab("public")}>
+          Public Activity ({publicAddresses.length + publicCalls.length})
+        </Tab>
       </TabBar>
 
       {activeTab === "details" && (
         <>
-          {/* ── Public Activity ── */}
-          <SectionTitle>Public Activity</SectionTitle>
+          {noteHashes.length > 0 && (
+            <Collapsible title="Note Hashes" count={noteHashes.length} defaultOpen={false}>
+              <Card style={{ padding: 0, overflow: "hidden" }}>
+                <TableWrapper>
+                  <Table>
+                    <thead>
+                      <tr>
+                        <th>#</th>
+                        <th>Value</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {noteHashes.map((n) => (
+                        <tr key={n.id}>
+                          <td>{n.position}</td>
+                          <td>
+                            <Mono style={{ fontSize: "10px" }}>{n.value}</Mono>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </Table>
+                </TableWrapper>
+              </Card>
+            </Collapsible>
+          )}
+          {nullifiers.length > 0 && (
+            <Collapsible title="Nullifiers" count={nullifiers.length} defaultOpen={false}>
+              <Card style={{ padding: 0, overflow: "hidden" }}>
+                <TableWrapper>
+                  <Table>
+                    <thead>
+                      <tr>
+                        <th>#</th>
+                        <th>Value</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {nullifiers.map((n) => (
+                        <tr key={n.id}>
+                          <td>{n.position}</td>
+                          <td>
+                            <Mono style={{ fontSize: "10px" }}>{n.value}</Mono>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </Table>
+                </TableWrapper>
+              </Card>
+            </Collapsible>
+          )}
+          <SlotTimelines networkId={selectedNetwork} hash={hash ?? ""} />
+          {privateLogDetails.length > 0 && (
+            <PrivateLogsSection logs={privateLogDetails} />
+          )}
+          {publicLogDetails.length > 0 && (
+            <PublicLogsSection
+              logs={publicLogDetails}
+              resolveAddress={resolveAddress}
+            />
+          )}
+          {contractClassLogDetails.length > 0 && (
+            <ContractClassLogsSection
+              logs={contractClassLogDetails}
+              resolveAddress={resolveAddress}
+            />
+          )}
+        </>
+      )}
+
+      {activeTab === "public" && (
+        <>
+          <PublicAddressesSection
+            addresses={publicAddresses}
+            resolveAddress={resolveAddress}
+            feePayer={tx.feePayer}
+          />
           {publicCalls.length > 0 && (
             <>
               <h3
@@ -1254,7 +1382,7 @@ export function TxDetail() {
                   color: theme.colors.text,
                 }}
               >
-                Calls ({publicCalls.length})
+                Public Calls ({publicCalls.length})
               </h3>
               <PublicCallsSection
                 calls={publicCalls}
@@ -1262,86 +1390,6 @@ export function TxDetail() {
                 labeledAddresses={labeledAddresses}
               />
             </>
-          )}
-          <SlotTimelines networkId={selectedNetwork} hash={hash ?? ""} />
-          <PublicAddressesSection
-            addresses={publicAddresses}
-            resolveAddress={resolveAddress}
-            feePayer={tx.feePayer}
-          />
-
-          {/* ── Tx Effects (collapsible) ── */}
-          {hasTxEffects && (
-            <Collapsible
-              title="Tx Effects"
-              count={
-                nullifiers.length +
-                noteHashes.length +
-                privateLogDetails.length +
-                contractClassLogDetails.length
-              }
-              defaultOpen={false}
-            >
-              {nullifiers.length > 0 && (
-                <div style={{ marginBottom: theme.spacing.md }}>
-                  <SectionTitle>Nullifiers ({nullifiers.length})</SectionTitle>
-                  <Card style={{ padding: 0, overflow: "hidden" }}>
-                    <TableWrapper>
-                      <Table>
-                        <thead>
-                          <tr>
-                            <th>#</th>
-                            <th>Value</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {nullifiers.map((n) => (
-                            <tr key={n.id}>
-                              <td>{n.position}</td>
-                              <td>
-                                <Mono style={{ fontSize: "10px" }}>{n.value}</Mono>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </Table>
-                    </TableWrapper>
-                  </Card>
-                </div>
-              )}
-              {noteHashes.length > 0 && (
-                <div style={{ marginBottom: theme.spacing.md }}>
-                  <SectionTitle>Note Hashes ({noteHashes.length})</SectionTitle>
-                  <Card style={{ padding: 0, overflow: "hidden" }}>
-                    <TableWrapper>
-                      <Table>
-                        <thead>
-                          <tr>
-                            <th>#</th>
-                            <th>Value</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {noteHashes.map((n) => (
-                            <tr key={n.id}>
-                              <td>{n.position}</td>
-                              <td>
-                                <Mono style={{ fontSize: "10px" }}>{n.value}</Mono>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </Table>
-                    </TableWrapper>
-                  </Card>
-                </div>
-              )}
-              <PrivateLogsSection logs={privateLogDetails} />
-              <ContractClassLogsSection
-                logs={contractClassLogDetails}
-                resolveAddress={resolveAddress}
-              />
-            </Collapsible>
           )}
         </>
       )}

@@ -236,6 +236,12 @@ export interface ContractClassLogDetail {
   emittedLength: number;
 }
 
+export interface PublicLogDetail {
+  index: number;
+  contractAddress: string | null;
+  emittedLength: number;
+}
+
 export interface PublicAddress {
   address: string;
   source: string;
@@ -274,6 +280,7 @@ export interface TxDetail {
   privacySet: PrivacySet | null;
   similarTxs: SimilarTx[];
   privateLogDetails: PrivateLogDetail[];
+  publicLogDetails: PublicLogDetail[];
   contractClassLogDetails: ContractClassLogDetail[];
   publicAddresses: PublicAddress[];
   feePayerPct: number;
@@ -302,6 +309,70 @@ export interface ClusterMember {
   totalPublicCalldataSize: number;
   expirationTimestamp: number | null;
   feePayer: string;
+}
+
+// ── Murder Board types ──
+
+export interface MurderBoardTx {
+  txHash: string;
+  blockNumber: number | null;
+  status: TxStatus;
+  executionResult: TxExecutionResult | null;
+  actualFee: string | null;
+  roles: string[];
+  clusterId: number | null;
+  clusterSize: number | null;
+  outlierScore: number | null;
+  featureVector: (number | string)[] | null;
+  feePayer: string;
+  numNoteHashes: number;
+  numNullifiers: number;
+  numL2ToL1Msgs: number;
+  numPrivateLogs: number;
+  numPublicLogs: number | null;
+  numSetupCalls: number;
+  numAppCalls: number;
+  totalPublicCalldataSize: number;
+  createdAt: string;
+}
+
+export interface MurderBoardCluster {
+  clusterId: number;
+  clusterSize: number;
+  txCount: number;
+}
+
+export interface MurderBoardFpc {
+  address: string;
+  label: string | null;
+  contractType: string | null;
+  txCount: number;
+  networkShare: number;
+}
+
+export interface MurderBoardContract {
+  address: string;
+  label: string | null;
+  contractType: string | null;
+  callCount: number;
+}
+
+export interface PrivacyScoreFactor {
+  name: string;
+  impact: "good" | "bad" | "neutral";
+  detail: string;
+}
+
+export interface MurderBoardData {
+  address: string;
+  totalTxs: number;
+  networkTxCount: number;
+  latestRunId: number | null;
+  transactions: MurderBoardTx[];
+  clusters: MurderBoardCluster[];
+  fpcsUsed: MurderBoardFpc[];
+  contractsInteracted: MurderBoardContract[];
+  privacyScore: { score: number; factors: PrivacyScoreFactor[] } | null;
 }
 
 // ── API functions ──
@@ -348,4 +419,6 @@ export const api = {
     fetchJson<{ clusterId: number; members: ClusterMember[] }>(`/networks/${id}/clusters/${runId}/${clusterId}`),
   getFeePayerStats: (id: string) =>
     fetchJson<{ feePayers: FeePayerStat[] }>(`/networks/${id}/txs/stats/fee-payers`),
+  getMurderBoard: (id: string, address: string) =>
+    fetchJson<MurderBoardData>(`/networks/${id}/murder-board/${encodeURIComponent(address)}`),
 };

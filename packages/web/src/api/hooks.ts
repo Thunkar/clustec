@@ -124,4 +124,12 @@ export function useFeePayerStats(networkId: string) {
   });
 }
 
+export function useMurderBoard(networkId: string, address: string) {
+  return useQuery({
+    queryKey: ["networks", networkId, "murder-board", address],
+    queryFn: () => api.getMurderBoard(networkId, address),
+    enabled: !!networkId && !!address,
+  });
+}
+
 
