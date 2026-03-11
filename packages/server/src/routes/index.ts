@@ -8,6 +8,7 @@ import { registerClusterRoutes } from "./clusters.ts";
 import { registerLabelRoutes } from "./labels.ts";
 import { registerAnalyzeRoutes } from "./analyze.ts";
 import { registerGraphRoutes } from "./graph.ts";
+import { registerMurderBoardRoutes } from "./murder-board.ts";
 
 export function registerRoutes(
   app: FastifyInstance,
@@ -21,4 +22,5 @@ export function registerRoutes(
   registerLabelRoutes(app, db);
   registerAnalyzeRoutes(app, db);
   registerGraphRoutes(app, db);
+  registerMurderBoardRoutes(app, db);
 }

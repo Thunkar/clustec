@@ -6,7 +6,7 @@ import { Transactions } from "./pages/Transactions";
 import { Outliers } from "./pages/Outliers";
 import { TxDetail } from "./pages/TxDetail";
 import { Labels } from "./pages/Labels";
-import { MyTransactions } from "./pages/MyTransactions";
+import { MurderBoard } from "./pages/MurderBoard";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -28,7 +28,7 @@ export function App() {
             <Route path="/privacy-sets" element={<Outliers />} />
             <Route path="/tx/:hash" element={<TxDetail />} />
             <Route path="/labels" element={<Labels />} />
-            <Route path="/my-txs" element={<MyTransactions />} />
+            <Route path="/murder-board" element={<MurderBoard />} />
           </Route>
         </Routes>
       </BrowserRouter>

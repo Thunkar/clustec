@@ -362,6 +362,19 @@ export function registerTxRoutes(app: FastifyInstance, db: Db, feePricing?: Map<
       }
     }
 
+    // Extract public log details from rawTxEffect
+    const publicLogDetails: { index: number; contractAddress: string | null; emittedLength: number }[] = [];
+    if (rawEffect && Array.isArray(rawEffect.publicLogs)) {
+      for (let i = 0; i < rawEffect.publicLogs.length; i++) {
+        const log = rawEffect.publicLogs[i] as Record<string, unknown>;
+        const addr = typeof log?.contractAddress === "string" ? log.contractAddress : null;
+        const emitted = typeof log?.emittedLength === "number" ? log.emittedLength : 0;
+        if (addr || emitted > 0) {
+          publicLogDetails.push({ index: i, contractAddress: addr, emittedLength: emitted });
+        }
+      }
+    }
+
     // Collect all publicly visible addresses
     const l2ToL1Msgs = (tx.l2ToL1MsgDetails ?? []) as { recipient: string; senderContract: string }[];
     const addrSet = new Map<string, { address: string; source: string }>();
@@ -420,6 +433,7 @@ export function registerTxRoutes(app: FastifyInstance, db: Db, feePricing?: Map<
       privacySet,
       similarTxs,
       privateLogDetails,
+      publicLogDetails,
       contractClassLogDetails,
       publicAddresses,
       feePayerPct,
