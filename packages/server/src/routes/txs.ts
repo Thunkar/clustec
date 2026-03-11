@@ -333,44 +333,52 @@ export function registerTxRoutes(app: FastifyInstance, db: Db, feePricing?: Map<
         .limit(20);
     }
 
-    // Extract private log details from rawTxEffect
+    // Extract log details from rawTxEffect
     const rawEffect = tx.rawTxEffect as Record<string, unknown> | null;
-    const privateLogDetails: { index: number; emittedLength: number }[] = [];
+
+    // Private logs: { fields: string[], emittedLength: number }
+    const privateLogDetails: { index: number; emittedLength: number; fields: string[] }[] = [];
     if (rawEffect && Array.isArray(rawEffect.privateLogs)) {
       for (let i = 0; i < rawEffect.privateLogs.length; i++) {
         const log = rawEffect.privateLogs[i] as Record<string, unknown>;
         const emitted = typeof log?.emittedLength === "number" ? log.emittedLength : 0;
+        const allFields = Array.isArray(log?.fields) ? (log.fields as string[]) : [];
+        // Only include the emitted (non-padding) fields
+        const fields = allFields.slice(0, emitted).map(String);
         if (emitted > 0) {
-          privateLogDetails.push({ index: i, emittedLength: emitted });
+          privateLogDetails.push({ index: i, emittedLength: emitted, fields });
         }
       }
     }
 
-    // Extract contract class log details from rawTxEffect
-    const contractClassLogDetails: { index: number; contractAddress: string | null; contractClassId: string | null; emittedLength: number }[] = [];
+    // Contract class logs: { contractAddress, fields: { fields: string[] }, emittedLength }
+    const contractClassLogDetails: { index: number; contractAddress: string | null; contractClassId: string | null; emittedLength: number; fields: string[] }[] = [];
     if (rawEffect && Array.isArray(rawEffect.contractClassLogs)) {
       for (let i = 0; i < rawEffect.contractClassLogs.length; i++) {
         const log = rawEffect.contractClassLogs[i] as Record<string, unknown>;
         const addr = typeof log?.contractAddress === "string" ? log.contractAddress : null;
         const emitted = typeof log?.emittedLength === "number" ? log.emittedLength : 0;
-        // contractClassId is typically the first field in the log
-        const fields = Array.isArray(log?.fields) ? log.fields as string[] : [];
-        const contractClassId = fields.length > 0 ? String(fields[0]) : null;
+        // fields is a ContractClassLogFields object with its own .fields array
+        const inner = log?.fields as Record<string, unknown> | undefined;
+        const allFields = Array.isArray(inner?.fields) ? (inner.fields as string[]) : [];
+        const fields = allFields.slice(0, emitted).map(String);
+        const contractClassId = fields.length > 0 ? fields[0] : null;
         if (addr || emitted > 0) {
-          contractClassLogDetails.push({ index: i, contractAddress: addr, contractClassId, emittedLength: emitted });
+          contractClassLogDetails.push({ index: i, contractAddress: addr, contractClassId, emittedLength: emitted, fields });
         }
       }
     }
 
-    // Extract public log details from rawTxEffect
-    const publicLogDetails: { index: number; contractAddress: string | null; emittedLength: number }[] = [];
+    // Public logs: { contractAddress, fields: string[] } — no emittedLength, use fields.length
+    const publicLogDetails: { index: number; contractAddress: string | null; emittedLength: number; fields: string[] }[] = [];
     if (rawEffect && Array.isArray(rawEffect.publicLogs)) {
       for (let i = 0; i < rawEffect.publicLogs.length; i++) {
         const log = rawEffect.publicLogs[i] as Record<string, unknown>;
         const addr = typeof log?.contractAddress === "string" ? log.contractAddress : null;
-        const emitted = typeof log?.emittedLength === "number" ? log.emittedLength : 0;
+        const fields = Array.isArray(log?.fields) ? (log.fields as string[]).map(String) : [];
+        const emitted = fields.length;
         if (addr || emitted > 0) {
-          publicLogDetails.push({ index: i, contractAddress: addr, emittedLength: emitted });
+          publicLogDetails.push({ index: i, contractAddress: addr, emittedLength: emitted, fields });
         }
       }
     }

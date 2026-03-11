@@ -3,7 +3,6 @@ import { useSearchParams, Link } from "react-router-dom";
 import styled from "@emotion/styled";
 import { useNetworkStore } from "../stores/network";
 import { useMurderBoard } from "../api/hooks";
-import { useAddressResolver } from "../hooks/useAddressResolver";
 import {
   PageContainer,
   PageTitle,
@@ -21,6 +20,7 @@ import {
   Grid,
   SectionTitle,
 } from "../components/ui";
+import { HexDisplay } from "../components/HexDisplay";
 import { theme } from "../lib/theme";
 import type { MurderBoardData, PrivacyScoreFactor } from "../lib/api";
 
@@ -125,8 +125,6 @@ export function MurderBoard() {
   const [searchParams, setSearchParams] = useSearchParams();
   const addressParam = searchParams.get("address") ?? "";
   const [inputValue, setInputValue] = useState(addressParam);
-  const resolveAddress = useAddressResolver();
-
   const { data, isLoading } = useMurderBoard(selectedNetwork, addressParam);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -160,17 +158,15 @@ export function MurderBoard() {
 
       {addressParam && isLoading && <Loading />}
 
-      {addressParam && data && <MurderBoardResults data={data} resolveAddress={resolveAddress} />}
+      {addressParam && data && <MurderBoardResults data={data} />}
     </PageContainer>
   );
 }
 
 function MurderBoardResults({
   data,
-  resolveAddress,
 }: {
   data: MurderBoardData;
-  resolveAddress: (addr: string) => string;
 }) {
   const [txSort, setTxSort] = useState<{ key: string; dir: "asc" | "desc" }>({
     key: "blockNumber",
@@ -346,7 +342,7 @@ function MurderBoardResults({
                 <tbody>
                   {data.fpcsUsed.map((fpc) => (
                     <tr key={fpc.address}>
-                      <td>{resolveAddress(fpc.address)}</td>
+                      <td><HexDisplay address={fpc.address} /></td>
                       <td>{fpc.txCount}</td>
                       <td>
                         <span
@@ -388,7 +384,7 @@ function MurderBoardResults({
                 <tbody>
                   {data.contractsInteracted.map((c) => (
                     <tr key={c.address}>
-                      <td>{resolveAddress(c.address)}</td>
+                      <td><HexDisplay address={c.address} /></td>
                       <td>
                         {c.contractType ? (
                           <Badge>{c.contractType}</Badge>
@@ -432,9 +428,11 @@ function MurderBoardResults({
                 <tr key={tx.txHash}>
                   <td>{tx.blockNumber ?? "—"}</td>
                   <td>
-                    <TxLink to={`/tx/${tx.txHash}`}>
-                      {tx.txHash.slice(0, 10)}...{tx.txHash.slice(-6)}
-                    </TxLink>
+                    <Flex gap="4px" align="center">
+                      <TxLink to={`/tx/${tx.txHash}`}>
+                        <HexDisplay address={tx.txHash} link={false} />
+                      </TxLink>
+                    </Flex>
                   </td>
                   <td>
                     <Flex gap="4px" wrap>
@@ -516,8 +514,8 @@ function MurderBoardResults({
                       </span>
                     )}
                   </td>
-                  <td style={{ fontSize: theme.fontSize.xs }}>
-                    {resolveAddress(tx.feePayer)}
+                  <td>
+                    <HexDisplay address={tx.feePayer} />
                   </td>
                 </tr>
               ))}

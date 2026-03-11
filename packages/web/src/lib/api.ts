@@ -227,6 +227,7 @@ export interface SimilarTx {
 export interface PrivateLogDetail {
   index: number;
   emittedLength: number;
+  fields: string[];
 }
 
 export interface ContractClassLogDetail {
@@ -234,12 +235,14 @@ export interface ContractClassLogDetail {
   contractAddress: string | null;
   contractClassId: string | null;
   emittedLength: number;
+  fields: string[];
 }
 
 export interface PublicLogDetail {
   index: number;
   contractAddress: string | null;
   emittedLength: number;
+  fields: string[];
 }
 
 export interface PublicAddress {
