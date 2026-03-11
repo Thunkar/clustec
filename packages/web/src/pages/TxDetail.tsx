@@ -4,10 +4,7 @@ import styled from "@emotion/styled";
 import { useNetworkStore } from "../stores/network";
 import { useTxDetail, useTxGraph } from "../api/hooks";
 import { useMyTxs } from "../stores/my-txs";
-import {
-  useAddressResolver,
-  useLabeledAddresses,
-} from "../hooks/useAddressResolver";
+import { useLabeledAddresses } from "../hooks/useAddressResolver";
 import type {
   PrivateLogDetail,
   PublicLogDetail,
@@ -28,6 +25,7 @@ import {
   Badge,
   Button,
 } from "../components/ui";
+import { HexDisplay } from "../components/HexDisplay";
 import { theme } from "../lib/theme";
 import {
   SnapshotableFingerprint,
@@ -167,6 +165,8 @@ const FeatureRow = styled.div`
 const FeatureName = styled.span`
   font-size: ${theme.fontSize.xs};
   color: ${theme.colors.textMuted};
+  flex-shrink: 0;
+  margin-right: ${theme.spacing.sm};
 `;
 
 const FeatureValue = styled(Mono)`
@@ -272,11 +272,41 @@ const FingerprintChartCol = styled.div`
   flex-direction: column;
 `;
 
-const FingerprintValuesCol = styled.div`
-  flex: 0 0 350px;
+const FingerprintValuesCol = styled.div<{ collapsed?: boolean }>`
+  flex: 0 0 ${(p) => (p.collapsed ? "0px" : "35%")};
   min-width: 0;
   max-height: 400px;
-  overflow-y: auto;
+  overflow: ${(p) => (p.collapsed ? "hidden" : "auto")};
+  opacity: ${(p) => (p.collapsed ? 0 : 1)};
+  transition:
+    flex-basis 0.2s,
+    opacity 0.2s;
+
+  @media (max-width: 1400px) {
+    display: none;
+  }
+`;
+
+const ValuesToggle = styled.button<{ collapsed?: boolean }>`
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: flex-end;
+  background: ${theme.colors.bg};
+  border: 1px solid ${theme.colors.border};
+  border-radius: ${theme.radius.md};
+  padding: 4px 10px;
+  cursor: pointer;
+  color: ${theme.colors.textMuted};
+  font-size: ${theme.fontSize.xs};
+  font-weight: 500;
+  line-height: 1;
+  margin-bottom: ${theme.spacing.xs};
+  &:hover {
+    color: ${theme.colors.text};
+    background: ${theme.colors.bgHover};
+    border-color: ${theme.colors.primary};
+  }
 
   @media (max-width: 1400px) {
     display: none;
@@ -581,7 +611,6 @@ function SlotTimelines({
 
 function PublicCallsSection({
   calls,
-  resolveAddress,
   labeledAddresses,
 }: {
   calls: {
@@ -595,7 +624,6 @@ function PublicCallsSection({
     label: string | null;
     contractType: string | null;
   }[];
-  resolveAddress: (addr: string) => string;
   labeledAddresses: Set<string>;
 }) {
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
@@ -642,20 +670,10 @@ function PublicCallsSection({
                       <Badge color={phaseColor}>{c.phase}</Badge>
                     </td>
                     <td>
-                      <Mono style={{ fontSize: "10px" }}>
-                        {c.label ? (
-                          <>
-                            <Badge color={theme.colors.primary}>
-                              {c.label}
-                            </Badge>{" "}
-                            <span style={{ color: theme.colors.textMuted }}>
-                              {c.contractAddress.slice(0, 14)}...
-                            </span>
-                          </>
-                        ) : (
-                          c.contractAddress.slice(0, 18) + "..."
-                        )}
-                      </Mono>
+                      <HexDisplay
+                        address={c.contractAddress}
+
+                      />
                     </td>
                     <td>
                       <Mono style={{ fontSize: "10px" }}>
@@ -663,9 +681,14 @@ function PublicCallsSection({
                       </Mono>
                     </td>
                     <td>
-                      <Mono style={{ fontSize: "10px" }}>
-                        {c.msgSender ? resolveAddress(c.msgSender) : "\u2014"}
-                      </Mono>
+                      {c.msgSender ? (
+                        <HexDisplay
+                          address={c.msgSender}
+
+                        />
+                      ) : (
+                        "\u2014"
+                      )}
                     </td>
                     <td>
                       {hasCalldata ? (
@@ -717,7 +740,7 @@ function PublicCallsSection({
                                     wordBreak: "break-all",
                                   }}
                                 >
-                                  {isLabeled ? (
+                                  {isLabeled && (
                                     <>
                                       <Badge
                                         color={theme.colors.accent}
@@ -725,11 +748,9 @@ function PublicCallsSection({
                                       >
                                         addr
                                       </Badge>{" "}
-                                      {resolveAddress(field)}
                                     </>
-                                  ) : (
-                                    field
                                   )}
+                                  <HexDisplay address={field} abbreviate={false} />
                                 </Mono>
                               </div>
                             );
@@ -790,11 +811,9 @@ const FEATURE_LABELS = [
 
 function PublicAddressesSection({
   addresses,
-  resolveAddress,
   feePayer,
 }: {
   addresses: PublicAddress[];
-  resolveAddress: (addr: string) => string;
   feePayer: string;
 }) {
   const { sorted, toggleSort, indicator, sortKey } = useSortableTable(
@@ -855,9 +874,10 @@ function PublicAddressesSection({
                     }
                   >
                     <td>
-                      <Mono style={{ fontSize: "10px" }}>
-                        {resolveAddress(a.address)}
-                      </Mono>
+                      <HexDisplay
+                        address={a.address}
+
+                      />
                     </td>
                     <td>
                       <Mono
@@ -882,6 +902,39 @@ function PublicAddressesSection({
   );
 }
 
+// ── Shared log fields list ──
+
+function LogFieldsList({ fields }: { fields: string[] }) {
+  return (
+    <div style={{ maxHeight: "160px", overflowY: "auto" }}>
+      {fields.map((field, j) => (
+        <div
+          key={j}
+          style={{
+            display: "flex",
+            gap: "8px",
+            alignItems: "baseline",
+          }}
+        >
+          <span
+            style={{
+              color: theme.colors.textMuted,
+              fontSize: "10px",
+              minWidth: "20px",
+              textAlign: "right",
+            }}
+          >
+            {j}
+          </span>
+          <Mono style={{ fontSize: "10px", wordBreak: "break-all" }}>
+            <HexDisplay address={field} abbreviate={false} mode="hex" link={false} />
+          </Mono>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── Private Logs section ──
 
 function PrivateLogsSection({ logs }: { logs: PrivateLogDetail[] }) {
@@ -889,6 +942,14 @@ function PrivateLogsSection({ logs }: { logs: PrivateLogDetail[] }) {
     logs,
     "index",
   );
+  const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
+  const toggle = (i: number) =>
+    setExpandedRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i);
+      else next.add(i);
+      return next;
+    });
 
   if (logs.length === 0) return null;
 
@@ -914,12 +975,33 @@ function PrivateLogsSection({ logs }: { logs: PrivateLogDetail[] }) {
               </tr>
             </thead>
             <tbody>
-              {sorted.map((log) => (
-                <tr key={log.index}>
-                  <td>{log.index}</td>
-                  <td>{log.emittedLength.toLocaleString()}</td>
-                </tr>
-              ))}
+              {sorted.map((log) => {
+                const isExpanded = expandedRows.has(log.index);
+                const hasFields = log.fields.length > 0;
+                return (
+                  <Fragment key={log.index}>
+                    <tr>
+                      <td>{log.index}</td>
+                      <td>
+                        {hasFields ? (
+                          <CalldataToggle onClick={() => toggle(log.index)}>
+                            {log.emittedLength} fields {isExpanded ? "▾" : "▸"}
+                          </CalldataToggle>
+                        ) : (
+                          log.emittedLength.toLocaleString()
+                        )}
+                      </td>
+                    </tr>
+                    {isExpanded && (
+                      <tr>
+                        <CalldataCell colSpan={2}>
+                          <LogFieldsList fields={log.fields} />
+                        </CalldataCell>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
             </tbody>
           </Table>
         </TableWrapper>
@@ -932,15 +1014,21 @@ function PrivateLogsSection({ logs }: { logs: PrivateLogDetail[] }) {
 
 function PublicLogsSection({
   logs,
-  resolveAddress,
 }: {
   logs: PublicLogDetail[];
-  resolveAddress: (addr: string) => string;
 }) {
   const { sorted, toggleSort, indicator, sortKey } = useSortableTable(
     logs,
     "index",
   );
+  const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
+  const toggle = (i: number) =>
+    setExpandedRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i);
+      else next.add(i);
+      return next;
+    });
 
   if (logs.length === 0) return null;
 
@@ -967,24 +1055,45 @@ function PublicLogsSection({
                   active={sortKey === "emittedLength"}
                   onClick={() => toggleSort("emittedLength")}
                 >
-                  Emitted Length{indicator("emittedLength")}
+                  Fields{indicator("emittedLength")}
                 </SortableHeader>
               </tr>
             </thead>
             <tbody>
-              {sorted.map((log) => (
-                <tr key={log.index}>
-                  <td>{log.index}</td>
-                  <td>
-                    <Mono style={{ fontSize: "10px" }}>
-                      {log.contractAddress
-                        ? resolveAddress(log.contractAddress)
-                        : "\u2014"}
-                    </Mono>
-                  </td>
-                  <td>{log.emittedLength.toLocaleString()}</td>
-                </tr>
-              ))}
+              {sorted.map((log) => {
+                const isExpanded = expandedRows.has(log.index);
+                const hasFields = log.fields.length > 0;
+                return (
+                  <Fragment key={log.index}>
+                    <tr>
+                      <td>{log.index}</td>
+                      <td>
+                        {log.contractAddress ? (
+                          <HexDisplay address={log.contractAddress} />
+                        ) : (
+                          "\u2014"
+                        )}
+                      </td>
+                      <td>
+                        {hasFields ? (
+                          <CalldataToggle onClick={() => toggle(log.index)}>
+                            {log.emittedLength} fields {isExpanded ? "▾" : "▸"}
+                          </CalldataToggle>
+                        ) : (
+                          log.emittedLength.toLocaleString()
+                        )}
+                      </td>
+                    </tr>
+                    {isExpanded && (
+                      <tr>
+                        <CalldataCell colSpan={3}>
+                          <LogFieldsList fields={log.fields} />
+                        </CalldataCell>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
             </tbody>
           </Table>
         </TableWrapper>
@@ -997,15 +1106,21 @@ function PublicLogsSection({
 
 function ContractClassLogsSection({
   logs,
-  resolveAddress,
 }: {
   logs: ContractClassLogDetail[];
-  resolveAddress: (addr: string) => string;
 }) {
   const { sorted, toggleSort, indicator, sortKey } = useSortableTable(
     logs,
     "index",
   );
+  const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
+  const toggle = (i: number) =>
+    setExpandedRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i);
+      else next.add(i);
+      return next;
+    });
 
   if (logs.length === 0) return null;
 
@@ -1042,31 +1157,52 @@ function ContractClassLogsSection({
                   active={sortKey === "emittedLength"}
                   onClick={() => toggleSort("emittedLength")}
                 >
-                  Emitted Length{indicator("emittedLength")}
+                  Fields{indicator("emittedLength")}
                 </SortableHeader>
               </tr>
             </thead>
             <tbody>
-              {sorted.map((log) => (
-                <tr key={log.index}>
-                  <td>{log.index}</td>
-                  <td>
-                    <Mono style={{ fontSize: "10px" }}>
-                      {log.contractAddress
-                        ? resolveAddress(log.contractAddress)
-                        : "\u2014"}
-                    </Mono>
-                  </td>
-                  <td>
-                    <Mono style={{ fontSize: "10px" }}>
-                      {log.contractClassId
-                        ? `${log.contractClassId.slice(0, 18)}...`
-                        : "\u2014"}
-                    </Mono>
-                  </td>
-                  <td>{log.emittedLength.toLocaleString()}</td>
-                </tr>
-              ))}
+              {sorted.map((log) => {
+                const isExpanded = expandedRows.has(log.index);
+                const hasFields = log.fields.length > 0;
+                return (
+                  <Fragment key={log.index}>
+                    <tr>
+                      <td>{log.index}</td>
+                      <td>
+                        {log.contractAddress ? (
+                          <HexDisplay address={log.contractAddress} />
+                        ) : (
+                          "\u2014"
+                        )}
+                      </td>
+                      <td>
+                        {log.contractClassId ? (
+                          <HexDisplay address={log.contractClassId} link={false} />
+                        ) : (
+                          "\u2014"
+                        )}
+                      </td>
+                      <td>
+                        {hasFields ? (
+                          <CalldataToggle onClick={() => toggle(log.index)}>
+                            {log.emittedLength} fields {isExpanded ? "▾" : "▸"}
+                          </CalldataToggle>
+                        ) : (
+                          log.emittedLength.toLocaleString()
+                        )}
+                      </td>
+                    </tr>
+                    {isExpanded && (
+                      <tr>
+                        <CalldataCell colSpan={4}>
+                          <LogFieldsList fields={log.fields} />
+                        </CalldataCell>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
             </tbody>
           </Table>
         </TableWrapper>
@@ -1082,10 +1218,12 @@ export function TxDetail() {
   const { selectedNetwork } = useNetworkStore();
   const { data, isLoading, isError } = useTxDetail(selectedNetwork, hash ?? "");
   const { isTracked, add, remove } = useMyTxs();
-  const resolveAddress = useAddressResolver();
   const labeledAddresses = useLabeledAddresses();
   const [activeTab, setActiveTab] = useState<"details" | "similar" | "public">(
     "details",
+  );
+  const [valuesCollapsed, setValuesCollapsed] = useState(
+    () => window.innerWidth < 1700,
   );
   const sortedSimilarTxs = useMemo(
     () =>
@@ -1150,7 +1288,9 @@ export function TxDetail() {
           <Card style={{ flex: 1 }}>
             <Field>
               <FieldLabel>Hash</FieldLabel>
-              <FieldValue>{abbreviateHex(tx.txHash)}</FieldValue>
+              <FieldValue>
+                <HexDisplay address={tx.txHash} link={false} />
+              </FieldValue>
             </Field>
             <Flex gap="24px" wrap>
               <Field>
@@ -1277,7 +1417,10 @@ export function TxDetail() {
             <Field>
               <FieldLabel>Fee Payer</FieldLabel>
               <FieldValue>
-                {resolveAddress(tx.feePayer)}
+                <HexDisplay
+                  address={tx.feePayer}
+
+                />
                 <span
                   style={{
                     color: theme.colors.textMuted,
@@ -1310,8 +1453,14 @@ export function TxDetail() {
 
         {featureVector && (
           <TopColumnRight>
-            <Card style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+            <Card style={{ flex: 1, display: "flex", flexDirection: "column", position: "relative" }}>
               <FieldLabel>Transaction Fingerprint</FieldLabel>
+              <ValuesToggle
+                collapsed={valuesCollapsed}
+                onClick={() => setValuesCollapsed((v) => !v)}
+              >
+                {valuesCollapsed ? "Show Values \u25B6" : "\u25C0 Hide Values"}
+              </ValuesToggle>
               <FingerprintInner>
                 <FingerprintChartCol>
                   <SnapshotableFingerprint
@@ -1320,16 +1469,18 @@ export function TxDetail() {
                     label={tx.txHash.slice(0, 10)}
                   />
                 </FingerprintChartCol>
-                <FingerprintValuesCol>
+                <FingerprintValuesCol collapsed={valuesCollapsed}>
                   {FEATURE_LABELS.map((label, i) => (
                     <FeatureRow key={i}>
                       <FeatureName>{label}</FeatureName>
                       <FeatureValue>
-                        {i === 14
-                          ? resolveAddress(String(featureVector[i]))
-                          : typeof featureVector[i] === "number"
-                            ? (featureVector[i] as number).toLocaleString()
-                            : String(featureVector[i])}
+                        {i === 14 ? (
+                          <HexDisplay address={String(featureVector[i])} mode="label" />
+                        ) : typeof featureVector[i] === "number" ? (
+                          (featureVector[i] as number).toLocaleString()
+                        ) : (
+                          String(featureVector[i])
+                        )}
                       </FeatureValue>
                     </FeatureRow>
                   ))}
@@ -1341,11 +1492,13 @@ export function TxDetail() {
                     <FeatureRow key={i}>
                       <FeatureName>{label}</FeatureName>
                       <FeatureValue>
-                        {i === 14
-                          ? resolveAddress(String(featureVector[i]))
-                          : typeof featureVector[i] === "number"
-                            ? (featureVector[i] as number).toLocaleString()
-                            : String(featureVector[i])}
+                        {i === 14 ? (
+                          <HexDisplay address={String(featureVector[i])} mode="label" />
+                        ) : typeof featureVector[i] === "number" ? (
+                          (featureVector[i] as number).toLocaleString()
+                        ) : (
+                          String(featureVector[i])
+                        )}
                       </FeatureValue>
                     </FeatureRow>
                   ))}
@@ -1447,16 +1600,10 @@ export function TxDetail() {
             <PrivateLogsSection logs={privateLogDetails} />
           )}
           {publicLogDetails.length > 0 && (
-            <PublicLogsSection
-              logs={publicLogDetails}
-              resolveAddress={resolveAddress}
-            />
+            <PublicLogsSection logs={publicLogDetails} />
           )}
           {contractClassLogDetails.length > 0 && (
-            <ContractClassLogsSection
-              logs={contractClassLogDetails}
-              resolveAddress={resolveAddress}
-            />
+            <ContractClassLogsSection logs={contractClassLogDetails} />
           )}
         </>
       )}
@@ -1465,7 +1612,6 @@ export function TxDetail() {
         <>
           <PublicAddressesSection
             addresses={publicAddresses}
-            resolveAddress={resolveAddress}
             feePayer={tx.feePayer}
           />
           {publicCalls.length > 0 && (
@@ -1482,7 +1628,6 @@ export function TxDetail() {
               </h3>
               <PublicCallsSection
                 calls={publicCalls}
-                resolveAddress={resolveAddress}
                 labeledAddresses={labeledAddresses}
               />
             </>

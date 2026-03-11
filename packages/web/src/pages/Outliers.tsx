@@ -4,7 +4,6 @@ import styled from "@emotion/styled";
 import { useNetworkStore } from "../stores/network";
 import { useClusterRuns, useClusterDetail, useClusterMembers, useOutliers } from "../api/hooks";
 import { useMyTxs } from "../stores/my-txs";
-import { useAddressResolver } from "../hooks/useAddressResolver";
 import type { ClusterMember, ClusterSize } from "../lib/api";
 import {
   PageContainer, PageTitle, Card, Table, TableWrapper, Loading, Badge, Flex, Button,
@@ -44,7 +43,6 @@ function ClusterMembersView({
   totalTxs: number; clusterSize: number; onBack: () => void;
 }) {
   const { data, isLoading } = useClusterMembers(networkId, runId, clusterId);
-  const resolveAddress = useAddressResolver();
   const [sortKey, setSortKey] = useState<TxSortKey>("outlierScore");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [page, setPage] = useState(1);
@@ -98,7 +96,6 @@ function ClusterMembersView({
           sortKey={sortKey}
           sortDir={sortDir}
           onSort={handleSort}
-          resolveAddress={resolveAddress}
           showOutlierScore
           showIndex
           pageOffset={(page - 1) * PAGE_SIZE}

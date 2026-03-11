@@ -28,6 +28,24 @@ export function useAddressResolver() {
 }
 
 /**
+ * Returns a function that resolves an address to just its label name, or undefined.
+ */
+export function useLabelResolver() {
+  const { selectedNetwork } = useNetworkStore();
+  const { data: labels } = useLabels(selectedNetwork);
+
+  return useCallback(
+    (address: string): string | undefined => {
+      const match = labels?.find(
+        (l) => l.address.toLowerCase() === address.toLowerCase()
+      );
+      return match?.label;
+    },
+    [labels]
+  );
+}
+
+/**
  * Returns a Set of lowercase addresses that have labels.
  */
 export function useLabeledAddresses(): Set<string> {

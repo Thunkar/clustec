@@ -2,7 +2,6 @@ import { useState, useCallback, useRef } from "react";
 import styled from "@emotion/styled";
 import { useNetworkStore } from "../stores/network";
 import { useTxs } from "../api/hooks";
-import { useAddressResolver } from "../hooks/useAddressResolver";
 import {
   PageContainer, PageTitle, Card, Loading, Flex, Button, Input, Select,
 } from "../components/ui";
@@ -32,8 +31,6 @@ const PaginationInfo = styled.span`
 
 export function Transactions() {
   const { selectedNetwork } = useNetworkStore();
-  const resolveAddress = useAddressResolver();
-
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -107,7 +104,6 @@ export function Transactions() {
           sortKey={sort}
           sortDir={order}
           onSort={handleSort}
-          resolveAddress={resolveAddress}
         />
       </Card>
 

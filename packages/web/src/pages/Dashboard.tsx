@@ -11,7 +11,7 @@ import {
   PageContainer, PageTitle, Grid, StatCard, StatValue, StatLabel,
   Card, Loading,
 } from "../components/ui";
-import { useAddressResolver } from "../hooks/useAddressResolver";
+import { useLabelResolver } from "../hooks/useAddressResolver";
 import { theme } from "../lib/theme";
 import styled from "@emotion/styled";
 
@@ -102,7 +102,7 @@ const MobileTitle = styled(PageTitle)`
 export function Dashboard() {
   const { selectedNetwork } = useNetworkStore();
   const navigate = useNavigate();
-  const resolveAddress = useAddressResolver();
+  const resolveLabel = useLabelResolver();
 
   const { data: stats, isLoading } = useNetworkStats(selectedNetwork);
 
@@ -121,8 +121,8 @@ export function Dashboard() {
     let otherCount = 0;
     for (const fp of feePayerData.feePayers) {
       if (fp.count >= threshold) {
-        const resolved = resolveAddress(fp.address);
-        const name = resolved !== fp.address ? resolved : `${fp.address.slice(0, 10)}...`;
+        const label = resolveLabel(fp.address);
+        const name = label ?? `${fp.address.slice(0, 10)}...`;
         significant.push({ name, value: fp.count, address: fp.address });
       } else {
         otherCount += fp.count;
@@ -132,7 +132,7 @@ export function Dashboard() {
       significant.push({ name: "Other", value: otherCount, address: "" });
     }
     return significant;
-  }, [feePayerData, resolveAddress]);
+  }, [feePayerData, resolveLabel]);
 
   if (isLoading) return <Loading />;
 

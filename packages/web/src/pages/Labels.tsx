@@ -4,55 +4,20 @@ import styled from "@emotion/styled";
 import { useNetworkStore } from "../stores/network";
 import { useLabels, useAddLabel, useDeleteLabel } from "../api/hooks";
 import { useMyTxs } from "../stores/my-txs";
-import { abbreviateHex } from "../components/TxTable";
+
 import {
   PageContainer, PageTitle, Card, Table, TableWrapper, Loading,
   Flex, Button, Input, Badge, SectionTitle,
 } from "../components/ui";
+import { HexDisplay } from "../components/HexDisplay";
 import { theme } from "../lib/theme";
 
-const CopyButton = styled.button`
-  background: none;
-  border: none;
-  color: ${theme.colors.textMuted};
-  cursor: pointer;
-  padding: 2px 4px;
-  font-size: 12px;
-  line-height: 1;
-  border-radius: 3px;
-  &:hover {
-    color: ${theme.colors.text};
-    background: ${theme.colors.bgHover};
-  }
-`;
-
-const MonoCell = styled.span`
-  font-family: "SF Mono", "Fira Code", monospace;
-  font-size: ${theme.fontSize.xs};
-`;
 
 const SectionNote = styled.p`
   color: ${theme.colors.textMuted};
   font-size: ${theme.fontSize.xs};
   margin: 0 0 ${theme.spacing.sm};
 `;
-
-function CopyableAddress({ address }: { address: string }) {
-  const [copied, setCopied] = useState(false);
-  const handleCopy = () => {
-    navigator.clipboard.writeText(address);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  };
-  return (
-    <Flex gap="4px" align="center">
-      <MonoCell>{abbreviateHex(address)}</MonoCell>
-      <CopyButton onClick={handleCopy} title="Copy full address">
-        {copied ? "✓" : "⧉"}
-      </CopyButton>
-    </Flex>
-  );
-}
 
 export function Labels() {
   const { selectedNetwork } = useNetworkStore();
@@ -122,7 +87,7 @@ export function Labels() {
             <tbody>
               {labels?.map((l) => (
                 <tr key={l.id}>
-                  <td><CopyableAddress address={l.address} /></td>
+                  <td><HexDisplay address={l.address} /></td>
                   <td>{l.label}</td>
                   <td>{l.contractType ? <Badge>{l.contractType}</Badge> : "—"}</td>
                   <td>
@@ -182,14 +147,8 @@ export function Labels() {
                   <td>
                     <Flex gap="4px" align="center">
                       <Link to={`/tx/${t.hash}`} style={{ color: theme.colors.primary, textDecoration: "none" }}>
-                        <MonoCell>{abbreviateHex(t.hash)}</MonoCell>
+                        <HexDisplay address={t.hash} link={false} />
                       </Link>
-                      <CopyButton
-                        onClick={() => navigator.clipboard.writeText(t.hash)}
-                        title="Copy full hash"
-                      >
-                        ⧉
-                      </CopyButton>
                     </Flex>
                   </td>
                   <td>{t.label ? <Badge color={theme.colors.warning}>{t.label}</Badge> : "—"}</td>

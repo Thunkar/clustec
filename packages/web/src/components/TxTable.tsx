@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import styled from "@emotion/styled";
 import { Table, TableWrapper, Badge, Mono } from "./ui";
+import { HexDisplay } from "./HexDisplay";
 import { theme } from "../lib/theme";
 
 /** Abbreviate a 0x-prefixed hex string: 0x1234...abcd */
@@ -78,7 +79,6 @@ interface TxTableProps {
   sortKey?: TxSortKey;
   sortDir?: SortDir;
   onSort?: (key: TxSortKey) => void;
-  resolveAddress: (addr: string) => string;
   showOutlierScore?: boolean;
   showIndex?: boolean;
   pageOffset?: number;
@@ -89,7 +89,6 @@ export function TxTable({
   sortKey,
   sortDir,
   onSort,
-  resolveAddress,
   showOutlierScore = false,
   showIndex = false,
   pageOffset = 0,
@@ -108,12 +107,6 @@ export function TxTable({
 
   const num = (v: number | null | undefined) =>
     v != null ? v.toLocaleString() : "\u2014";
-
-  const abbreviateAddress = (addr: string) => {
-    const resolved = resolveAddress(addr);
-    // If resolved to a label, show label; otherwise abbreviate the hex
-    return resolved !== addr ? resolved : abbreviateHex(addr);
-  };
 
   const colCount = 18 + (showIndex ? 1 : 0) + (showOutlierScore ? 1 : 0);
 
@@ -168,7 +161,7 @@ export function TxTable({
               <td>{tx.numAppCalls}</td>
               <td>{tx.totalPublicCalldataSize}</td>
               <td style={{ textAlign: "left" }}>
-                <Mono>{abbreviateAddress(tx.feePayer)}</Mono>
+                <HexDisplay address={tx.feePayer} />
               </td>
               {showOutlierScore && (
                 <td>
