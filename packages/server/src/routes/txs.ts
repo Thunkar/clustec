@@ -330,6 +330,7 @@ export function registerTxRoutes(app: FastifyInstance, db: Db, feePricing?: Map<
             ne(clusterMemberships.txId, tx.id)
           )
         )
+        .orderBy(desc(clusterMemberships.outlierScore))
         .limit(20);
     }
 

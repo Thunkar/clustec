@@ -35,11 +35,22 @@ export interface TxRow {
 
 export type TxSortKey =
   | "blockNumber"
-  | "numNoteHashes" | "numNullifiers" | "numL2ToL1Msgs"
-  | "numPrivateLogs" | "numContractClassLogs" | "numPublicLogs"
-  | "gasLimitDa" | "gasLimitL2" | "maxFeePerDaGas" | "maxFeePerL2Gas"
-  | "numSetupCalls" | "numAppCalls" | "totalPublicCalldataSize"
-  | "feePayer" | "status" | "outlierScore";
+  | "numNoteHashes"
+  | "numNullifiers"
+  | "numL2ToL1Msgs"
+  | "numPrivateLogs"
+  | "numContractClassLogs"
+  | "numPublicLogs"
+  | "gasLimitDa"
+  | "gasLimitL2"
+  | "maxFeePerDaGas"
+  | "maxFeePerL2Gas"
+  | "numSetupCalls"
+  | "numAppCalls"
+  | "totalPublicCalldataSize"
+  | "feePayer"
+  | "status"
+  | "outlierScore";
 
 export type SortDir = "asc" | "desc";
 
@@ -62,15 +73,20 @@ const SortHeader = styled.th<{ $active?: boolean }>`
   cursor: pointer;
   user-select: none;
   color: ${(p) => (p.$active ? theme.colors.primary : "inherit")} !important;
-  &:hover { color: ${theme.colors.primary} !important; }
+  &:hover {
+    color: ${theme.colors.primary} !important;
+  }
 `;
 
 function StatusBadge({ status }: { status: string }) {
   const color =
-    status === "finalized" || status === "proven" ? theme.colors.success
-    : status === "checkpointed" || status === "proposed" ? theme.colors.accent
-    : status === "dropped" ? theme.colors.danger
-    : theme.colors.warning;
+    status === "finalized" || status === "proven"
+      ? theme.colors.success
+      : status === "checkpointed" || status === "proposed"
+        ? theme.colors.accent
+        : status === "dropped"
+          ? theme.colors.danger
+          : theme.colors.warning;
   return <Badge color={color}>{status}</Badge>;
 }
 
@@ -99,7 +115,8 @@ export function TxTable({
   const header = (key: TxSortKey, label: string) =>
     onSort ? (
       <SortHeader $active={sortKey === key} onClick={() => onSort(key)}>
-        {label}{indicator(key)}
+        {label}
+        {indicator(key)}
       </SortHeader>
     ) : (
       <th>{label}</th>
@@ -125,13 +142,13 @@ export function TxTable({
             {header("numPrivateLogs", "Priv Logs")}
             {header("numContractClassLogs", "CC Logs")}
             {header("numPublicLogs", "Pub Logs")}
-            {header("gasLimitDa", "Gas (DA)")}
-            {header("gasLimitL2", "Gas (L2)")}
-            {header("maxFeePerDaGas", "Fee/DA")}
-            {header("maxFeePerL2Gas", "Fee/L2")}
-            {header("numSetupCalls", "Setup")}
-            {header("numAppCalls", "App")}
-            {header("totalPublicCalldataSize", "Calldata Size")}
+            {header("gasLimitDa", "DA Limit")}
+            {header("gasLimitL2", "L2 Limit")}
+            {header("maxFeePerDaGas", "Max Fee/DA Gas")}
+            {header("maxFeePerL2Gas", "Max Fee/L2 Gas")}
+            {header("numSetupCalls", "Pub Setup")}
+            {header("numAppCalls", "Pub App")}
+            {header("totalPublicCalldataSize", "Pub Calldata Size")}
             {header("feePayer", "Fee Payer")}
             {showOutlierScore && header("outlierScore", "Outlier")}
           </tr>
@@ -141,11 +158,19 @@ export function TxTable({
             <tr key={tx.txHash}>
               {showIndex && <td>{pageOffset + i + 1}</td>}
               <td style={{ textAlign: "left" }}>
-                <Link to={`/tx/${tx.txHash}`} style={{ color: theme.colors.primary, textDecoration: "none" }}>
+                <Link
+                  to={`/tx/${tx.txHash}`}
+                  style={{
+                    color: theme.colors.primary,
+                    textDecoration: "none",
+                  }}
+                >
                   <Mono>{abbreviateHex(tx.txHash)}</Mono>
                 </Link>
               </td>
-              <td><StatusBadge status={tx.status} /></td>
+              <td>
+                <StatusBadge status={tx.status} />
+              </td>
               <td>{num(tx.blockNumber)}</td>
               <td>{tx.numNoteHashes}</td>
               <td>{tx.numNullifiers}</td>
@@ -166,21 +191,34 @@ export function TxTable({
               {showOutlierScore && (
                 <td>
                   {tx.outlierScore != null ? (
-                    <Badge color={
-                      tx.outlierScore > 0.5 ? theme.colors.danger
-                        : tx.outlierScore > 0.2 ? theme.colors.warning
-                          : theme.colors.success
-                    }>
+                    <Badge
+                      color={
+                        tx.outlierScore > 0.5
+                          ? theme.colors.danger
+                          : tx.outlierScore > 0.2
+                            ? theme.colors.warning
+                            : theme.colors.success
+                      }
+                    >
                       {(tx.outlierScore * 100).toFixed(1)}%
                     </Badge>
-                  ) : "\u2014"}
+                  ) : (
+                    "\u2014"
+                  )}
                 </td>
               )}
             </tr>
           ))}
           {rows.length === 0 && (
             <tr>
-              <td colSpan={colCount} style={{ textAlign: "center", color: theme.colors.textMuted, padding: theme.spacing.lg }}>
+              <td
+                colSpan={colCount}
+                style={{
+                  textAlign: "center",
+                  color: theme.colors.textMuted,
+                  padding: theme.spacing.lg,
+                }}
+              >
                 No transactions found
               </td>
             </tr>
