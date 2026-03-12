@@ -65,20 +65,89 @@ function hashToPattern(s: string): number {
  * Patterns (indexed 0-5): diagonal-45, diagonal-135, horizontal, vertical,
  * checkerboard, diagonal-checkerboard.
  */
-function feePayerPattern(id: string, patternIndex: number, color: string): React.ReactElement {
+function feePayerPattern(
+  id: string,
+  patternIndex: number,
+  color: string,
+): React.ReactElement {
   switch (patternIndex) {
     case 0: // diagonal /
-      return <pattern key={id} id={id} width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="2" height="4" fill={color} /></pattern>;
+      return (
+        <pattern
+          key={id}
+          id={id}
+          width="4"
+          height="4"
+          patternUnits="userSpaceOnUse"
+          patternTransform="rotate(45)"
+        >
+          <rect width="2" height="4" fill={color} />
+        </pattern>
+      );
     case 1: // diagonal \
-      return <pattern key={id} id={id} width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)"><rect width="2" height="4" fill={color} /></pattern>;
+      return (
+        <pattern
+          key={id}
+          id={id}
+          width="4"
+          height="4"
+          patternUnits="userSpaceOnUse"
+          patternTransform="rotate(-45)"
+        >
+          <rect width="2" height="4" fill={color} />
+        </pattern>
+      );
     case 2: // horizontal stripes
-      return <pattern key={id} id={id} width="4" height="4" patternUnits="userSpaceOnUse"><rect width="4" height="2" fill={color} /></pattern>;
+      return (
+        <pattern
+          key={id}
+          id={id}
+          width="4"
+          height="4"
+          patternUnits="userSpaceOnUse"
+        >
+          <rect width="4" height="2" fill={color} />
+        </pattern>
+      );
     case 3: // vertical stripes
-      return <pattern key={id} id={id} width="4" height="4" patternUnits="userSpaceOnUse"><rect width="2" height="4" fill={color} /></pattern>;
+      return (
+        <pattern
+          key={id}
+          id={id}
+          width="4"
+          height="4"
+          patternUnits="userSpaceOnUse"
+        >
+          <rect width="2" height="4" fill={color} />
+        </pattern>
+      );
     case 4: // checkerboard
-      return <pattern key={id} id={id} width="4" height="4" patternUnits="userSpaceOnUse"><rect width="2" height="2" fill={color} /><rect x="2" y="2" width="2" height="2" fill={color} /></pattern>;
+      return (
+        <pattern
+          key={id}
+          id={id}
+          width="4"
+          height="4"
+          patternUnits="userSpaceOnUse"
+        >
+          <rect width="2" height="2" fill={color} />
+          <rect x="2" y="2" width="2" height="2" fill={color} />
+        </pattern>
+      );
     default: // checkerboard diagonal
-      return <pattern key={id} id={id} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="3" height="3" fill={color} /><rect x="3" y="3" width="3" height="3" fill={color} /></pattern>;
+      return (
+        <pattern
+          key={id}
+          id={id}
+          width="6"
+          height="6"
+          patternUnits="userSpaceOnUse"
+          patternTransform="rotate(45)"
+        >
+          <rect width="3" height="3" fill={color} />
+          <rect x="3" y="3" width="3" height="3" fill={color} />
+        </pattern>
+      );
   }
 }
 
@@ -96,11 +165,11 @@ function normalizeNumeric(
     2: 8, // numL2ToL1Msgs — MAX_L2_TO_L1_MSGS_PER_TX
     3: 64, // numPrivateLogs — MAX_PRIVATE_LOGS_PER_TX
     4: 1, // numContractClassLogs — MAX_CONTRACT_CLASS_LOGS_PER_TX
-    5: 16, // numPublicLogs (count) — no protocol max, practical cap
+    5: 64, // numPublicLogs — practical cap; DA-derived max ~85 @ 16 fields/log avg
     6: 786_432, // gasLimitDa — MAX_PROCESSABLE_DA_GAS_PER_CHECKPOINT
     7: 6_540_000, // gasLimitL2 — MAX_PROCESSABLE_L2_GAS
-    8: 1e15, // maxFeePerDaGas — UInt128, practical cap
-    9: 1e15, // maxFeePerL2Gas — UInt128, practical cap
+    8: 1e9, // maxFeePerDaGas — 1 gwei/gas → max fee ~$0.25 DA at $2500/ETH
+    9: 1e9, // maxFeePerL2Gas — 1 gwei/gas → max fee ~$16 L2 at $2500/ETH
     10: 32, // numSetupCalls — MAX_ENQUEUED_CALLS_PER_TX
     11: 32, // numAppCalls — MAX_ENQUEUED_CALLS_PER_TX
     12: 1_000, // totalPublicCalldataSize (fields) — practical cap; AVM bench test max is 300/call
@@ -167,7 +236,6 @@ function barPathDouble(
     "Z",
   ].join(" ");
 }
-
 
 /** Format a value for tooltip display */
 function formatValue(value: number | string, index: number): string {
@@ -370,11 +438,25 @@ function renderComparisonBars({
           {!sameAddr && (
             <>
               <path
-                d={barPathDouble(x + halfW + gap, centerY, halfW, barH, barH, r)}
+                d={barPathDouble(
+                  x + halfW + gap,
+                  centerY,
+                  halfW,
+                  barH,
+                  barH,
+                  r,
+                )}
                 fill={`url(#${patIdB})`}
               />
               <path
-                d={barPathDouble(x + halfW + gap, centerY, halfW, barH, barH, r)}
+                d={barPathDouble(
+                  x + halfW + gap,
+                  centerY,
+                  halfW,
+                  barH,
+                  barH,
+                  r,
+                )}
                 fill="none"
                 stroke={catColorB}
                 strokeWidth="0.6"
@@ -431,28 +513,50 @@ function renderComparisonBars({
               strokeWidth="0.8"
               strokeOpacity={anyActive ? 0.75 : 0.35}
             />
-          ) : (() => {
-            /* Different: upper half = A (colorA), lower half = B (colorB)
+          ) : (
+            (() => {
+              /* Different: upper half = A (colorA), lower half = B (colorB)
                Use two clipRects + the same outline path to split colors. */
-            const clipIdUp = `clip-up-${i}`;
-            const clipIdDn = `clip-dn-${i}`;
-            const d = barPathDouble(x, centerY, barW, barHA, barHB, r);
-            const top = centerY - barHA;
-            return (
-              <>
-                <defs>
-                  <clipPath id={clipIdUp}>
-                    <rect x={x - 1} y={top - 1} width={barW + 2} height={barHA + 1} />
-                  </clipPath>
-                  <clipPath id={clipIdDn}>
-                    <rect x={x - 1} y={centerY} width={barW + 2} height={barHB + 1} />
-                  </clipPath>
-                </defs>
-                <path d={d} fill={activeA ? colorA : ZERO_COLOR} opacity={activeA ? 0.85 : 0.4} clipPath={`url(#${clipIdUp})`} />
-                <path d={d} fill={activeB ? colorB : ZERO_COLOR} opacity={activeB ? 0.85 : 0.4} clipPath={`url(#${clipIdDn})`} />
-              </>
-            );
-          })()}
+              const clipIdUp = `clip-up-${i}`;
+              const clipIdDn = `clip-dn-${i}`;
+              const d = barPathDouble(x, centerY, barW, barHA, barHB, r);
+              const top = centerY - barHA;
+              return (
+                <>
+                  <defs>
+                    <clipPath id={clipIdUp}>
+                      <rect
+                        x={x - 1}
+                        y={top - 1}
+                        width={barW + 2}
+                        height={barHA + 1}
+                      />
+                    </clipPath>
+                    <clipPath id={clipIdDn}>
+                      <rect
+                        x={x - 1}
+                        y={centerY}
+                        width={barW + 2}
+                        height={barHB + 1}
+                      />
+                    </clipPath>
+                  </defs>
+                  <path
+                    d={d}
+                    fill={activeA ? colorA : ZERO_COLOR}
+                    opacity={activeA ? 0.85 : 0.4}
+                    clipPath={`url(#${clipIdUp})`}
+                  />
+                  <path
+                    d={d}
+                    fill={activeB ? colorB : ZERO_COLOR}
+                    opacity={activeB ? 0.85 : 0.4}
+                    clipPath={`url(#${clipIdDn})`}
+                  />
+                </>
+              );
+            })()
+          )}
           {/* Invisible hit area */}
           <rect
             x={x}
