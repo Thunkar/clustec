@@ -3,7 +3,14 @@ import styled from "@emotion/styled";
 import { useNetworkStore } from "../stores/network";
 import { useTxs } from "../api/hooks";
 import {
-  PageContainer, PageTitle, Card, Loading, Flex, Button, Input, Select,
+  PageContainer,
+  PageTitle,
+  Card,
+  Loading,
+  Flex,
+  Button,
+  Input,
+  Select,
 } from "../components/ui";
 import { TxTable, type TxSortKey, type SortDir } from "../components/TxTable";
 import { theme } from "../lib/theme";
@@ -55,7 +62,11 @@ export function Transactions() {
     order,
   };
 
-  const { data, isLoading, isFetching } = useTxs(selectedNetwork, page, filters);
+  const { data, isLoading, isFetching } = useTxs(
+    selectedNetwork,
+    page,
+    filters,
+  );
 
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / LIMIT));
@@ -82,7 +93,10 @@ export function Transactions() {
           value={search}
           onChange={(e) => handleSearch(e.target.value)}
         />
-        <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+        <Select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+        >
           <option value="">All statuses</option>
           <option value="dropped">Dropped</option>
           <option value="pending">Pending</option>
@@ -92,7 +106,12 @@ export function Transactions() {
           <option value="finalized">Finalized</option>
         </Select>
         {isFetching && (
-          <span style={{ color: theme.colors.textMuted, fontSize: theme.fontSize.xs }}>
+          <span
+            style={{
+              color: theme.colors.textMuted,
+              fontSize: theme.fontSize.xs,
+            }}
+          >
             Loading...
           </span>
         )}
@@ -107,18 +126,30 @@ export function Transactions() {
         />
       </Card>
 
-      <Flex justify="space-between" wrap style={{ marginTop: theme.spacing.md, alignItems: "center" }}>
+      <Flex
+        justify="space-between"
+        wrap
+        style={{ marginTop: theme.spacing.md, alignItems: "center" }}
+      >
         <PaginationInfo>
           {total.toLocaleString()} transaction{total !== 1 ? "s" : ""}
         </PaginationInfo>
         <Flex gap="12px" style={{ alignItems: "center" }}>
-          <Button variant="ghost" disabled={page <= 1} onClick={() => setPage(page - 1)}>
+          <Button
+            variant="ghost"
+            disabled={page <= 1}
+            onClick={() => setPage(page - 1)}
+          >
             Previous
           </Button>
           <PaginationInfo>
             Page {page} of {totalPages.toLocaleString()}
           </PaginationInfo>
-          <Button variant="ghost" disabled={page >= totalPages} onClick={() => setPage(page + 1)}>
+          <Button
+            variant="ghost"
+            disabled={page >= totalPages}
+            onClick={() => setPage(page + 1)}
+          >
             Next
           </Button>
         </Flex>

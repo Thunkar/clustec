@@ -4,12 +4,21 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { useNetworkStore } from "../stores/network";
 import {
   useNetworkStats,
-  useClusterRuns, useClusterDetail, useUmapPoints, useFeePayerStats,
+  useClusterRuns,
+  useClusterDetail,
+  useUmapPoints,
+  useFeePayerStats,
 } from "../api/hooks";
 import { ScatterPlot3D } from "../components/ScatterPlot3D";
 import {
-  PageContainer, PageTitle, Grid, StatCard, StatValue, StatLabel,
-  Card, Loading,
+  PageContainer,
+  PageTitle,
+  Grid,
+  StatCard,
+  StatValue,
+  StatLabel,
+  Card,
+  Loading,
 } from "../components/ui";
 import { useLabelResolver } from "../hooks/useAddressResolver";
 import { theme } from "../lib/theme";
@@ -143,21 +152,32 @@ export function Dashboard() {
       <TopRow>
         <Grid columns={2} style={{ flex: 1 }}>
           <StatCard>
-            <StatValue>{Number(stats?.blockCount ?? 0).toLocaleString()}</StatValue>
+            <StatValue>
+              {Number(stats?.blockCount ?? 0).toLocaleString()}
+            </StatValue>
             <StatLabel>Blocks</StatLabel>
           </StatCard>
           <StatCard>
-            <StatValue>{Number(stats?.txCount ?? 0).toLocaleString()}</StatValue>
+            <StatValue>
+              {Number(stats?.txCount ?? 0).toLocaleString()}
+            </StatValue>
             <StatLabel>Transactions</StatLabel>
           </StatCard>
           <StatCard>
-            <StatValue>{stats?.proposedBlock?.toLocaleString() ?? "—"}</StatValue>
+            <StatValue>
+              {stats?.proposedBlock?.toLocaleString() ?? "—"}
+            </StatValue>
             <StatLabel>Last Block</StatLabel>
           </StatCard>
           <StatCard>
             <StatValue>{detail?.run?.numClusters ?? "—"}</StatValue>
-            <StatLabel>Clusters / Outliers</StatLabel>
-            <span style={{ color: theme.colors.textMuted, fontSize: theme.fontSize.xs }}>
+            <StatLabel>Clusters</StatLabel>
+            <span
+              style={{
+                color: theme.colors.textMuted,
+                fontSize: theme.fontSize.xs,
+              }}
+            >
               {detail?.run?.numOutliers ?? 0} outlier txs
             </span>
           </StatCard>
@@ -178,25 +198,75 @@ export function Dashboard() {
                     innerRadius="45%"
                   >
                     {pieData.map((_, i) => (
-                      <Cell key={i} fill={theme.colors.cluster[i % theme.colors.cluster.length]} />
+                      <Cell
+                        key={i}
+                        fill={
+                          theme.colors.cluster[i % theme.colors.cluster.length]
+                        }
+                      />
                     ))}
                   </Pie>
                   <Tooltip
-                    contentStyle={{ background: theme.colors.bgCard, border: `1px solid ${theme.colors.border}`, fontSize: theme.fontSize.xs, color: theme.colors.text }}
+                    contentStyle={{
+                      background: theme.colors.bgCard,
+                      border: `1px solid ${theme.colors.border}`,
+                      fontSize: theme.fontSize.xs,
+                      color: theme.colors.text,
+                    }}
                     labelStyle={{ color: theme.colors.text }}
                     itemStyle={{ color: theme.colors.text }}
-                    formatter={(value: number) => [value.toLocaleString(), "txs"]}
+                    formatter={(value: number) => [
+                      value.toLocaleString(),
+                      "txs",
+                    ]}
                   />
                 </PieChart>
               </ResponsiveContainer>
             </PieChartBox>
             <Legend>
-              <StatLabel style={{ marginBottom: theme.spacing.xs }}>Fee Payers</StatLabel>
+              <StatLabel style={{ marginBottom: theme.spacing.xs }}>
+                Fee Payers
+              </StatLabel>
               {pieData.map((d, i) => (
-                <div key={i} style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: theme.fontSize.sm, lineHeight: "20px" }}>
-                  <span style={{ width: 10, height: 10, borderRadius: "50%", background: theme.colors.cluster[i % theme.colors.cluster.length], flexShrink: 0 }} />
-                  <span style={{ color: theme.colors.textMuted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.name}</span>
-                  <span style={{ color: theme.colors.text, flexShrink: 0, marginLeft: "auto" }}>{d.value}</span>
+                <div
+                  key={i}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    fontSize: theme.fontSize.sm,
+                    lineHeight: "20px",
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: "50%",
+                      background:
+                        theme.colors.cluster[i % theme.colors.cluster.length],
+                      flexShrink: 0,
+                    }}
+                  />
+                  <span
+                    style={{
+                      color: theme.colors.textMuted,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {d.name}
+                  </span>
+                  <span
+                    style={{
+                      color: theme.colors.text,
+                      flexShrink: 0,
+                      marginLeft: "auto",
+                    }}
+                  >
+                    {d.value}
+                  </span>
                 </div>
               ))}
             </Legend>
@@ -208,13 +278,23 @@ export function Dashboard() {
       {umapData?.points && umapData.points.length > 0 && (
         <PlotSection>
           <PlotCaption>
-            3D cluster visualization. Drag to rotate, scroll to zoom, click a point to view.
+            3D cluster visualization. Drag to rotate, scroll to zoom, click a
+            point to view.
           </PlotCaption>
-          <Card style={{ padding: theme.spacing.sm, overflow: "hidden", flex: 1, minHeight: 400 }}>
+          <Card
+            style={{
+              padding: theme.spacing.sm,
+              overflow: "hidden",
+              flex: 1,
+              minHeight: 400,
+            }}
+          >
             <ScatterPlot3D
               points={umapData.points}
               height="100%"
-              onClusterClick={(clusterId) => navigate(`/privacy-sets?cluster=${clusterId}`)}
+              onClusterClick={(clusterId) =>
+                navigate(`/privacy-sets?cluster=${clusterId}`)
+              }
               onOutlierClick={(p) => navigate(`/tx/${p.txHash}`)}
             />
           </Card>

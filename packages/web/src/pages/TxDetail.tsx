@@ -746,7 +746,7 @@ function PublicCallsSection({
                                         color={theme.colors.accent}
                                         style={{ fontSize: "9px" }}
                                       >
-                                        addr
+                                        addr?
                                       </Badge>{" "}
                                     </>
                                   )}

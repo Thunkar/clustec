@@ -41,14 +41,7 @@ const PAD_X = 6;
 const PAD_TOP = 14;
 const PAD_BOT = 50;
 const ZERO_COLOR = "#555570"; // visible muted color for zero-value stubs
-
-function hashToUnit(s: string): number {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) {
-    h = ((h << 5) - h + s.charCodeAt(i)) | 0;
-  }
-  return (((h >>> 0) % 1000) + 1) / 1000;
-}
+const EQUAL_COLOR = "#9999ff"; // color for equal bars in comparison view
 
 function hashToHue(s: string): number {
   let h = 0;
@@ -58,32 +51,63 @@ function hashToHue(s: string): number {
   return (h >>> 0) % 360;
 }
 
+// Second independent hash — uses different mixing constants
+function hashToPattern(s: string): number {
+  let h = 0x9e3779b9;
+  for (let i = 0; i < s.length; i++) {
+    h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  }
+  return (h >>> 0) % 6;
+}
+
+/**
+ * Returns SVG <pattern> children for a fee-payer bar.
+ * Patterns (indexed 0-5): diagonal-45, diagonal-135, horizontal, vertical,
+ * checkerboard, diagonal-checkerboard.
+ */
+function feePayerPattern(id: string, patternIndex: number, color: string): React.ReactElement {
+  switch (patternIndex) {
+    case 0: // diagonal /
+      return <pattern key={id} id={id} width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="2" height="4" fill={color} /></pattern>;
+    case 1: // diagonal \
+      return <pattern key={id} id={id} width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)"><rect width="2" height="4" fill={color} /></pattern>;
+    case 2: // horizontal stripes
+      return <pattern key={id} id={id} width="4" height="4" patternUnits="userSpaceOnUse"><rect width="4" height="2" fill={color} /></pattern>;
+    case 3: // vertical stripes
+      return <pattern key={id} id={id} width="4" height="4" patternUnits="userSpaceOnUse"><rect width="2" height="4" fill={color} /></pattern>;
+    case 4: // checkerboard
+      return <pattern key={id} id={id} width="4" height="4" patternUnits="userSpaceOnUse"><rect width="2" height="2" fill={color} /><rect x="2" y="2" width="2" height="2" fill={color} /></pattern>;
+    default: // checkerboard diagonal
+      return <pattern key={id} id={id} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="3" height="3" fill={color} /><rect x="3" y="3" width="3" height="3" fill={color} /></pattern>;
+  }
+}
+
 function normalizeNumeric(
   value: number,
   index: number,
   maxValues?: number[],
 ): number {
   if (maxValues && maxValues[index] > 0) {
-    return Math.min(value / maxValues[index], 1);
+    return Math.sqrt(Math.min(value / maxValues[index], 1));
   }
   const caps: Record<number, number> = {
-    0: 64,          // numNoteHashes
-    1: 64,          // numNullifiers
-    2: 16,          // numL2ToL1Msgs
-    3: 64,          // numPrivateLogs
-    4: 8,           // numContractClassLogs
-    5: 64,          // numPublicLogs
-    6: 2_000_000,   // gasLimitDa
-    7: 20_000_000,  // gasLimitL2
-    8: 100_000_000, // maxFeePerDaGas
-    9: 500_000_000, // maxFeePerL2Gas
-    10: 4,          // numSetupCalls
-    11: 4,          // numAppCalls
-    12: 10_000,     // totalPublicCalldataSize
-    13: 172_800,    // expirationDelta (seconds) — 48h max
+    0: 64, // numNoteHashes — MAX_NOTE_HASHES_PER_TX
+    1: 64, // numNullifiers — MAX_NULLIFIERS_PER_TX
+    2: 8, // numL2ToL1Msgs — MAX_L2_TO_L1_MSGS_PER_TX
+    3: 64, // numPrivateLogs — MAX_PRIVATE_LOGS_PER_TX
+    4: 1, // numContractClassLogs — MAX_CONTRACT_CLASS_LOGS_PER_TX
+    5: 16, // numPublicLogs (count) — no protocol max, practical cap
+    6: 786_432, // gasLimitDa — MAX_PROCESSABLE_DA_GAS_PER_CHECKPOINT
+    7: 6_540_000, // gasLimitL2 — MAX_PROCESSABLE_L2_GAS
+    8: 1e15, // maxFeePerDaGas — UInt128, practical cap
+    9: 1e15, // maxFeePerL2Gas — UInt128, practical cap
+    10: 32, // numSetupCalls — MAX_ENQUEUED_CALLS_PER_TX
+    11: 32, // numAppCalls — MAX_ENQUEUED_CALLS_PER_TX
+    12: 1_000, // totalPublicCalldataSize (fields) — practical cap; AVM bench test max is 300/call
+    13: 172_800, // expirationDelta (seconds) — 48h max
   };
   const cap = caps[index] ?? 1;
-  return Math.min(value / cap, 1);
+  return Math.sqrt(Math.min(value / cap, 1));
 }
 
 function computeLayout(
@@ -101,7 +125,7 @@ function computeLayout(
   const numGaps = GROUPS.length - 1;
   const usableWidth = viewWidth - 2 * PAD_X - numGaps * GROUP_GAP;
   const barSpacing = usableWidth / numBars;
-  const barW = barSpacing * 0.82;
+  const barW = barSpacing * 0.88;
 
   function barX(index: number): number {
     let x = PAD_X + index * barSpacing;
@@ -115,24 +139,35 @@ function computeLayout(
 }
 
 /**
- * Bar path: flat at center, rounded only at outer tip.
+ * Combined bar path: a single shape spanning both up and down from centerY,
+ * rounded only at the outer tips. No seam at center.
  */
-function barPath(
+function barPathDouble(
   x: number,
   centerY: number,
   w: number,
-  h: number,
-  dir: -1 | 1,
+  hUp: number,
+  hDown: number,
   r: number,
 ): string {
-  const cr = Math.min(r, w / 2, h);
-  if (dir === -1) {
-    const top = centerY - h;
-    return `M${x},${centerY} L${x},${top + cr} Q${x},${top} ${x + cr},${top} L${x + w - cr},${top} Q${x + w},${top} ${x + w},${top + cr} L${x + w},${centerY} Z`;
-  }
-  const bot = centerY + h;
-  return `M${x},${centerY} L${x + w},${centerY} L${x + w},${bot - cr} Q${x + w},${bot} ${x + w - cr},${bot} L${x + cr},${bot} Q${x},${bot} ${x},${bot - cr} Z`;
+  const crUp = Math.min(r, w / 2, hUp);
+  const crDown = Math.min(r, w / 2, hDown);
+  const top = centerY - hUp;
+  const bot = centerY + hDown;
+  // Start top-left, go CCW: top edge with rounded corners, right side down, bottom rounded, left side up
+  return [
+    `M${x},${top + crUp}`,
+    `Q${x},${top} ${x + crUp},${top}`,
+    `L${x + w - crUp},${top}`,
+    `Q${x + w},${top} ${x + w},${top + crUp}`,
+    `L${x + w},${bot - crDown}`,
+    `Q${x + w},${bot} ${x + w - crDown},${bot}`,
+    `L${x + crDown},${bot}`,
+    `Q${x},${bot} ${x},${bot - crDown}`,
+    "Z",
+  ].join(" ");
 }
+
 
 /** Format a value for tooltip display */
 function formatValue(value: number | string, index: number): string {
@@ -150,14 +185,12 @@ function renderBars({
   maxValues,
   layout,
   color,
-  id,
   showLabels,
 }: {
   vector: (number | string)[];
   maxValues?: number[];
   layout: ReturnType<typeof computeLayout>;
   color: string;
-  id: string;
   showLabels: boolean;
 }) {
   const { centerY, maxBarH, barW, barX } = layout;
@@ -172,43 +205,22 @@ function renderBars({
 
     if (isCategorical) {
       const addr = String(vector[i]);
-      const norm = hashToUnit(addr);
-      const barH = Math.max(norm * maxBarH, 3);
+      const barH = maxBarH * 0.5;
       const hue = hashToHue(addr);
+      const patIdx = hashToPattern(addr);
       const catColor = `hsl(${hue}, 65%, 55%)`;
-      const patId = `${id}-hatch-${hue}`;
+      const patId = `fp-pat-${hue}-${patIdx}`;
 
       elements.push(
         <g key={i}>
           <title>{tooltip}</title>
-          <defs>
-            <pattern
-              id={patId}
-              width="4"
-              height="4"
-              patternUnits="userSpaceOnUse"
-              patternTransform="rotate(45)"
-            >
-              <rect width="2" height="4" fill={catColor} />
-            </pattern>
-          </defs>
+          <defs>{feePayerPattern(patId, patIdx, catColor)}</defs>
           <path
-            d={barPath(x, centerY, barW, barH, -1, r)}
+            d={barPathDouble(x, centerY, barW, barH, barH, r)}
             fill={`url(#${patId})`}
           />
           <path
-            d={barPath(x, centerY, barW, barH, 1, r)}
-            fill={`url(#${patId})`}
-          />
-          <path
-            d={barPath(x, centerY, barW, barH, -1, r)}
-            fill="none"
-            stroke={catColor}
-            strokeWidth="0.6"
-            opacity="0.5"
-          />
-          <path
-            d={barPath(x, centerY, barW, barH, 1, r)}
+            d={barPathDouble(x, centerY, barW, barH, barH, r)}
             fill="none"
             stroke={catColor}
             strokeWidth="0.6"
@@ -247,12 +259,7 @@ function renderBars({
         <g key={i}>
           <title>{tooltip}</title>
           <path
-            d={barPath(x, centerY, barW, barH, -1, r)}
-            fill={active ? color : ZERO_COLOR}
-            opacity={active ? 0.85 : 0.5}
-          />
-          <path
-            d={barPath(x, centerY, barW, barH, 1, r)}
+            d={barPathDouble(x, centerY, barW, barH, barH, r)}
             fill={active ? color : ZERO_COLOR}
             opacity={active ? 0.85 : 0.5}
           />
@@ -326,50 +333,72 @@ function renderComparisonBars({
     if (isCategorical) {
       const addrA = String(vectorA[i]);
       const addrB = String(vectorB[i]);
-      const normA = hashToUnit(addrA);
-      const normB = hashToUnit(addrB);
-      const barHA = Math.max(normA * maxBarH, 3);
-      const barHB = Math.max(normB * maxBarH, 3);
+      const barH = maxBarH * 0.5;
       const hueA = hashToHue(addrA);
       const hueB = hashToHue(addrB);
+      const patIdxA = hashToPattern(addrA);
+      const patIdxB = hashToPattern(addrB);
       const catColorA = `hsl(${hueA}, 65%, 55%)`;
       const catColorB = `hsl(${hueB}, 65%, 55%)`;
-      const patIdA = `cmpA-hatch-${hueA}`;
-      const patIdB = `cmpB-hatch-${hueB}`;
-
-      // Render taller behind, shorter on top
-      const aIsTaller = barHA >= barHB;
-      const backH = aIsTaller ? barHA : barHB;
-      const frontH = aIsTaller ? barHB : barHA;
-      const backPat = aIsTaller ? patIdA : patIdB;
-      const frontPat = aIsTaller ? patIdB : patIdA;
-      const backColor = aIsTaller ? catColorA : catColorB;
+      const sameAddr = addrA === addrB;
+      const patIdA = `fp-pat-${hueA}-${patIdxA}`;
+      const patIdB = `fp-pat-${hueB}-${patIdxB}`;
+      // When different: two equal-width bars side by side with a 1px gap
+      const gap = sameAddr ? 0 : 1;
+      const halfW = sameAddr ? barW : (barW - gap) / 2;
 
       elements.push(
         <g key={i}>
           <title>{tooltip}</title>
           <defs>
-            <pattern id={patIdA} width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-              <rect width="2" height="4" fill={catColorA} />
-            </pattern>
-            <pattern id={patIdB} width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-              <rect width="2" height="4" fill={catColorB} />
-            </pattern>
+            {feePayerPattern(patIdA, patIdxA, catColorA)}
+            {!sameAddr && feePayerPattern(patIdB, patIdxB, catColorB)}
           </defs>
-          {/* Taller bar (behind) */}
-          <path d={barPath(x, centerY, barW, backH, -1, r)} fill={`url(#${backPat})`} />
-          <path d={barPath(x, centerY, barW, backH, 1, r)} fill={`url(#${backPat})`} />
-          {/* Shorter bar (on top) */}
-          <path d={barPath(x, centerY, barW, frontH, -1, r)} fill={`url(#${frontPat})`} />
-          <path d={barPath(x, centerY, barW, frontH, 1, r)} fill={`url(#${frontPat})`} />
+          {/* A bar */}
+          <path
+            d={barPathDouble(x, centerY, halfW, barH, barH, r)}
+            fill={`url(#${patIdA})`}
+          />
+          <path
+            d={barPathDouble(x, centerY, halfW, barH, barH, r)}
+            fill="none"
+            stroke={catColorA}
+            strokeWidth="0.6"
+            opacity="0.5"
+          />
+          {/* B bar (only if different address) */}
+          {!sameAddr && (
+            <>
+              <path
+                d={barPathDouble(x + halfW + gap, centerY, halfW, barH, barH, r)}
+                fill={`url(#${patIdB})`}
+              />
+              <path
+                d={barPathDouble(x + halfW + gap, centerY, halfW, barH, barH, r)}
+                fill="none"
+                stroke={catColorB}
+                strokeWidth="0.6"
+                opacity="0.5"
+              />
+            </>
+          )}
           {/* Invisible hit area */}
-          <rect x={x} y={centerY - maxBarH} width={barW} height={maxBarH * 2} fill="transparent" />
+          <rect
+            x={x}
+            y={centerY - barH}
+            width={barW}
+            height={barH * 2}
+            fill="transparent"
+          />
           {showLabels && (
             <text
-              x={0} y={0}
+              x={0}
+              y={0}
               transform={`translate(${x + barW * 0.3}, ${centerY + maxBarH + 6}) rotate(65)`}
-              fontSize="6" fontFamily="'SF Mono', 'Fira Code', monospace"
-              fill={backColor} fontWeight="600"
+              fontSize="6"
+              fontFamily="'SF Mono', 'Fira Code', monospace"
+              fill={catColorA}
+              fontWeight="600"
             >
               {FEATURE_LABELS[i]}
             </text>
@@ -385,33 +414,63 @@ function renderComparisonBars({
       const activeB = rawB > 0;
       const barHA = activeA ? Math.max(normA * maxBarH, 3) : ZERO_H;
       const barHB = activeB ? Math.max(normB * maxBarH, 3) : ZERO_H;
+      const equal = rawA === rawB;
 
-      // Always render taller bar behind, shorter bar on top (both opaque)
-      const aIsTaller = barHA >= barHB;
-      const backH = aIsTaller ? barHA : barHB;
-      const frontH = aIsTaller ? barHB : barHA;
-      const backColor = aIsTaller ? colorA : colorB;
-      const frontColor = aIsTaller ? colorB : colorA;
-      const backActive = aIsTaller ? activeA : activeB;
-      const frontActive = aIsTaller ? activeB : activeA;
+      const anyActive = activeA || activeB;
 
       elements.push(
         <g key={i}>
           <title>{tooltip}</title>
-          {/* Taller bar (behind, full opacity) */}
-          <path d={barPath(x, centerY, barW, backH, -1, r)} fill={backActive ? backColor : ZERO_COLOR} opacity={backActive ? 0.85 : 0.4} />
-          <path d={barPath(x, centerY, barW, backH, 1, r)} fill={backActive ? backColor : ZERO_COLOR} opacity={backActive ? 0.85 : 0.4} />
-          {/* Shorter bar (on top, full opacity) */}
-          <path d={barPath(x, centerY, barW, frontH, -1, r)} fill={frontActive ? frontColor : ZERO_COLOR} opacity={frontActive ? 0.85 : 0.4} />
-          <path d={barPath(x, centerY, barW, frontH, 1, r)} fill={frontActive ? frontColor : ZERO_COLOR} opacity={frontActive ? 0.85 : 0.4} />
+          {equal ? (
+            /* Equal: symmetric barPathDouble with muted outline */
+            <path
+              d={barPathDouble(x, centerY, barW, barHA, barHA, r)}
+              fill={anyActive ? EQUAL_COLOR : ZERO_COLOR}
+              fillOpacity={anyActive ? 0.18 : 0.08}
+              stroke={anyActive ? EQUAL_COLOR : ZERO_COLOR}
+              strokeWidth="0.8"
+              strokeOpacity={anyActive ? 0.75 : 0.35}
+            />
+          ) : (() => {
+            /* Different: upper half = A (colorA), lower half = B (colorB)
+               Use two clipRects + the same outline path to split colors. */
+            const clipIdUp = `clip-up-${i}`;
+            const clipIdDn = `clip-dn-${i}`;
+            const d = barPathDouble(x, centerY, barW, barHA, barHB, r);
+            const top = centerY - barHA;
+            return (
+              <>
+                <defs>
+                  <clipPath id={clipIdUp}>
+                    <rect x={x - 1} y={top - 1} width={barW + 2} height={barHA + 1} />
+                  </clipPath>
+                  <clipPath id={clipIdDn}>
+                    <rect x={x - 1} y={centerY} width={barW + 2} height={barHB + 1} />
+                  </clipPath>
+                </defs>
+                <path d={d} fill={activeA ? colorA : ZERO_COLOR} opacity={activeA ? 0.85 : 0.4} clipPath={`url(#${clipIdUp})`} />
+                <path d={d} fill={activeB ? colorB : ZERO_COLOR} opacity={activeB ? 0.85 : 0.4} clipPath={`url(#${clipIdDn})`} />
+              </>
+            );
+          })()}
           {/* Invisible hit area */}
-          <rect x={x} y={centerY - Math.max(barHA, barHB, 6)} width={barW} height={Math.max(barHA, barHB, 6) * 2} fill="transparent" />
+          <rect
+            x={x}
+            y={centerY - Math.max(barHA, barHB, 6)}
+            width={barW}
+            height={Math.max(barHA, barHB, 6) * 2}
+            fill="transparent"
+          />
           {showLabels && (
             <text
-              x={0} y={0}
+              x={0}
+              y={0}
               transform={`translate(${x + barW * 0.3}, ${centerY + maxBarH + 6}) rotate(65)`}
-              fontSize="6" fontFamily="'SF Mono', 'Fira Code', monospace"
-              fill={activeA || activeB ? theme.colors.text : theme.colors.textMuted}
+              fontSize="6"
+              fontFamily="'SF Mono', 'Fira Code', monospace"
+              fill={
+                activeA || activeB ? theme.colors.text : theme.colors.textMuted
+              }
               opacity={activeA || activeB ? 0.7 : 0.35}
             >
               {FEATURE_LABELS[i]}
@@ -517,11 +576,7 @@ export function TxFingerprint({
         preserveAspectRatio="xMidYMid meet"
         className={className}
       >
-        <line
-          x1={PAD_X} y1={layout.centerY} x2={VB_W - PAD_X} y2={layout.centerY}
-          stroke={theme.colors.border} strokeWidth={0.5} strokeDasharray="4 3"
-        />
-        {renderBars({ vector, maxValues, layout, color, id: "fp", showLabels: false })}
+        {renderBars({ vector, maxValues, layout, color, showLabels: false })}
       </ResponsiveSvg>
     );
   }
@@ -535,11 +590,7 @@ export function TxFingerprint({
           preserveAspectRatio="xMidYMid meet"
         >
           {renderGroupLabelsAndSeparators(layout)}
-          <line
-            x1={PAD_X} y1={layout.centerY} x2={VB_W - PAD_X} y2={layout.centerY}
-            stroke={theme.colors.border} strokeWidth={0.5} strokeDasharray="4 3"
-          />
-          {renderBars({ vector, maxValues, layout, color, id: "fp", showLabels: true })}
+          {renderBars({ vector, maxValues, layout, color, showLabels: true })}
         </ResponsiveSvg>
       </DesktopOnly>
       {/* Mobile: bars only, no labels */}
@@ -548,11 +599,13 @@ export function TxFingerprint({
           viewBox={`0 0 ${VB_W} ${vbHMobile}`}
           preserveAspectRatio="xMidYMid meet"
         >
-          <line
-            x1={PAD_X} y1={layoutMobile.centerY} x2={VB_W - PAD_X} y2={layoutMobile.centerY}
-            stroke={theme.colors.border} strokeWidth={0.5} strokeDasharray="4 3"
-          />
-          {renderBars({ vector, maxValues, layout: layoutMobile, color, id: "fp-m", showLabels: false })}
+          {renderBars({
+            vector,
+            maxValues,
+            layout: layoutMobile,
+            color,
+            showLabels: false,
+          })}
         </ResponsiveSvg>
       </MobileOnly>
     </div>
@@ -584,7 +637,11 @@ export function FingerprintCompare({
   compact = false,
   className,
 }: FingerprintCompareProps) {
-  const vbH = compact ? VB_H_COMPACT : showLabels ? VB_H_LABELS : VB_H_NO_LABELS;
+  const vbH = compact
+    ? VB_H_COMPACT
+    : showLabels
+      ? VB_H_LABELS
+      : VB_H_NO_LABELS;
   const layout = computeLayout(vectorA.length, VB_W, vbH, showLabels);
 
   if (!showLabels) {
@@ -594,11 +651,17 @@ export function FingerprintCompare({
         preserveAspectRatio="xMidYMid meet"
         className={className}
       >
-        <line
-          x1={PAD_X} y1={layout.centerY} x2={VB_W - PAD_X} y2={layout.centerY}
-          stroke={theme.colors.border} strokeWidth={0.5} strokeDasharray="4 3"
-        />
-        {renderComparisonBars({ vectorA, vectorB, maxValues, layout, colorA, colorB, labelA, labelB, showLabels: false })}
+        {renderComparisonBars({
+          vectorA,
+          vectorB,
+          maxValues,
+          layout,
+          colorA,
+          colorB,
+          labelA,
+          labelB,
+          showLabels: false,
+        })}
       </ResponsiveSvg>
     );
   }
@@ -615,11 +678,17 @@ export function FingerprintCompare({
           preserveAspectRatio="xMidYMid meet"
         >
           {renderGroupLabelsAndSeparators(layout)}
-          <line
-            x1={PAD_X} y1={layout.centerY} x2={VB_W - PAD_X} y2={layout.centerY}
-            stroke={theme.colors.border} strokeWidth={0.5} strokeDasharray="4 3"
-          />
-          {renderComparisonBars({ vectorA, vectorB, maxValues, layout, colorA, colorB, labelA, labelB, showLabels: true })}
+          {renderComparisonBars({
+            vectorA,
+            vectorB,
+            maxValues,
+            layout,
+            colorA,
+            colorB,
+            labelA,
+            labelB,
+            showLabels: true,
+          })}
         </ResponsiveSvg>
       </DesktopOnly>
       {/* Mobile: bars only */}
@@ -628,11 +697,17 @@ export function FingerprintCompare({
           viewBox={`0 0 ${VB_W} ${vbHMobile}`}
           preserveAspectRatio="xMidYMid meet"
         >
-          <line
-            x1={PAD_X} y1={layoutMobile.centerY} x2={VB_W - PAD_X} y2={layoutMobile.centerY}
-            stroke={theme.colors.border} strokeWidth={0.5} strokeDasharray="4 3"
-          />
-          {renderComparisonBars({ vectorA, vectorB, maxValues, layout: layoutMobile, colorA, colorB, labelA, labelB, showLabels: false })}
+          {renderComparisonBars({
+            vectorA,
+            vectorB,
+            maxValues,
+            layout: layoutMobile,
+            colorA,
+            colorB,
+            labelA,
+            labelB,
+            showLabels: false,
+          })}
         </ResponsiveSvg>
       </MobileOnly>
     </div>
@@ -688,9 +763,7 @@ export function SnapshotableFingerprint({
     const dataUrl = await snapshot(3);
     const a = document.createElement("a");
     a.href = dataUrl;
-    a.download = label
-      ? `tx-fingerprint-${label}.png`
-      : "tx-fingerprint.png";
+    a.download = label ? `tx-fingerprint-${label}.png` : "tx-fingerprint.png";
     a.click();
   }, [snapshot, label]);
 
@@ -711,16 +784,7 @@ export function SnapshotableFingerprint({
         >
           <rect width={VB_W} height={vbH} fill={theme.colors.bgCard} rx="8" />
           {showLabels && renderGroupLabelsAndSeparators(layout)}
-          <line
-            x1={PAD_X}
-            y1={layout.centerY}
-            x2={VB_W - PAD_X}
-            y2={layout.centerY}
-            stroke={theme.colors.border}
-            strokeWidth={0.5}
-            strokeDasharray="4 3"
-          />
-          {renderBars({ vector, maxValues, layout, color, id: "snap", showLabels })}
+          {renderBars({ vector, maxValues, layout, color, showLabels })}
         </ResponsiveSvg>
       </DesktopOnly>
       {/* Mobile: bars only, no labels */}
@@ -729,17 +793,19 @@ export function SnapshotableFingerprint({
           viewBox={`0 0 ${VB_W} ${vbHCompact}`}
           preserveAspectRatio="xMidYMid meet"
         >
-          <rect width={VB_W} height={vbHCompact} fill={theme.colors.bgCard} rx="8" />
-          <line
-            x1={PAD_X}
-            y1={layoutCompact.centerY}
-            x2={VB_W - PAD_X}
-            y2={layoutCompact.centerY}
-            stroke={theme.colors.border}
-            strokeWidth={0.5}
-            strokeDasharray="4 3"
+          <rect
+            width={VB_W}
+            height={vbHCompact}
+            fill={theme.colors.bgCard}
+            rx="8"
           />
-          {renderBars({ vector, maxValues, layout: layoutCompact, color, id: "snap-m", showLabels: false })}
+          {renderBars({
+            vector,
+            maxValues,
+            layout: layoutCompact,
+            color,
+            showLabels: false,
+          })}
         </ResponsiveSvg>
       </MobileOnly>
       <DownloadButton onClick={handleDownload} title="Download as PNG">
