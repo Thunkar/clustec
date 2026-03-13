@@ -174,6 +174,11 @@ export class BlockProcessor extends L2TipsMemoryStore {
           txIndex: mined.txIndex,
           executionResult: mined.executionResult,
           actualFee: mined.actualFee,
+          // Use counts from TxEffect — authoritative post-execution values that
+          // include any note hashes/nullifiers added by public VM execution,
+          // which are absent from the pre-execution mempool Tx counts.
+          numNoteHashes: mined.noteHashes.length,
+          numNullifiers: mined.nullifiers.length,
           numPublicDataWrites: mined.numPublicDataWrites,
           numPublicLogs: mined.numPublicLogs,
           privateLogTotalSize: mined.privateLogTotalSize,
@@ -251,8 +256,8 @@ export class BlockProcessor extends L2TipsMemoryStore {
         // or the freshly extracted pendingFields (block-first).
         const pf = pendingFields as Record<string, number | null> | null;
         const vector = computeFeatureVector({
-          numNoteHashes: existing?.numNoteHashes ?? (pf?.numNoteHashes as number) ?? 0,
-          numNullifiers: existing?.numNullifiers ?? (pf?.numNullifiers as number) ?? 0,
+          numNoteHashes: mined.noteHashes.length,
+          numNullifiers: mined.nullifiers.length,
           numL2ToL1Msgs: existing?.numL2ToL1Msgs ?? (pf?.numL2ToL1Msgs as number) ?? 0,
           numPrivateLogs: existing?.numPrivateLogs ?? (pf?.numPrivateLogs as number) ?? 0,
           numContractClassLogs: existing?.numContractClassLogs ?? (pf?.numContractClassLogs as number) ?? 0,
