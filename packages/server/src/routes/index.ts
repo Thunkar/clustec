@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type { Db } from "@clustec/common";
 import type { FeePricingService } from "../services/fee-pricing.ts";
+import { registerAuthRoutes } from "./auth.ts";
 import { registerNetworkRoutes } from "./networks.ts";
 import { registerBlockRoutes } from "./blocks.ts";
 import { registerTxRoutes } from "./txs.ts";
@@ -15,6 +16,7 @@ export function registerRoutes(
   db: Db,
   feePricing?: Map<string, FeePricingService>,
 ) {
+  registerAuthRoutes(app);
   registerNetworkRoutes(app, db);
   registerBlockRoutes(app, db);
   registerTxRoutes(app, db, feePricing);

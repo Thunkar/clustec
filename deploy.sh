@@ -100,9 +100,17 @@ for img in "${IMAGES[@]}"; do
   remote "docker pull $img"
 done
 
-# ─── 4. Set IMAGE_TAG in .env ────────────────────────────────────────
+# ─── 4. Set IMAGE_TAG and secrets in .env ────────────────────────────
 remote "[ -f $REMOTE_DIR/.env ] || cp $REMOTE_DIR/.env.example $REMOTE_DIR/.env"
 remote "grep -q '^IMAGE_TAG=' $REMOTE_DIR/.env 2>/dev/null && sed -i 's|^IMAGE_TAG=.*|IMAGE_TAG=$IMAGE_TAG|' $REMOTE_DIR/.env || echo 'IMAGE_TAG=$IMAGE_TAG' >> $REMOTE_DIR/.env"
+
+# Write secrets from env vars if provided (set via GitHub secrets in CI)
+if [[ -n "${ADMIN_PASSWORD:-}" ]]; then
+  remote "grep -q '^ADMIN_PASSWORD=' $REMOTE_DIR/.env 2>/dev/null && sed -i 's|^ADMIN_PASSWORD=.*|ADMIN_PASSWORD=$ADMIN_PASSWORD|' $REMOTE_DIR/.env || echo 'ADMIN_PASSWORD=$ADMIN_PASSWORD' >> $REMOTE_DIR/.env"
+fi
+if [[ -n "${JWT_SECRET:-}" ]]; then
+  remote "grep -q '^JWT_SECRET=' $REMOTE_DIR/.env 2>/dev/null && sed -i 's|^JWT_SECRET=.*|JWT_SECRET=$JWT_SECRET|' $REMOTE_DIR/.env || echo 'JWT_SECRET=$JWT_SECRET' >> $REMOTE_DIR/.env"
+fi
 
 # ─── 5. Restart services ─────────────────────────────────────────────
 echo "==> Starting services..."

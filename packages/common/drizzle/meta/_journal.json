@@ -22,6 +22,13 @@
       "when": 1741571100000,
       "tag": "0002_add_anchor_block_timestamp",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1773999999000,
+      "tag": "0003_analysis_config",
+      "breakpoints": true
     }
   ]
 }

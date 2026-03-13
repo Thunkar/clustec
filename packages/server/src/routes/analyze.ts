@@ -2,8 +2,10 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
-import type { Db } from "@clustec/common";
+import { type Db, analysisConfig } from "@clustec/common";
+import { requireAdmin } from "../middleware/auth.ts";
 
 const execFileAsync = promisify(execFile);
 
@@ -15,15 +17,33 @@ interface AnalysisConfig {
   minClusterSize: number;
   nNeighbors: number;
   minDist: number;
-  dimensions: number;
 }
 
 const DEFAULT_CONFIG: AnalysisConfig = {
   minClusterSize: 5,
   nNeighbors: 15,
   minDist: 0.1,
-  dimensions: 3,
 };
+
+async function getConfig(db: Db, networkId: string): Promise<AnalysisConfig> {
+  const [row] = await db
+    .select()
+    .from(analysisConfig)
+    .where(eq(analysisConfig.networkId, networkId));
+  return row
+    ? { minClusterSize: row.minClusterSize, nNeighbors: row.nNeighbors, minDist: row.minDist }
+    : { ...DEFAULT_CONFIG };
+}
+
+async function persistConfig(db: Db, networkId: string, cfg: AnalysisConfig): Promise<void> {
+  await db
+    .insert(analysisConfig)
+    .values({ networkId, ...cfg })
+    .onConflictDoUpdate({
+      target: analysisConfig.networkId,
+      set: { minClusterSize: cfg.minClusterSize, nNeighbors: cfg.nNeighbors, minDist: cfg.minDist, updatedAt: new Date() },
+    });
+}
 
 async function runAnalysis(
   networkId: string,
@@ -52,7 +72,7 @@ async function runAnalysis(
       "--min-dist",
       String(config.minDist),
       "--dimensions",
-      String(config.dimensions),
+      "3",
     ],
     {
       env: { ...process.env, DATABASE_URL: databaseUrl },
@@ -65,47 +85,112 @@ async function runAnalysis(
   return { status: "complete", output: stdout.trim() };
 }
 
-export function registerAnalyzeRoutes(app: FastifyInstance, _db: Db) {
-  // GET endpoint to check last analysis status (no mutation)
+// Guard against concurrent trigger runs per network
+const runningNetworks = new Set<string>();
+
+type ConfigBody = { minClusterSize?: number; nNeighbors?: number; minDist?: number };
+
+export function registerAnalyzeRoutes(app: FastifyInstance, db: Db) {
+  // GET endpoint to check last analysis status and current config
   app.get<{ Params: { id: string } }>(
     "/api/networks/:id/analyze/status",
-    async () => {
-      return { scheduled: true, intervalMinutes: 10 };
+    async (request) => {
+      const config = await getConfig(db, request.params.id);
+      return { scheduled: true, intervalMinutes: 10, config };
+    }
+  );
+
+  // POST /config — save config for scheduler (no immediate run)
+  app.post<{ Params: { id: string }; Body: ConfigBody }>(
+    "/api/networks/:id/analyze/config",
+    { preHandler: [requireAdmin] },
+    async (request) => {
+      const { id } = request.params;
+      const current = await getConfig(db, id);
+      const next: AnalysisConfig = {
+        minClusterSize: request.body.minClusterSize ?? current.minClusterSize,
+        nNeighbors: request.body.nNeighbors ?? current.nNeighbors,
+        minDist: request.body.minDist ?? current.minDist,
+      };
+      await persistConfig(db, id, next);
+      return { config: next };
+    }
+  );
+
+  // DELETE /config — revert to defaults
+  app.delete<{ Params: { id: string } }>(
+    "/api/networks/:id/analyze/config",
+    { preHandler: [requireAdmin] },
+    async (request) => {
+      const { id } = request.params;
+      await persistConfig(db, id, { ...DEFAULT_CONFIG });
+      return { config: DEFAULT_CONFIG };
+    }
+  );
+
+  // POST /trigger — run analysis on demand (admin only), optionally overriding params
+  app.post<{ Params: { id: string }; Body: ConfigBody }>(
+    "/api/networks/:id/analyze/trigger",
+    { preHandler: [requireAdmin] },
+    async (request, reply) => {
+      const { id } = request.params;
+
+      if (runningNetworks.has(id)) {
+        reply.status(409).send({ error: "Analysis already running for this network" });
+        return;
+      }
+
+      // Merge any param overrides with current config and persist
+      const current = await getConfig(db, id);
+      const next: AnalysisConfig = {
+        minClusterSize: request.body.minClusterSize ?? current.minClusterSize,
+        nNeighbors: request.body.nNeighbors ?? current.nNeighbors,
+        minDist: request.body.minDist ?? current.minDist,
+      };
+      await persistConfig(db, id, next);
+
+      runningNetworks.add(id);
+      try {
+        const result = await runAnalysis(id, next, app.log);
+        return result;
+      } catch (err: unknown) {
+        const message = String(err);
+        const stderr = (err as { stderr?: string }).stderr ?? "";
+        const stdout = (err as { stdout?: string }).stdout ?? "";
+        reply.status(500).send({ error: message, stderr, stdout });
+      } finally {
+        runningNetworks.delete(id);
+      }
     }
   );
 }
 
 /**
  * Start a periodic analysis scheduler.
- * Runs every `intervalMs` for each network that has indexed transactions.
+ * Loads config from DB for each network before each run.
  */
 export function startAnalysisScheduler(
   app: FastifyInstance,
+  db: Db,
   networks: string[],
   intervalMs = 10 * 60 * 1000
 ): NodeJS.Timeout {
-  const timer = setInterval(async () => {
+  const runAll = async (label: string) => {
     for (const networkId of networks) {
       try {
-        app.log.info({ networkId }, "Scheduled analysis starting");
-        await runAnalysis(networkId, DEFAULT_CONFIG, app.log);
+        const config = await getConfig(db, networkId);
+        app.log.info({ networkId, config }, `${label} starting`);
+        await runAnalysis(networkId, config, app.log);
       } catch (err) {
-        app.log.error({ err, networkId }, "Scheduled analysis failed");
+        app.log.error({ err, networkId }, `${label} failed`);
       }
     }
-  }, intervalMs);
+  };
+
+  const timer = setInterval(() => runAll("Scheduled analysis"), intervalMs);
 
   // Run once immediately on startup (after a short delay to let indexer catch up)
-  setTimeout(async () => {
-    for (const networkId of networks) {
-      try {
-        app.log.info({ networkId }, "Initial analysis starting");
-        await runAnalysis(networkId, DEFAULT_CONFIG, app.log);
-      } catch (err) {
-        app.log.error({ err, networkId }, "Initial analysis failed");
-      }
-    }
-  }, 5_000);
+  setTimeout(() => runAll("Initial analysis"), 5_000);
 
   return timer;
 }

@@ -12,6 +12,7 @@
     "@aztec/l1-artifacts": "4.0.0-devnet.2-patch.3",
     "@aztec/protocol-contracts": "4.0.0-devnet.2-patch.3",
     "@clustec/common": "workspace:*",
+    "@fastify/jwt": "^10.0.0",
     "drizzle-orm": "^0.45",
     "fastify": "^5",
     "pino": "^9",

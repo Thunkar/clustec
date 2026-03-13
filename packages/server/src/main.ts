@@ -3,6 +3,7 @@ loadEnv();
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import Fastify from "fastify";
+import fjwt from "@fastify/jwt";
 import { createDb, networks, contractLabels } from "@clustec/common";
 import { registerRoutes } from "./routes/index.ts";
 import { startAnalysisScheduler } from "./routes/analyze.ts";
@@ -111,11 +112,15 @@ async function main() {
   app.addHook("onRequest", async (request, reply) => {
     reply.header("Access-Control-Allow-Origin", "*");
     reply.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-    reply.header("Access-Control-Allow-Headers", "Content-Type");
+    reply.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
     if (request.method === "OPTIONS") {
       reply.status(204).send();
     }
   });
+
+  const jwtSecret = process.env.JWT_SECRET;
+  if (!jwtSecret) throw new Error("JWT_SECRET env var is required");
+  await app.register(fjwt, { secret: jwtSecret });
 
   // Load per-network config files
   const networkConfigs = loadNetworkConfigs();
@@ -184,7 +189,7 @@ async function main() {
       { networks: networkIds, intervalMs: analysisIntervalMs },
       "Starting analysis scheduler"
     );
-    startAnalysisScheduler(app, networkIds, analysisIntervalMs);
+    startAnalysisScheduler(app, db, networkIds, analysisIntervalMs);
   } else {
     app.log.warn("No networks found in DB after 10 attempts — analysis scheduler not started");
   }
