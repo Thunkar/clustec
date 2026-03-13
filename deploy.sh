@@ -100,11 +100,11 @@ for img in "${IMAGES[@]}"; do
   remote "docker pull $img"
 done
 
-# ─── 4. Set IMAGE_TAG in .env ────────────────────────────────────────
+# ─── 4. Set IMAGE_TAG and secrets in .env ────────────────────────────
 remote "[ -f $REMOTE_DIR/.env ] || cp $REMOTE_DIR/.env.example $REMOTE_DIR/.env"
 remote "grep -q '^IMAGE_TAG=' $REMOTE_DIR/.env 2>/dev/null && sed -i 's|^IMAGE_TAG=.*|IMAGE_TAG=$IMAGE_TAG|' $REMOTE_DIR/.env || echo 'IMAGE_TAG=$IMAGE_TAG' >> $REMOTE_DIR/.env"
 
-# ─── 5. Restart services ─────────────────────────────────────────────
+#─── 5. Restart services ─────────────────────────────────────────────
 echo "==> Starting services..."
 remote "cd $REMOTE_DIR && docker compose up -d"
 

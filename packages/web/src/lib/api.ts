@@ -1,3 +1,5 @@
+import { useAuthStore } from "../stores/auth.js";
+
 const BASE = "/api";
 
 async function fetchJson<T>(path: string): Promise<T> {
@@ -16,9 +18,44 @@ async function postJson<T>(path: string, body?: unknown): Promise<T> {
   return res.json();
 }
 
-async function deleteJson(path: string): Promise<void> {
-  const res = await fetch(`${BASE}${path}`, { method: "DELETE" });
+function authHeaders(): Record<string, string> {
+  const token = useAuthStore.getState().token;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+export class ApiError extends Error {
+  detail: { error?: string; stderr?: string; stdout?: string } | null;
+  constructor(status: number, statusText: string, detail: ApiError["detail"]) {
+    super(detail?.error ?? `API error: ${status} ${statusText}`);
+    this.detail = detail;
+  }
+}
+
+async function postJsonAuth<T>(path: string, body?: unknown): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (res.status === 401) throw new Error("Unauthorized");
+  if (!res.ok) {
+    let detail = null;
+    try { detail = await res.json(); } catch { /* ignore */ }
+    throw new ApiError(res.status, res.statusText, detail);
+  }
+  return res.json();
+}
+
+async function deleteJsonAuth(path: string): Promise<void>;
+async function deleteJsonAuth<T>(path: string, expectJson: true): Promise<T>;
+async function deleteJsonAuth<T>(path: string, expectJson?: boolean): Promise<T | void> {
+  const res = await fetch(`${BASE}${path}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  if (res.status === 401) throw new Error("Unauthorized");
   if (!res.ok) throw new Error(`API error: ${res.status} ${res.statusText}`);
+  if (expectJson) return res.json() as Promise<T>;
 }
 
 // ── Types ──
@@ -414,8 +451,21 @@ export const api = {
     fetchJson<{ runId: number; totalTxsAnalyzed: number; outliers: OutlierEntry[] }>(`/networks/${id}/clusters/${runId}/outliers?limit=${limit}`),
   getLabels: (id: string) => fetchJson<ContractLabel[]>(`/networks/${id}/labels`),
   addLabel: (id: string, data: { address: string; label: string; contractType?: string }) =>
-    postJson<ContractLabel>(`/networks/${id}/labels`, data),
-  deleteLabel: (id: string, labelId: number) => deleteJson(`/networks/${id}/labels/${labelId}`),
+    postJsonAuth<ContractLabel>(`/networks/${id}/labels`, data),
+  deleteLabel: (id: string, labelId: number) => deleteJsonAuth(`/networks/${id}/labels/${labelId}`),
+  getAnalysisStatus: (networkId: string) =>
+    fetchJson<{ scheduled: boolean; intervalMinutes: number; config: { minClusterSize: number; nNeighbors: number; minDist: number } }>(`/networks/${networkId}/analyze/status`),
+  login: (password: string) => postJson<{ token: string }>("/auth/login", { password }),
+  triggerAnalysis: (
+    networkId: string,
+    params: { minClusterSize?: number; nNeighbors?: number; minDist?: number }
+  ) => postJsonAuth<{ status: string; output: string }>(`/networks/${networkId}/analyze/trigger`, params),
+  saveAnalysisConfig: (
+    networkId: string,
+    params: { minClusterSize?: number; nNeighbors?: number; minDist?: number }
+  ) => postJsonAuth<{ config: { minClusterSize: number; nNeighbors: number; minDist: number } }>(`/networks/${networkId}/analyze/config`, params),
+  revertAnalysisConfig: (networkId: string) =>
+    deleteJsonAuth<{ config: { minClusterSize: number; nNeighbors: number; minDist: number } }>(`/networks/${networkId}/analyze/config`, true),
   getTxGraph: (id: string, hash: string) =>
     fetchJson<TxGraphData>(`/networks/${id}/txs/${hash}/graph`),
   getClusterMembers: (id: string, runId: number, clusterId: number) =>

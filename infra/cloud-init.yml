@@ -16,6 +16,8 @@ write_files:
       ANALYSIS_INTERVAL_MS=600000
       DOMAIN=${domain}
       WEB_PORT=443
+      ADMIN_PASSWORD=${admin_password}
+      JWT_SECRET=${jwt_secret}
   - path: /opt/clustec/docker-compose.override.yml
     content: |
       services:

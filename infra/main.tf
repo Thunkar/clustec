@@ -16,6 +16,11 @@ resource "random_password" "postgres" {
   special = false
 }
 
+resource "random_password" "jwt_secret" {
+  length  = 32
+  special = false
+}
+
 # ── Firewall ─────────────────────────────────────────────────────────
 
 resource "hcloud_firewall" "clustec" {
@@ -56,11 +61,17 @@ resource "hcloud_server" "clustec" {
 
   user_data = templatefile("${path.module}/cloud-init.yml", {
     postgres_password = random_password.postgres.result
+    jwt_secret        = random_password.jwt_secret.result
+    admin_password    = var.admin_password
     network           = var.network
     domain            = var.domain
   })
 
   labels = {
     project = "clustec"
+  }
+
+  lifecycle {
+    ignore_changes = [user_data]
   }
 }

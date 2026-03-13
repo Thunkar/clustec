@@ -1,4 +1,4 @@
-import React, { useRef, useCallback } from "react";
+import React, { useRef, useCallback, useState } from "react";
 import styled from "@emotion/styled";
 import { theme } from "../lib/theme";
 
@@ -40,8 +40,8 @@ const GROUP_GAP = 6;
 const PAD_X = 6;
 const PAD_TOP = 14;
 const PAD_BOT = 50;
-const ZERO_COLOR = "#555570"; // visible muted color for zero-value stubs
-const EQUAL_COLOR = "#9999ff"; // color for equal bars in comparison view
+const ZERO_COLOR = "#555570";
+const EQUAL_COLOR = "#9999ff";
 
 function hashToHue(s: string): number {
   let h = 0;
@@ -51,7 +51,6 @@ function hashToHue(s: string): number {
   return (h >>> 0) % 360;
 }
 
-// Second independent hash — uses different mixing constants
 function hashToPattern(s: string): number {
   let h = 0x9e3779b9;
   for (let i = 0; i < s.length; i++) {
@@ -60,90 +59,46 @@ function hashToPattern(s: string): number {
   return (h >>> 0) % 6;
 }
 
-/**
- * Returns SVG <pattern> children for a fee-payer bar.
- * Patterns (indexed 0-5): diagonal-45, diagonal-135, horizontal, vertical,
- * checkerboard, diagonal-checkerboard.
- */
 function feePayerPattern(
   id: string,
   patternIndex: number,
   color: string,
 ): React.ReactElement {
   switch (patternIndex) {
-    case 0: // diagonal /
+    case 0:
       return (
-        <pattern
-          key={id}
-          id={id}
-          width="4"
-          height="4"
-          patternUnits="userSpaceOnUse"
-          patternTransform="rotate(45)"
-        >
+        <pattern key={id} id={id} width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
           <rect width="2" height="4" fill={color} />
         </pattern>
       );
-    case 1: // diagonal \
+    case 1:
       return (
-        <pattern
-          key={id}
-          id={id}
-          width="4"
-          height="4"
-          patternUnits="userSpaceOnUse"
-          patternTransform="rotate(-45)"
-        >
+        <pattern key={id} id={id} width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)">
           <rect width="2" height="4" fill={color} />
         </pattern>
       );
-    case 2: // horizontal stripes
+    case 2:
       return (
-        <pattern
-          key={id}
-          id={id}
-          width="4"
-          height="4"
-          patternUnits="userSpaceOnUse"
-        >
+        <pattern key={id} id={id} width="4" height="4" patternUnits="userSpaceOnUse">
           <rect width="4" height="2" fill={color} />
         </pattern>
       );
-    case 3: // vertical stripes
+    case 3:
       return (
-        <pattern
-          key={id}
-          id={id}
-          width="4"
-          height="4"
-          patternUnits="userSpaceOnUse"
-        >
+        <pattern key={id} id={id} width="4" height="4" patternUnits="userSpaceOnUse">
           <rect width="2" height="4" fill={color} />
         </pattern>
       );
-    case 4: // checkerboard
+    case 4:
       return (
-        <pattern
-          key={id}
-          id={id}
-          width="4"
-          height="4"
-          patternUnits="userSpaceOnUse"
-        >
+        <pattern key={id} id={id} width="4" height="4" patternUnits="userSpaceOnUse">
           <rect width="2" height="2" fill={color} />
           <rect x="2" y="2" width="2" height="2" fill={color} />
         </pattern>
       );
-    default: // checkerboard diagonal
+    default:
       return (
-        <pattern
-          key={id}
-          id={id}
-          width="6"
-          height="6"
-          patternUnits="userSpaceOnUse"
-          patternTransform="rotate(45)"
-        >
+        <pattern key={id} id={id} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
           <rect width="3" height="3" fill={color} />
           <rect x="3" y="3" width="3" height="3" fill={color} />
         </pattern>
@@ -151,42 +106,21 @@ function feePayerPattern(
   }
 }
 
-function normalizeNumeric(
-  value: number,
-  index: number,
-  maxValues?: number[],
-): number {
+function normalizeNumeric(value: number, index: number, maxValues?: number[]): number {
   if (maxValues && maxValues[index] > 0) {
     return Math.sqrt(Math.min(value / maxValues[index], 1));
   }
   const caps: Record<number, number> = {
-    0: 64, // numNoteHashes — MAX_NOTE_HASHES_PER_TX
-    1: 64, // numNullifiers — MAX_NULLIFIERS_PER_TX
-    2: 8, // numL2ToL1Msgs — MAX_L2_TO_L1_MSGS_PER_TX
-    3: 64, // numPrivateLogs — MAX_PRIVATE_LOGS_PER_TX
-    4: 1, // numContractClassLogs — MAX_CONTRACT_CLASS_LOGS_PER_TX
-    5: 64, // numPublicLogs — practical cap; DA-derived max ~85 @ 16 fields/log avg
-    6: 786_432, // gasLimitDa — MAX_PROCESSABLE_DA_GAS_PER_CHECKPOINT
-    7: 6_540_000, // gasLimitL2 — MAX_PROCESSABLE_L2_GAS
-    8: 1e9, // maxFeePerDaGas — 1 gwei/gas → max fee ~$0.25 DA at $2500/ETH
-    9: 1e9, // maxFeePerL2Gas — 1 gwei/gas → max fee ~$16 L2 at $2500/ETH
-    10: 32, // numSetupCalls — MAX_ENQUEUED_CALLS_PER_TX
-    11: 32, // numAppCalls — MAX_ENQUEUED_CALLS_PER_TX
-    12: 1_000, // totalPublicCalldataSize (fields) — practical cap; AVM bench test max is 300/call
-    13: 172_800, // expirationDelta (seconds) — 48h max
+    0: 64, 1: 64, 2: 8, 3: 64, 4: 1, 5: 64,
+    6: 786_432, 7: 6_540_000, 8: 1e9, 9: 1e9,
+    10: 32, 11: 32, 12: 1_000, 13: 172_800,
   };
-  const cap = caps[index] ?? 1;
-  return Math.sqrt(Math.min(value / cap, 1));
+  return Math.sqrt(Math.min(value / (caps[index] ?? 1), 1));
 }
 
-function computeLayout(
-  numBars: number,
-  viewWidth: number,
-  viewHeight: number,
-  showLabels: boolean,
-) {
-  const topPad = showLabels ? PAD_TOP : 4;
-  const botPad = showLabels ? PAD_BOT : 4;
+function computeLayout(numBars: number, viewWidth: number, viewHeight: number, withGroupLabels: boolean) {
+  const topPad = withGroupLabels ? PAD_TOP : 4;
+  const botPad = withGroupLabels ? PAD_BOT : 4;
   const waveArea = viewHeight - topPad - botPad;
   const centerY = topPad + waveArea / 2;
   const maxBarH = waveArea / 2 - 1;
@@ -207,23 +141,11 @@ function computeLayout(
   return { centerY, maxBarH, barW, barSpacing, barX, topPad, botPad };
 }
 
-/**
- * Combined bar path: a single shape spanning both up and down from centerY,
- * rounded only at the outer tips. No seam at center.
- */
-function barPathDouble(
-  x: number,
-  centerY: number,
-  w: number,
-  hUp: number,
-  hDown: number,
-  r: number,
-): string {
+function barPathDouble(x: number, centerY: number, w: number, hUp: number, hDown: number, r: number): string {
   const crUp = Math.min(r, w / 2, hUp);
   const crDown = Math.min(r, w / 2, hDown);
   const top = centerY - hUp;
   const bot = centerY + hDown;
-  // Start top-left, go CCW: top edge with rounded corners, right side down, bottom rounded, left side up
   return [
     `M${x},${top + crUp}`,
     `Q${x},${top} ${x + crUp},${top}`,
@@ -237,7 +159,6 @@ function barPathDouble(
   ].join(" ");
 }
 
-/** Format a value for tooltip display */
 function formatValue(value: number | string, index: number): string {
   if (index === 14) {
     const s = String(value);
@@ -246,20 +167,80 @@ function formatValue(value: number | string, index: number): string {
   return typeof value === "number" ? value.toLocaleString() : String(value);
 }
 
-// ── Bar rendering (flat style) ──
+// ── Tooltip ──
+
+interface Tooltip { text: string; x: number; y: number }
+type TooltipCallback = (text: string, barCenterX: number, barTopY: number) => void;
+
+/** Delayed-show (hover) / instant (tap) tooltip state. */
+function useTooltip(delayMs = 150) {
+  const [tip, setTip] = useState<Tooltip | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const show = useCallback((text: string, x: number, y: number) => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setTip({ text, x, y }), delayMs);
+  }, [delayMs]);
+
+  const hide = useCallback(() => {
+    if (timer.current) clearTimeout(timer.current);
+    setTip(null);
+  }, []);
+
+  const tap = useCallback((text: string, x: number, y: number) => {
+    if (timer.current) clearTimeout(timer.current);
+    setTip({ text, x, y });
+  }, []);
+
+  return { tip, show, hide, tap };
+}
+
+function TooltipOverlay({ tip, vbW, vbH }: { tip: Tooltip; vbW: number; vbH: number }) {
+  const lines = tip.text.split("\n");
+  const lineH = 10;
+  const padX = 6;
+  const padY = 5;
+  const boxW = Math.min(Math.max(...lines.map((l) => l.length)) * 5.5 + padX * 2, vbW - 8);
+  const boxH = lines.length * lineH + padY * 2;
+  const bx = Math.max(4, Math.min(tip.x - boxW / 2, vbW - boxW - 4));
+  const margin = 4;
+  const by = tip.y - boxH - margin < 4
+    ? Math.min(tip.y + margin, vbH - boxH - 4)
+    : tip.y - boxH - margin;
+  return (
+    <g style={{ pointerEvents: "none" }}>
+      <rect x={bx} y={by} width={boxW} height={boxH} rx="4" fill="#1a1a2e" stroke="#4444aa" strokeWidth="0.8" opacity="0.95" />
+      {lines.map((line, idx) => (
+        <text key={idx} x={bx + padX} y={by + padY + (idx + 0.75) * lineH} fontSize="8" fontFamily="'SF Mono', 'Fira Code', monospace" fill="#ccccff">
+          {line}
+        </text>
+      ))}
+    </g>
+  );
+}
+
+// ── Bar rendering helpers ──
 
 function renderBars({
   vector,
   maxValues,
   layout,
   color,
-  showLabels,
+  withGroupLabels,
+  idScope = "",
+  onTap,
+  onHover,
+  onHoverEnd,
 }: {
   vector: (number | string)[];
   maxValues?: number[];
   layout: ReturnType<typeof computeLayout>;
   color: string;
-  showLabels: boolean;
+  withGroupLabels: boolean;
+  idScope?: string;
+  onTap: TooltipCallback;
+  onHover: TooltipCallback;
+  onHoverEnd: () => void;
 }) {
   const { centerY, maxBarH, barW, barX } = layout;
   const r = 2;
@@ -270,48 +251,30 @@ function renderBars({
     const x = barX(i);
     const isCategorical = i === 14;
     const tooltip = `${FEATURE_LABELS[i]}: ${formatValue(vector[i], i)}`;
+    const barCenterX = x + barW / 2;
 
     if (isCategorical) {
       const addr = String(vector[i]);
       const barH = maxBarH * 0.5;
+      const barTopY = centerY - barH;
       const hue = hashToHue(addr);
       const patIdx = hashToPattern(addr);
       const catColor = `hsl(${hue}, 65%, 55%)`;
-      const patId = `fp-pat-${hue}-${patIdx}`;
+      const patId = `fp-pat-${idScope}-${hue}-${patIdx}`;
 
       elements.push(
         <g key={i}>
-          <title>{tooltip}</title>
           <defs>{feePayerPattern(patId, patIdx, catColor)}</defs>
-          <path
-            d={barPathDouble(x, centerY, barW, barH, barH, r)}
-            fill={`url(#${patId})`}
-          />
-          <path
-            d={barPathDouble(x, centerY, barW, barH, barH, r)}
-            fill="none"
-            stroke={catColor}
-            strokeWidth="0.6"
-            opacity="0.5"
-          />
-          {/* Invisible hit area for tooltip */}
+          <path d={barPathDouble(x, centerY, barW, barH, barH, r)} fill={`url(#${patId})`} />
+          <path d={barPathDouble(x, centerY, barW, barH, barH, r)} fill="none" stroke={catColor} strokeWidth="0.6" opacity="0.5" />
           <rect
-            x={x}
-            y={centerY - barH}
-            width={barW}
-            height={barH * 2}
-            fill="transparent"
+            x={x} y={barTopY} width={barW} height={barH * 2} fill="transparent"
+            onTouchStart={(e) => { e.stopPropagation(); onTap(tooltip, barCenterX, barTopY); }}
+            onMouseEnter={() => onHover(tooltip, barCenterX, barTopY)}
+            onMouseLeave={onHoverEnd}
           />
-          {showLabels && (
-            <text
-              x={0}
-              y={0}
-              transform={`translate(${x + barW * 0.3}, ${centerY + maxBarH + 6}) rotate(65)`}
-              fontSize="6"
-              fontFamily="'SF Mono', 'Fira Code', monospace"
-              fill={catColor}
-              fontWeight="600"
-            >
+          {withGroupLabels && (
+            <text x={0} y={0} transform={`translate(${x + barW * 0.3}, ${centerY + maxBarH + 6}) rotate(65)`} fontSize="6" fontFamily="'SF Mono', 'Fira Code', monospace" fill={catColor} fontWeight="600">
               {FEATURE_LABELS[i]}
             </text>
           )}
@@ -322,33 +285,20 @@ function renderBars({
       const norm = normalizeNumeric(value, i, maxValues);
       const active = value > 0;
       const barH = active ? Math.max(norm * maxBarH, 3) : ZERO_H;
+      const hitH = Math.max(barH, 6);
+      const barTopY = centerY - hitH;
 
       elements.push(
         <g key={i}>
-          <title>{tooltip}</title>
-          <path
-            d={barPathDouble(x, centerY, barW, barH, barH, r)}
-            fill={active ? color : ZERO_COLOR}
-            opacity={active ? 0.85 : 0.5}
-          />
-          {/* Invisible hit area for tooltip */}
+          <path d={barPathDouble(x, centerY, barW, barH, barH, r)} fill={active ? color : ZERO_COLOR} opacity={active ? 0.85 : 0.5} />
           <rect
-            x={x}
-            y={centerY - Math.max(barH, 6)}
-            width={barW}
-            height={Math.max(barH, 6) * 2}
-            fill="transparent"
+            x={x} y={barTopY} width={barW} height={hitH * 2} fill="transparent"
+            onTouchStart={(e) => { e.stopPropagation(); onTap(tooltip, barCenterX, barTopY); }}
+            onMouseEnter={() => onHover(tooltip, barCenterX, barTopY)}
+            onMouseLeave={onHoverEnd}
           />
-          {showLabels && (
-            <text
-              x={0}
-              y={0}
-              transform={`translate(${x + barW * 0.3}, ${centerY + maxBarH + 6}) rotate(65)`}
-              fontSize="6"
-              fontFamily="'SF Mono', 'Fira Code', monospace"
-              fill={active ? theme.colors.text : theme.colors.textMuted}
-              opacity={active ? 0.7 : 0.35}
-            >
+          {withGroupLabels && (
+            <text x={0} y={0} transform={`translate(${x + barW * 0.3}, ${centerY + maxBarH + 6}) rotate(65)`} fontSize="6" fontFamily="'SF Mono', 'Fira Code', monospace" fill={active ? theme.colors.text : theme.colors.textMuted} opacity={active ? 0.7 : 0.35}>
               {FEATURE_LABELS[i]}
             </text>
           )}
@@ -359,12 +309,6 @@ function renderBars({
   return elements;
 }
 
-/**
- * Render comparison bars with overlap.
- * The taller bar is always rendered first (behind) at full opacity.
- * The shorter bar is always rendered second (on top) at full opacity.
- * The visible "excess" of the taller bar shows the difference.
- */
 function renderComparisonBars({
   vectorA,
   vectorB,
@@ -374,7 +318,11 @@ function renderComparisonBars({
   colorB,
   labelA,
   labelB,
-  showLabels,
+  withGroupLabels,
+  idScope = "",
+  onTap,
+  onHover,
+  onHoverEnd,
 }: {
   vectorA: (number | string)[];
   vectorB: (number | string)[];
@@ -384,7 +332,11 @@ function renderComparisonBars({
   colorB: string;
   labelA: string;
   labelB: string;
-  showLabels: boolean;
+  withGroupLabels: boolean;
+  idScope?: string;
+  onTap: TooltipCallback;
+  onHover: TooltipCallback;
+  onHoverEnd: () => void;
 }) {
   const { centerY, maxBarH, barW, barX } = layout;
   const r = 2;
@@ -397,11 +349,13 @@ function renderComparisonBars({
     const valA = formatValue(vectorA[i], i);
     const valB = formatValue(vectorB[i], i);
     const tooltip = `${FEATURE_LABELS[i]}\n${labelA}: ${valA}\n${labelB}: ${valB}`;
+    const barCenterX = x + barW / 2;
 
     if (isCategorical) {
       const addrA = String(vectorA[i]);
       const addrB = String(vectorB[i]);
       const barH = maxBarH * 0.5;
+      const barTopY = centerY - barH;
       const hueA = hashToHue(addrA);
       const hueB = hashToHue(addrB);
       const patIdxA = hashToPattern(addrA);
@@ -409,79 +363,33 @@ function renderComparisonBars({
       const catColorA = `hsl(${hueA}, 65%, 55%)`;
       const catColorB = `hsl(${hueB}, 65%, 55%)`;
       const sameAddr = addrA === addrB;
-      const patIdA = `fp-pat-${hueA}-${patIdxA}`;
-      const patIdB = `fp-pat-${hueB}-${patIdxB}`;
-      // When different: two equal-width bars side by side with a 1px gap
+      const patIdA = `fp-pat-${idScope}-${hueA}-${patIdxA}`;
+      const patIdB = `fp-pat-${idScope}-${hueB}-${patIdxB}`;
       const gap = sameAddr ? 0 : 1;
       const halfW = sameAddr ? barW : (barW - gap) / 2;
 
       elements.push(
         <g key={i}>
-          <title>{tooltip}</title>
           <defs>
             {feePayerPattern(patIdA, patIdxA, catColorA)}
             {!sameAddr && feePayerPattern(patIdB, patIdxB, catColorB)}
           </defs>
-          {/* A bar */}
-          <path
-            d={barPathDouble(x, centerY, halfW, barH, barH, r)}
-            fill={`url(#${patIdA})`}
-          />
-          <path
-            d={barPathDouble(x, centerY, halfW, barH, barH, r)}
-            fill="none"
-            stroke={catColorA}
-            strokeWidth="0.6"
-            opacity="0.5"
-          />
-          {/* B bar (only if different address) */}
+          <path d={barPathDouble(x, centerY, halfW, barH, barH, r)} fill={`url(#${patIdA})`} />
+          <path d={barPathDouble(x, centerY, halfW, barH, barH, r)} fill="none" stroke={catColorA} strokeWidth="0.6" opacity="0.5" />
           {!sameAddr && (
             <>
-              <path
-                d={barPathDouble(
-                  x + halfW + gap,
-                  centerY,
-                  halfW,
-                  barH,
-                  barH,
-                  r,
-                )}
-                fill={`url(#${patIdB})`}
-              />
-              <path
-                d={barPathDouble(
-                  x + halfW + gap,
-                  centerY,
-                  halfW,
-                  barH,
-                  barH,
-                  r,
-                )}
-                fill="none"
-                stroke={catColorB}
-                strokeWidth="0.6"
-                opacity="0.5"
-              />
+              <path d={barPathDouble(x + halfW + gap, centerY, halfW, barH, barH, r)} fill={`url(#${patIdB})`} />
+              <path d={barPathDouble(x + halfW + gap, centerY, halfW, barH, barH, r)} fill="none" stroke={catColorB} strokeWidth="0.6" opacity="0.5" />
             </>
           )}
-          {/* Invisible hit area */}
           <rect
-            x={x}
-            y={centerY - barH}
-            width={barW}
-            height={barH * 2}
-            fill="transparent"
+            x={x} y={barTopY} width={barW} height={barH * 2} fill="transparent"
+            onTouchStart={(e) => { e.stopPropagation(); onTap(tooltip, barCenterX, barTopY); }}
+            onMouseEnter={() => onHover(tooltip, barCenterX, barTopY)}
+            onMouseLeave={onHoverEnd}
           />
-          {showLabels && (
-            <text
-              x={0}
-              y={0}
-              transform={`translate(${x + barW * 0.3}, ${centerY + maxBarH + 6}) rotate(65)`}
-              fontSize="6"
-              fontFamily="'SF Mono', 'Fira Code', monospace"
-              fill={catColorA}
-              fontWeight="600"
-            >
+          {withGroupLabels && (
+            <text x={0} y={0} transform={`translate(${x + barW * 0.3}, ${centerY + maxBarH + 6}) rotate(65)`} fontSize="6" fontFamily="'SF Mono', 'Fira Code', monospace" fill={catColorA} fontWeight="600">
               {FEATURE_LABELS[i]}
             </text>
           )}
@@ -497,14 +405,13 @@ function renderComparisonBars({
       const barHA = activeA ? Math.max(normA * maxBarH, 3) : ZERO_H;
       const barHB = activeB ? Math.max(normB * maxBarH, 3) : ZERO_H;
       const equal = rawA === rawB;
-
       const anyActive = activeA || activeB;
+      const hitH = Math.max(barHA, barHB, 6);
+      const barTopY = centerY - hitH;
 
       elements.push(
         <g key={i}>
-          <title>{tooltip}</title>
           {equal ? (
-            /* Equal: symmetric barPathDouble with muted outline */
             <path
               d={barPathDouble(x, centerY, barW, barHA, barHA, r)}
               fill={anyActive ? EQUAL_COLOR : ZERO_COLOR}
@@ -513,70 +420,34 @@ function renderComparisonBars({
               strokeWidth="0.8"
               strokeOpacity={anyActive ? 0.75 : 0.35}
             />
-          ) : (
-            (() => {
-              /* Different: upper half = A (colorA), lower half = B (colorB)
-               Use two clipRects + the same outline path to split colors. */
-              const clipIdUp = `clip-up-${i}`;
-              const clipIdDn = `clip-dn-${i}`;
-              const d = barPathDouble(x, centerY, barW, barHA, barHB, r);
-              const top = centerY - barHA;
-              return (
-                <>
-                  <defs>
-                    <clipPath id={clipIdUp}>
-                      <rect
-                        x={x - 1}
-                        y={top - 1}
-                        width={barW + 2}
-                        height={barHA + 1}
-                      />
-                    </clipPath>
-                    <clipPath id={clipIdDn}>
-                      <rect
-                        x={x - 1}
-                        y={centerY}
-                        width={barW + 2}
-                        height={barHB + 1}
-                      />
-                    </clipPath>
-                  </defs>
-                  <path
-                    d={d}
-                    fill={activeA ? colorA : ZERO_COLOR}
-                    opacity={activeA ? 0.85 : 0.4}
-                    clipPath={`url(#${clipIdUp})`}
-                  />
-                  <path
-                    d={d}
-                    fill={activeB ? colorB : ZERO_COLOR}
-                    opacity={activeB ? 0.85 : 0.4}
-                    clipPath={`url(#${clipIdDn})`}
-                  />
-                </>
-              );
-            })()
-          )}
-          {/* Invisible hit area */}
+          ) : (() => {
+            const clipIdUp = `clip-up-${idScope}-${i}`;
+            const clipIdDn = `clip-dn-${idScope}-${i}`;
+            const d = barPathDouble(x, centerY, barW, barHA, barHB, r);
+            const top = centerY - barHA;
+            return (
+              <>
+                <defs>
+                  <clipPath id={clipIdUp}>
+                    <rect x={x - 1} y={top - 1} width={barW + 2} height={barHA + 1} />
+                  </clipPath>
+                  <clipPath id={clipIdDn}>
+                    <rect x={x - 1} y={centerY} width={barW + 2} height={barHB + 1} />
+                  </clipPath>
+                </defs>
+                <path d={d} fill={activeA ? colorA : ZERO_COLOR} opacity={activeA ? 0.85 : 0.4} clipPath={`url(#${clipIdUp})`} />
+                <path d={d} fill={activeB ? colorB : ZERO_COLOR} opacity={activeB ? 0.85 : 0.4} clipPath={`url(#${clipIdDn})`} />
+              </>
+            );
+          })()}
           <rect
-            x={x}
-            y={centerY - Math.max(barHA, barHB, 6)}
-            width={barW}
-            height={Math.max(barHA, barHB, 6) * 2}
-            fill="transparent"
+            x={x} y={barTopY} width={barW} height={hitH * 2} fill="transparent"
+            onTouchStart={(e) => { e.stopPropagation(); onTap(tooltip, barCenterX, barTopY); }}
+            onMouseEnter={() => onHover(tooltip, barCenterX, barTopY)}
+            onMouseLeave={onHoverEnd}
           />
-          {showLabels && (
-            <text
-              x={0}
-              y={0}
-              transform={`translate(${x + barW * 0.3}, ${centerY + maxBarH + 6}) rotate(65)`}
-              fontSize="6"
-              fontFamily="'SF Mono', 'Fira Code', monospace"
-              fill={
-                activeA || activeB ? theme.colors.text : theme.colors.textMuted
-              }
-              opacity={activeA || activeB ? 0.7 : 0.35}
-            >
+          {withGroupLabels && (
+            <text x={0} y={0} transform={`translate(${x + barW * 0.3}, ${centerY + maxBarH + 6}) rotate(65)`} fontSize="6" fontFamily="'SF Mono', 'Fira Code', monospace" fill={activeA || activeB ? theme.colors.text : theme.colors.textMuted} opacity={activeA || activeB ? 0.7 : 0.35}>
               {FEATURE_LABELS[i]}
             </text>
           )}
@@ -587,9 +458,7 @@ function renderComparisonBars({
   return elements;
 }
 
-function renderGroupLabelsAndSeparators(
-  layout: ReturnType<typeof computeLayout>,
-) {
+function renderGroupLabelsAndSeparators(layout: ReturnType<typeof computeLayout>) {
   const { barX, barW, centerY, maxBarH } = layout;
   const elements: React.ReactElement[] = [];
 
@@ -598,38 +467,17 @@ function renderGroupLabelsAndSeparators(
     const x1 = barX(g.start);
     const x2 = barX(g.end) + barW;
 
-    // Group label
     elements.push(
-      <text
-        key={`lbl-${g.label}`}
-        x={(x1 + x2) / 2}
-        y={10}
-        textAnchor="middle"
-        fontSize="7"
-        fontWeight="700"
-        fontFamily="'SF Mono', 'Fira Code', monospace"
-        fill={theme.colors.textMuted}
-        letterSpacing="0.06em"
-      >
+      <text key={`lbl-${g.label}`} x={(x1 + x2) / 2} y={10} textAnchor="middle" fontSize="7" fontWeight="700" fontFamily="'SF Mono', 'Fira Code', monospace" fill={theme.colors.textMuted} letterSpacing="0.06em">
         {g.label.toUpperCase()}
       </text>,
     );
 
-    // Vertical separator line between groups
     if (gi < GROUPS.length - 1) {
       const nextX = barX(GROUPS[gi + 1].start);
       const sepX = (x2 + nextX) / 2;
       elements.push(
-        <line
-          key={`sep-${gi}`}
-          x1={sepX}
-          y1={centerY - maxBarH}
-          x2={sepX}
-          y2={centerY + maxBarH}
-          stroke={theme.colors.border}
-          strokeWidth="0.5"
-          strokeDasharray="2 2"
-        />,
+        <line key={`sep-${gi}`} x1={sepX} y1={centerY - maxBarH} x2={sepX} y2={centerY + maxBarH} stroke={theme.colors.border} strokeWidth="0.5" strokeDasharray="2 2" />,
       );
     }
   }
@@ -639,9 +487,130 @@ function renderGroupLabelsAndSeparators(
 // ── Viewbox dimensions ──
 
 const VB_W = 500;
-const VB_H_LABELS = 200;
-const VB_H_COMPACT = 100;
-const VB_H_NO_LABELS = 90;
+const VB_H_FULL = 200;  // with group labels + bar axis labels
+const VB_H_COMPACT = 90; // bars only
+
+// ── SVG building blocks — each one handles its own tooltip state ──
+
+/**
+ * Single-tx bars, full height with group/axis labels. Desktop hover tooltip.
+ */
+function FullBarsSvg({
+  vector, maxValues, layout, color, vbH, idScope, svgRef, extraSvgProps,
+}: {
+  vector: (number | string)[];
+  maxValues?: number[];
+  layout: ReturnType<typeof computeLayout>;
+  color: string;
+  vbH: number;
+  idScope: string;
+  svgRef?: React.Ref<SVGSVGElement>;
+  extraSvgProps?: React.SVGProps<SVGSVGElement>;
+}) {
+  const tt = useTooltip();
+  return (
+    <ResponsiveSvg ref={svgRef} viewBox={`0 0 ${VB_W} ${vbH}`} preserveAspectRatio="xMidYMid meet" onMouseLeave={tt.hide} {...extraSvgProps}>
+      {extraSvgProps?.children}
+      {renderGroupLabelsAndSeparators(layout)}
+      {renderBars({ vector, maxValues, layout, color, withGroupLabels: true, idScope, onTap: tt.tap, onHover: tt.show, onHoverEnd: tt.hide })}
+      {tt.tip && <TooltipOverlay tip={tt.tip} vbW={VB_W} vbH={vbH} />}
+    </ResponsiveSvg>
+  );
+}
+
+/**
+ * Single-tx bars, compact (no labels). Both hover and tap tooltips.
+ */
+function CompactBarsSvg({
+  vector, maxValues, layout, color, vbH, idScope, className, svgRef, extraSvgProps,
+}: {
+  vector: (number | string)[];
+  maxValues?: number[];
+  layout: ReturnType<typeof computeLayout>;
+  color: string;
+  vbH: number;
+  idScope: string;
+  className?: string;
+  svgRef?: React.Ref<SVGSVGElement>;
+  extraSvgProps?: React.SVGProps<SVGSVGElement>;
+}) {
+  const tt = useTooltip();
+  return (
+    <ResponsiveSvg
+      ref={svgRef}
+      viewBox={`0 0 ${VB_W} ${vbH}`}
+      preserveAspectRatio="xMidYMid meet"
+      className={className}
+      onMouseLeave={tt.hide}
+      onTouchStart={() => tt.hide()}
+      {...extraSvgProps}
+    >
+      {extraSvgProps?.children}
+      {renderBars({ vector, maxValues, layout, color, withGroupLabels: false, idScope, onTap: tt.tap, onHover: tt.show, onHoverEnd: tt.hide })}
+      {tt.tip && <TooltipOverlay tip={tt.tip} vbW={VB_W} vbH={vbH} />}
+    </ResponsiveSvg>
+  );
+}
+
+/**
+ * Comparison bars, full height with group/axis labels. Desktop hover tooltip.
+ */
+function FullCompareSvg({
+  vectorA, vectorB, maxValues, layout, colorA, colorB, labelA, labelB, vbH, idScope,
+}: {
+  vectorA: (number | string)[];
+  vectorB: (number | string)[];
+  maxValues?: number[];
+  layout: ReturnType<typeof computeLayout>;
+  colorA: string;
+  colorB: string;
+  labelA: string;
+  labelB: string;
+  vbH: number;
+  idScope: string;
+}) {
+  const tt = useTooltip();
+  return (
+    <ResponsiveSvg viewBox={`0 0 ${VB_W} ${vbH}`} preserveAspectRatio="xMidYMid meet" onMouseLeave={tt.hide}>
+      {renderGroupLabelsAndSeparators(layout)}
+      {renderComparisonBars({ vectorA, vectorB, maxValues, layout, colorA, colorB, labelA, labelB, withGroupLabels: true, idScope, onTap: tt.tap, onHover: tt.show, onHoverEnd: tt.hide })}
+      {tt.tip && <TooltipOverlay tip={tt.tip} vbW={VB_W} vbH={vbH} />}
+    </ResponsiveSvg>
+  );
+}
+
+/**
+ * Comparison bars, compact (no labels). Both hover and tap tooltips.
+ */
+function CompactCompareSvg({
+  vectorA, vectorB, maxValues, layout, colorA, colorB, labelA, labelB, vbH, idScope, className,
+}: {
+  vectorA: (number | string)[];
+  vectorB: (number | string)[];
+  maxValues?: number[];
+  layout: ReturnType<typeof computeLayout>;
+  colorA: string;
+  colorB: string;
+  labelA: string;
+  labelB: string;
+  vbH: number;
+  idScope: string;
+  className?: string;
+}) {
+  const tt = useTooltip();
+  return (
+    <ResponsiveSvg
+      viewBox={`0 0 ${VB_W} ${vbH}`}
+      preserveAspectRatio="xMidYMid meet"
+      className={className}
+      onMouseLeave={tt.hide}
+      onTouchStart={() => tt.hide()}
+    >
+      {renderComparisonBars({ vectorA, vectorB, maxValues, layout, colorA, colorB, labelA, labelB, withGroupLabels: false, idScope, onTap: tt.tap, onHover: tt.show, onHoverEnd: tt.hide })}
+      {tt.tip && <TooltipOverlay tip={tt.tip} vbW={VB_W} vbH={vbH} />}
+    </ResponsiveSvg>
+  );
+}
 
 // ── Public components ──
 
@@ -651,11 +620,17 @@ export interface TxFingerprintProps {
   width?: number;
   height?: number;
   color?: string;
+  /** Show group + axis labels. On mobile, always renders compact regardless. */
   showLabels?: boolean;
   compact?: boolean;
   className?: string;
 }
 
+/**
+ * Single-tx fingerprint.
+ * - `showLabels=false` (default): compact bars, hover+tap tooltips on all screen sizes.
+ * - `showLabels=true`: desktop shows full labeled view; mobile shows compact bars.
+ */
 export function TxFingerprint({
   vector,
   maxValues,
@@ -664,53 +639,28 @@ export function TxFingerprint({
   compact = false,
   className,
 }: TxFingerprintProps) {
-  const vbH = compact
-    ? VB_H_COMPACT
-    : showLabels
-      ? VB_H_LABELS
-      : VB_H_NO_LABELS;
-  const vbHMobile = VB_H_NO_LABELS;
-  const layout = computeLayout(vector.length, VB_W, vbH, showLabels);
-  const layoutMobile = computeLayout(vector.length, VB_W, vbHMobile, false);
+  const vbH = compact ? VB_H_COMPACT : showLabels ? VB_H_FULL : VB_H_COMPACT;
+  const layout = computeLayout(vector.length, VB_W, vbH, showLabels && !compact);
 
-  if (!showLabels) {
+  if (!showLabels || compact) {
+    // Compact: single SVG for all screen sizes, hover+tap both work
     return (
-      <ResponsiveSvg
-        viewBox={`0 0 ${VB_W} ${vbH}`}
-        preserveAspectRatio="xMidYMid meet"
-        className={className}
-      >
-        {renderBars({ vector, maxValues, layout, color, showLabels: false })}
-      </ResponsiveSvg>
+      <CompactBarsSvg
+        vector={vector} maxValues={maxValues} layout={layout} color={color}
+        vbH={vbH} idScope="c" className={className}
+      />
     );
   }
 
+  // Full labeled: desktop gets full view, mobile gets compact bars
+  const compactLayout = computeLayout(vector.length, VB_W, VB_H_COMPACT, false);
   return (
     <div className={className}>
-      {/* Desktop: SVG with rotated text labels */}
       <DesktopOnly>
-        <ResponsiveSvg
-          viewBox={`0 0 ${VB_W} ${vbH}`}
-          preserveAspectRatio="xMidYMid meet"
-        >
-          {renderGroupLabelsAndSeparators(layout)}
-          {renderBars({ vector, maxValues, layout, color, showLabels: true })}
-        </ResponsiveSvg>
+        <FullBarsSvg vector={vector} maxValues={maxValues} layout={layout} color={color} vbH={vbH} idScope="d" />
       </DesktopOnly>
-      {/* Mobile: bars only, no labels */}
       <MobileOnly>
-        <ResponsiveSvg
-          viewBox={`0 0 ${VB_W} ${vbHMobile}`}
-          preserveAspectRatio="xMidYMid meet"
-        >
-          {renderBars({
-            vector,
-            maxValues,
-            layout: layoutMobile,
-            color,
-            showLabels: false,
-          })}
-        </ResponsiveSvg>
+        <CompactBarsSvg vector={vector} maxValues={maxValues} layout={compactLayout} color={color} vbH={VB_H_COMPACT} idScope="m" />
       </MobileOnly>
     </div>
   );
@@ -724,11 +674,17 @@ export interface FingerprintCompareProps {
   colorB?: string;
   labelA?: string;
   labelB?: string;
+  /** Show group + axis labels. On mobile, always renders compact regardless. */
   showLabels?: boolean;
   compact?: boolean;
   className?: string;
 }
 
+/**
+ * Two-tx comparison fingerprint.
+ * - `showLabels=false` (default): compact bars, hover+tap tooltips on all screen sizes.
+ * - `showLabels=true`: desktop shows full labeled view; mobile shows compact bars.
+ */
 export function FingerprintCompare({
   vectorA,
   vectorB,
@@ -741,87 +697,42 @@ export function FingerprintCompare({
   compact = false,
   className,
 }: FingerprintCompareProps) {
-  const vbH = compact
-    ? VB_H_COMPACT
-    : showLabels
-      ? VB_H_LABELS
-      : VB_H_NO_LABELS;
-  const layout = computeLayout(vectorA.length, VB_W, vbH, showLabels);
+  const vbH = compact ? VB_H_COMPACT : showLabels ? VB_H_FULL : VB_H_COMPACT;
+  const layout = computeLayout(vectorA.length, VB_W, vbH, showLabels && !compact);
 
-  if (!showLabels) {
+  if (!showLabels || compact) {
     return (
-      <ResponsiveSvg
-        viewBox={`0 0 ${VB_W} ${vbH}`}
-        preserveAspectRatio="xMidYMid meet"
-        className={className}
-      >
-        {renderComparisonBars({
-          vectorA,
-          vectorB,
-          maxValues,
-          layout,
-          colorA,
-          colorB,
-          labelA,
-          labelB,
-          showLabels: false,
-        })}
-      </ResponsiveSvg>
+      <CompactCompareSvg
+        vectorA={vectorA} vectorB={vectorB} maxValues={maxValues}
+        layout={layout} colorA={colorA} colorB={colorB}
+        labelA={labelA} labelB={labelB} vbH={vbH} idScope="cc" className={className}
+      />
     );
   }
 
-  const vbHMobile = VB_H_NO_LABELS;
-  const layoutMobile = computeLayout(vectorA.length, VB_W, vbHMobile, false);
-
+  const compactLayout = computeLayout(vectorA.length, VB_W, VB_H_COMPACT, false);
   return (
     <div className={className}>
-      {/* Desktop */}
       <DesktopOnly>
-        <ResponsiveSvg
-          viewBox={`0 0 ${VB_W} ${vbH}`}
-          preserveAspectRatio="xMidYMid meet"
-        >
-          {renderGroupLabelsAndSeparators(layout)}
-          {renderComparisonBars({
-            vectorA,
-            vectorB,
-            maxValues,
-            layout,
-            colorA,
-            colorB,
-            labelA,
-            labelB,
-            showLabels: true,
-          })}
-        </ResponsiveSvg>
+        <FullCompareSvg
+          vectorA={vectorA} vectorB={vectorB} maxValues={maxValues}
+          layout={layout} colorA={colorA} colorB={colorB}
+          labelA={labelA} labelB={labelB} vbH={vbH} idScope="cd"
+        />
       </DesktopOnly>
-      {/* Mobile: bars only */}
       <MobileOnly>
-        <ResponsiveSvg
-          viewBox={`0 0 ${VB_W} ${vbHMobile}`}
-          preserveAspectRatio="xMidYMid meet"
-        >
-          {renderComparisonBars({
-            vectorA,
-            vectorB,
-            maxValues,
-            layout: layoutMobile,
-            colorA,
-            colorB,
-            labelA,
-            labelB,
-            showLabels: false,
-          })}
-        </ResponsiveSvg>
+        <CompactCompareSvg
+          vectorA={vectorA} vectorB={vectorB} maxValues={maxValues}
+          layout={compactLayout} colorA={colorA} colorB={colorB}
+          labelA={labelA} labelB={labelB} vbH={VB_H_COMPACT} idScope="cm"
+        />
       </MobileOnly>
     </div>
   );
 }
 
 /** Hook to export SVG as PNG data URL */
-export function useFingerprintSnapshot(
-  svgRef: React.RefObject<SVGSVGElement | null>,
-) {
+export function useFingerprintSnapshot(svgRef: React.RefObject<SVGSVGElement | null>) {
   return useCallback(
     (scale = 2): Promise<string> =>
       new Promise((resolve, reject) => {
@@ -829,19 +740,16 @@ export function useFingerprintSnapshot(
         if (!svg) return reject(new Error("No SVG ref"));
 
         const svgData = new XMLSerializer().serializeToString(svg);
-        const blob = new Blob(
-          [`<?xml version="1.0" encoding="UTF-8"?>${svgData}`],
-          { type: "image/svg+xml" },
-        );
+        const blob = new Blob([`<?xml version="1.0" encoding="UTF-8"?>${svgData}`], { type: "image/svg+xml" });
         const url = URL.createObjectURL(blob);
         const img = new Image();
         img.onload = () => {
           const canvas = document.createElement("canvas");
           canvas.width = VB_W * scale;
-          canvas.height = VB_H_LABELS * scale;
+          canvas.height = VB_H_FULL * scale;
           const ctx = canvas.getContext("2d")!;
           ctx.scale(scale, scale);
-          ctx.drawImage(img, 0, 0, VB_W, VB_H_LABELS);
+          ctx.drawImage(img, 0, 0, VB_W, VB_H_FULL);
           URL.revokeObjectURL(url);
           resolve(canvas.toDataURL("image/png"));
         };
@@ -871,46 +779,30 @@ export function SnapshotableFingerprint({
     a.click();
   }, [snapshot, label]);
 
-  const vbH = showLabels ? VB_H_LABELS : VB_H_NO_LABELS;
-  const vbHCompact = VB_H_NO_LABELS;
+  const vbH = showLabels ? VB_H_FULL : VB_H_COMPACT;
   const layout = computeLayout(vector.length, VB_W, vbH, showLabels);
-  const layoutCompact = computeLayout(vector.length, VB_W, vbHCompact, false);
+  const compactLayout = computeLayout(vector.length, VB_W, VB_H_COMPACT, false);
 
   return (
     <SnapshotWrapper className={className}>
-      {/* Desktop: full SVG with labels */}
       <DesktopOnly>
-        <ResponsiveSvg
-          ref={svgRef}
-          viewBox={`0 0 ${VB_W} ${vbH}`}
-          preserveAspectRatio="xMidYMid meet"
-          xmlns="http://www.w3.org/2000/svg"
-        >
-          <rect width={VB_W} height={vbH} fill={theme.colors.bgCard} rx="8" />
-          {showLabels && renderGroupLabelsAndSeparators(layout)}
-          {renderBars({ vector, maxValues, layout, color, showLabels })}
-        </ResponsiveSvg>
+        <FullBarsSvg
+          vector={vector} maxValues={maxValues} layout={layout} color={color}
+          vbH={vbH} idScope="sd" svgRef={svgRef}
+          extraSvgProps={{
+            xmlns: "http://www.w3.org/2000/svg",
+            children: <rect width={VB_W} height={vbH} fill={theme.colors.bgCard} rx="8" />,
+          }}
+        />
       </DesktopOnly>
-      {/* Mobile: bars only, no labels */}
       <MobileOnly>
-        <ResponsiveSvg
-          viewBox={`0 0 ${VB_W} ${vbHCompact}`}
-          preserveAspectRatio="xMidYMid meet"
-        >
-          <rect
-            width={VB_W}
-            height={vbHCompact}
-            fill={theme.colors.bgCard}
-            rx="8"
-          />
-          {renderBars({
-            vector,
-            maxValues,
-            layout: layoutCompact,
-            color,
-            showLabels: false,
-          })}
-        </ResponsiveSvg>
+        <CompactBarsSvg
+          vector={vector} maxValues={maxValues} layout={compactLayout} color={color}
+          vbH={VB_H_COMPACT} idScope="sm"
+          extraSvgProps={{
+            children: <rect width={VB_W} height={VB_H_COMPACT} fill={theme.colors.bgCard} rx="8" />,
+          }}
+        />
       </MobileOnly>
       <DownloadButton onClick={handleDownload} title="Download as PNG">
         <DownloadIcon />
@@ -979,13 +871,7 @@ const DownloadButton = styled.button`
 function DownloadIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-      <path
-        d="M7 1v8m0 0L4 6.5M7 9l3-2.5M2 11h10"
-        stroke={theme.colors.textMuted}
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+      <path d="M7 1v8m0 0L4 6.5M7 9l3-2.5M2 11h10" stroke={theme.colors.textMuted} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

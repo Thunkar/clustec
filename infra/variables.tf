@@ -33,3 +33,9 @@ variable "domain" {
   type        = string
   default     = "clustec.xyz"
 }
+
+variable "admin_password" {
+  description = "Admin password for the web UI"
+  type        = string
+  sensitive   = true
+}

@@ -79,6 +79,9 @@ jobs:
           ssh-keyscan -p ${{ vars.DEPLOY_SSH_PORT || '22' }} ${{ vars.DEPLOY_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
 
       - name: Deploy
+        env:
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
         run: |
           bash deploy.sh \
             --host ${{ vars.DEPLOY_HOST }} \

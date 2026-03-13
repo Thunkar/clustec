@@ -132,4 +132,44 @@ export function useMurderBoard(networkId: string, address: string) {
   });
 }
 
+export function useAnalysisStatus(networkId: string) {
+  return useQuery({
+    queryKey: ["networks", networkId, "analyze-status"],
+    queryFn: () => api.getAnalysisStatus(networkId),
+    enabled: !!networkId,
+  });
+}
+
+export function useLogin() {
+  return useMutation({
+    mutationFn: (password: string) => api.login(password),
+  });
+}
+
+export function useTriggerAnalysis(networkId: string) {
+  return useMutation({
+    mutationFn: (params: {
+      minClusterSize?: number;
+      nNeighbors?: number;
+      minDist?: number;
+    }) => api.triggerAnalysis(networkId, params),
+  });
+}
+
+export function useSaveAnalysisConfig(networkId: string) {
+  return useMutation({
+    mutationFn: (params: {
+      minClusterSize?: number;
+      nNeighbors?: number;
+      minDist?: number;
+    }) => api.saveAnalysisConfig(networkId, params),
+  });
+}
+
+export function useRevertAnalysisConfig(networkId: string) {
+  return useMutation({
+    mutationFn: () => api.revertAnalysisConfig(networkId),
+  });
+}
+
 

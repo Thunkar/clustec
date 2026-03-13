@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import styled from "@emotion/styled";
 import { useNetworkStore } from "../stores/network";
+import { useAuthStore } from "../stores/auth";
 import { useLabels, useAddLabel, useDeleteLabel } from "../api/hooks";
 import { useMyTxs } from "../stores/my-txs";
 
@@ -21,6 +22,7 @@ const SectionNote = styled.p`
 
 export function Labels() {
   const { selectedNetwork } = useNetworkStore();
+  const { isAdmin } = useAuthStore();
   const { data: labels, isLoading } = useLabels(selectedNetwork);
   const addLabel = useAddLabel(selectedNetwork);
   const deleteLabel = useDeleteLabel(selectedNetwork);
@@ -60,18 +62,21 @@ export function Labels() {
       <SectionTitle>Contract Labels</SectionTitle>
       <SectionNote>
         Shared — visible to all users. Add metadata to known contract addresses.
+        {!isAdmin() && " Sign in as admin to add or remove labels."}
       </SectionNote>
 
-      <Card style={{ marginBottom: theme.spacing.sm }}>
-        <form onSubmit={handleAddLabel}>
-          <Flex gap="12px">
-            <Input placeholder="Contract address (0x...)" value={address} onChange={(e) => setAddress(e.target.value)} style={{ flex: 2 }} />
-            <Input placeholder="Label" value={label} onChange={(e) => setLabel(e.target.value)} style={{ flex: 1 }} />
-            <Input placeholder="Type (Token, AMM...)" value={contractType} onChange={(e) => setContractType(e.target.value)} style={{ flex: 1 }} />
-            <Button type="submit" disabled={!address || !label}>Add</Button>
-          </Flex>
-        </form>
-      </Card>
+      {isAdmin() && (
+        <Card style={{ marginBottom: theme.spacing.sm }}>
+          <form onSubmit={handleAddLabel}>
+            <Flex gap="12px">
+              <Input placeholder="Contract address (0x...)" value={address} onChange={(e) => setAddress(e.target.value)} style={{ flex: 2 }} />
+              <Input placeholder="Label" value={label} onChange={(e) => setLabel(e.target.value)} style={{ flex: 1 }} />
+              <Input placeholder="Type (Token, AMM...)" value={contractType} onChange={(e) => setContractType(e.target.value)} style={{ flex: 1 }} />
+              <Button type="submit" disabled={!address || !label}>Add</Button>
+            </Flex>
+          </form>
+        </Card>
+      )}
 
       <Card style={{ padding: 0, overflow: "hidden", marginBottom: theme.spacing.lg }}>
         <TableWrapper>
@@ -81,7 +86,7 @@ export function Labels() {
                 <th>Address</th>
                 <th>Label</th>
                 <th>Type</th>
-                <th></th>
+                {isAdmin() && <th></th>}
               </tr>
             </thead>
             <tbody>
@@ -90,15 +95,17 @@ export function Labels() {
                   <td><HexDisplay address={l.address} /></td>
                   <td>{l.label}</td>
                   <td>{l.contractType ? <Badge>{l.contractType}</Badge> : "—"}</td>
-                  <td>
-                    <Button variant="danger" onClick={() => deleteLabel.mutate(l.id)} style={{ padding: "2px 8px", fontSize: "11px" }}>
-                      Remove
-                    </Button>
-                  </td>
+                  {isAdmin() && (
+                    <td>
+                      <Button variant="danger" onClick={() => deleteLabel.mutate(l.id)} style={{ padding: "2px 8px", fontSize: "11px" }}>
+                        Remove
+                      </Button>
+                    </td>
+                  )}
                 </tr>
               ))}
               {!labels?.length && (
-                <tr><td colSpan={4} style={{ color: theme.colors.textMuted, textAlign: "center" }}>No labels yet</td></tr>
+                <tr><td colSpan={isAdmin() ? 4 : 3} style={{ color: theme.colors.textMuted, textAlign: "center" }}>No labels yet</td></tr>
               )}
             </tbody>
           </Table>

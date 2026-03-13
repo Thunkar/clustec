@@ -255,6 +255,18 @@ export const contractLabels = pgTable(
   (t) => [unique("labels_network_address").on(t.networkId, t.address)]
 );
 
+// ── Analysis configuration (persisted, one row per network) ──────────
+
+export const analysisConfig = pgTable("analysis_config", {
+  networkId: text("network_id")
+    .primaryKey()
+    .references(() => networks.id),
+  minClusterSize: integer("min_cluster_size").notNull().default(5),
+  nNeighbors: integer("n_neighbors").notNull().default(15),
+  minDist: real("min_dist").notNull().default(0.1),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 // ── Analysis outputs ──────────────────────────────────────
 
 export const featureVectors = pgTable(

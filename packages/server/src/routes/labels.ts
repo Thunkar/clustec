@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { type Db, contractLabels } from "@clustec/common";
+import { requireAdmin } from "../middleware/auth.ts";
 
 export function registerLabelRoutes(app: FastifyInstance, db: Db) {
   app.get<{ Params: { id: string } }>("/api/networks/:id/labels", async (request) => {
@@ -14,7 +15,7 @@ export function registerLabelRoutes(app: FastifyInstance, db: Db) {
   app.post<{
     Params: { id: string };
     Body: { address: string; label: string; contractType?: string };
-  }>("/api/networks/:id/labels", async (request, reply) => {
+  }>("/api/networks/:id/labels", { preHandler: [requireAdmin] }, async (request, reply) => {
     const { id } = request.params;
     const { address, label, contractType } = request.body;
 
@@ -33,7 +34,7 @@ export function registerLabelRoutes(app: FastifyInstance, db: Db) {
 
   app.delete<{
     Params: { id: string; labelId: string };
-  }>("/api/networks/:id/labels/:labelId", async (request, reply) => {
+  }>("/api/networks/:id/labels/:labelId", { preHandler: [requireAdmin] }, async (request, reply) => {
     const labelId = parseInt(request.params.labelId, 10);
     await db.delete(contractLabels).where(eq(contractLabels.id, labelId));
     reply.status(204).send();
