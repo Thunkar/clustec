@@ -56,8 +56,19 @@ const SlotLabel = styled.div`
   font-size: ${theme.fontSize.xs};
   color: ${theme.colors.textMuted};
   white-space: nowrap;
-  min-width: 140px;
+  width: 160px;
   flex-shrink: 0;
+  overflow: hidden;
+  position: relative;
+
+  & > span {
+    display: inline-block;
+    transition: transform 0.6s ease;
+  }
+
+  &:hover > span {
+    transform: translateX(calc(min(0px, 160px - 100%)));
+  }
 `;
 
 const HeatmapBar = styled.div`
@@ -545,25 +556,33 @@ function SlotTimelines({
                 )
               }
             >
-              <SlotLabel>
-                {slot.resolvedContract ? (
-                  <>
-                    <Badge
-                      color={theme.colors.primary}
-                      style={{ fontSize: "10px" }}
-                    >
-                      {slot.resolvedContract.label ??
-                        slot.resolvedContract.address.slice(0, 10) + "..."}
-                    </Badge>{" "}
-                    <span style={{ color: theme.colors.textMuted }}>
-                      [{slot.resolvedContract.storageSlotIndex}]
-                    </span>
-                  </>
-                ) : (
-                  <Mono style={{ fontSize: "10px" }}>
-                    {slot.leafSlot.slice(0, 14)}...
-                  </Mono>
-                )}
+              <SlotLabel
+                title={
+                  slot.resolvedContract
+                    ? `${slot.resolvedContract.label ?? slot.resolvedContract.address} [${slot.resolvedContract.storageSlotIndex}]`
+                    : slot.leafSlot
+                }
+              >
+                <span>
+                  {slot.resolvedContract ? (
+                    <>
+                      <Badge
+                        color={theme.colors.primary}
+                        style={{ fontSize: "10px" }}
+                      >
+                        {slot.resolvedContract.label ??
+                          abbreviateHex(slot.resolvedContract.address)}
+                      </Badge>{" "}
+                      <span style={{ color: theme.colors.textMuted }}>
+                        [{slot.resolvedContract.storageSlotIndex}]
+                      </span>
+                    </>
+                  ) : (
+                    <Mono style={{ fontSize: "10px" }}>
+                      {abbreviateHex(slot.leafSlot)}
+                    </Mono>
+                  )}
+                </span>
               </SlotLabel>
               <SlotHeatmap
                 histogram={slot.histogram}
