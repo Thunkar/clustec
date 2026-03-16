@@ -308,18 +308,32 @@ function PointCloud({ points, trackedHashes, onClusterClick, onOutlierClick }: P
     canvas.style.cursor = (hoveredOutlierIdx !== null || hoveredBlobIdx !== null) ? "pointer" : "grab";
   }, [hoveredOutlierIdx, hoveredBlobIdx, gl]);
 
-  // Use a canvas-level click handler so clicks work even on empty space near blobs
+  // Use a canvas-level click handler, but suppress clicks after drags
+  const pointerDownPos = useRef<{ x: number; y: number } | null>(null);
   useEffect(() => {
     const canvas = gl.domElement;
-    const handleClick = () => {
+    const DRAG_THRESHOLD = 5;
+    const handlePointerDown = (e: PointerEvent) => {
+      pointerDownPos.current = { x: e.clientX, y: e.clientY };
+    };
+    const handleClick = (e: MouseEvent) => {
+      if (pointerDownPos.current) {
+        const dx = e.clientX - pointerDownPos.current.x;
+        const dy = e.clientY - pointerDownPos.current.y;
+        if (dx * dx + dy * dy > DRAG_THRESHOLD * DRAG_THRESHOLD) return;
+      }
       if (hoveredOutlierIdx !== null && onOutlierClick) {
         onOutlierClick(points[hoveredOutlierIdx]);
       } else if (hoveredBlobIdx !== null && onClusterClick) {
         onClusterClick(blobs[hoveredBlobIdx].clusterId);
       }
     };
+    canvas.addEventListener("pointerdown", handlePointerDown);
     canvas.addEventListener("click", handleClick);
-    return () => canvas.removeEventListener("click", handleClick);
+    return () => {
+      canvas.removeEventListener("pointerdown", handlePointerDown);
+      canvas.removeEventListener("click", handleClick);
+    };
   }, [hoveredOutlierIdx, hoveredBlobIdx, onOutlierClick, onClusterClick, points, blobs, gl]);
 
   const hoveredOutlier = hoveredOutlierIdx !== null ? points[hoveredOutlierIdx] : null;
