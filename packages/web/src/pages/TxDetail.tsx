@@ -60,65 +60,44 @@ const SlotLabel = styled.div`
   flex-shrink: 0;
 `;
 
-const HTimeline = styled.div`
+const HeatmapBar = styled.div`
   display: flex;
-  align-items: center;
-  position: relative;
+  align-items: stretch;
   flex: 1;
   min-width: 0;
-  height: 28px;
+  height: 20px;
+  border-radius: 3px;
+  overflow: hidden;
+  position: relative;
 `;
 
-const HTimelineLine = styled.div`
-  position: absolute;
-  top: 50%;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: ${theme.colors.border};
-  transform: translateY(-50%);
-`;
-
-const HTimelineDot = styled.div<{ isFocal?: boolean }>`
-  width: ${(p) => (p.isFocal ? "14px" : "10px")};
-  height: ${(p) => (p.isFocal ? "14px" : "10px")};
-  border-radius: 50%;
+const HeatmapCell = styled.div<{ intensity: number; isFocal?: boolean }>`
+  flex: 1;
   background: ${(p) =>
-    p.isFocal ? theme.colors.warning : theme.colors.primary};
-  border: 2px solid
-    ${(p) => (p.isFocal ? theme.colors.warning : theme.colors.bgCard)};
-  position: absolute;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 1;
-  cursor: ${(p) => (p.isFocal ? "default" : "pointer")};
+    p.isFocal
+      ? theme.colors.warning
+      : p.intensity > 0
+        ? `rgba(88, 101, 242, ${Math.min(0.2 + p.intensity * 0.8, 1)})`
+        : theme.colors.bgCard};
+  border-right: 1px solid ${theme.colors.bg};
 
-  &:hover {
-    transform: translate(-50%, -50%) scale(1.3);
+  &:last-child {
+    border-right: none;
   }
 `;
 
-const DotTooltip = styled.div`
-  position: absolute;
-  bottom: calc(100% + 8px);
-  left: 50%;
-  transform: translateX(-50%);
-  background: ${theme.colors.bgCard};
-  border: 1px solid ${theme.colors.border};
-  border-radius: ${theme.radius.md};
-  padding: ${theme.spacing.xs} ${theme.spacing.sm};
-  font-size: ${theme.fontSize.xs};
-  white-space: nowrap;
-  z-index: 10;
-  pointer-events: none;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+const NearbyList = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: ${theme.spacing.xs};
+  margin-top: ${theme.spacing.xs};
 `;
 
 const SlotRow = styled.div`
   display: flex;
   align-items: center;
   gap: ${theme.spacing.md};
-  padding: ${theme.spacing.xs} 0;
+  padding: ${theme.spacing.sm} 0;
 
   &:not(:last-child) {
     border-bottom: 1px solid ${theme.colors.border};
@@ -460,55 +439,61 @@ function Collapsible({
   );
 }
 
-// ── Slot Timeline subsection ──
+// ── Slot Activity subsection ──
 
-function TimelineDotWithTooltip({
-  write,
-  positionPct,
+function SlotHeatmap({
+  histogram,
+  focalBin,
+  blockRange,
 }: {
-  write: {
-    txId: number;
-    txHash: string;
-    blockNumber: number | null;
-    isFocalTx: boolean;
-  };
-  positionPct: number;
+  histogram: number[];
+  focalBin: number | null;
+  blockRange: { min: number; max: number };
 }) {
-  const [hovered, setHovered] = useState(false);
+  const maxCount = Math.max(...histogram, 1);
+  const [hoveredBin, setHoveredBin] = useState<number | null>(null);
+  const range = blockRange.max - blockRange.min || 1;
 
   return (
-    <div
-      style={{
-        position: "absolute",
-        left: `${positionPct}%`,
-        top: 0,
-        bottom: 0,
-      }}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-    >
-      {write.isFocalTx ? (
-        <HTimelineDot isFocal style={{ left: "50%" }} />
-      ) : (
-        <Link to={`/tx/${write.txHash}`} style={{ textDecoration: "none" }}>
-          <HTimelineDot style={{ left: "50%" }} />
-        </Link>
-      )}
-      {hovered && (
-        <DotTooltip>
-          {write.isFocalTx ? (
-            <span style={{ color: theme.colors.warning, fontWeight: "bold" }}>
-              This tx
-            </span>
-          ) : (
-            <Mono>{write.txHash.slice(0, 14)}...</Mono>
-          )}
-          <span style={{ color: theme.colors.textMuted, marginLeft: "6px" }}>
-            {write.blockNumber != null
-              ? `Block ${write.blockNumber.toLocaleString()}`
-              : "Pending"}
+    <div style={{ position: "relative", flex: 1, minWidth: 0 }}>
+      <HeatmapBar>
+        {histogram.map((count, i) => (
+          <HeatmapCell
+            key={i}
+            intensity={count / maxCount}
+            isFocal={i === focalBin}
+            onMouseEnter={() => setHoveredBin(i)}
+            onMouseLeave={() => setHoveredBin(null)}
+            title={`Blocks ${(blockRange.min + Math.floor((i / histogram.length) * range)).toLocaleString()}–${(blockRange.min + Math.floor(((i + 1) / histogram.length) * range)).toLocaleString()}: ${count} write${count !== 1 ? "s" : ""}`}
+          />
+        ))}
+      </HeatmapBar>
+      {hoveredBin != null && (
+        <div
+          style={{
+            position: "absolute",
+            bottom: "calc(100% + 4px)",
+            left: `${((hoveredBin + 0.5) / histogram.length) * 100}%`,
+            transform: "translateX(-50%)",
+            background: theme.colors.bgCard,
+            border: `1px solid ${theme.colors.border}`,
+            borderRadius: theme.radius.md,
+            padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
+            fontSize: theme.fontSize.xs,
+            whiteSpace: "nowrap",
+            zIndex: 10,
+            pointerEvents: "none",
+            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.3)",
+          }}
+        >
+          <span style={{ color: theme.colors.text }}>
+            {histogram[hoveredBin]} write{histogram[hoveredBin] !== 1 ? "s" : ""}
           </span>
-        </DotTooltip>
+          <span style={{ color: theme.colors.textMuted, marginLeft: "6px" }}>
+            Blocks {(blockRange.min + Math.floor((hoveredBin / histogram.length) * range)).toLocaleString()}
+            –{(blockRange.min + Math.floor(((hoveredBin + 1) / histogram.length) * range)).toLocaleString()}
+          </span>
+        </div>
       )}
     </div>
   );
@@ -522,17 +507,10 @@ function SlotTimelines({
   hash: string;
 }) {
   const { data, isLoading } = useTxGraph(networkId, hash);
+  const [expandedSlot, setExpandedSlot] = useState<string | null>(null);
 
   if (isLoading) return <Loading />;
   if (!data || data.slots.length === 0) return null;
-
-  const allBlocks = data.slots
-    .flatMap((s) => s.writes)
-    .map((w) => w.blockNumber)
-    .filter((b): b is number => b != null);
-  const minBlock = Math.min(...allBlocks);
-  const maxBlock = Math.max(...allBlocks);
-  const blockRange = maxBlock - minBlock || 1;
 
   return (
     <Collapsible
@@ -547,60 +525,87 @@ function SlotTimelines({
           fontSize: theme.fontSize.xs,
         }}
       >
-        Each row is a storage slot written by this transaction. Dots are all
-        transactions writing to that slot.
+        Activity heatmap per storage slot. Brighter = more writes.{" "}
         <span style={{ color: theme.colors.warning, fontWeight: "bold" }}>
-          {" "}
           Highlighted
         </span>{" "}
-        = this transaction.
+        = this transaction's block. Click a row for nearby transactions.
       </p>
 
       <Card
         style={{ padding: theme.spacing.md, marginBottom: theme.spacing.md }}
       >
         {data.slots.map((slot) => (
-          <SlotRow key={slot.leafSlot}>
-            <SlotLabel>
-              {slot.resolvedContract ? (
-                <>
-                  <Badge
-                    color={theme.colors.primary}
-                    style={{ fontSize: "10px" }}
-                  >
-                    {slot.resolvedContract.label ??
-                      slot.resolvedContract.address.slice(0, 10) + "..."}
-                  </Badge>{" "}
-                  <span style={{ color: theme.colors.textMuted }}>
-                    [{slot.resolvedContract.storageSlotIndex}]
-                  </span>
-                </>
-              ) : (
-                <Mono style={{ fontSize: "10px" }}>
-                  {slot.leafSlot.slice(0, 14)}...
-                </Mono>
+          <div key={slot.leafSlot}>
+            <SlotRow
+              style={{ cursor: "pointer" }}
+              onClick={() =>
+                setExpandedSlot(
+                  expandedSlot === slot.leafSlot ? null : slot.leafSlot,
+                )
+              }
+            >
+              <SlotLabel>
+                {slot.resolvedContract ? (
+                  <>
+                    <Badge
+                      color={theme.colors.primary}
+                      style={{ fontSize: "10px" }}
+                    >
+                      {slot.resolvedContract.label ??
+                        slot.resolvedContract.address.slice(0, 10) + "..."}
+                    </Badge>{" "}
+                    <span style={{ color: theme.colors.textMuted }}>
+                      [{slot.resolvedContract.storageSlotIndex}]
+                    </span>
+                  </>
+                ) : (
+                  <Mono style={{ fontSize: "10px" }}>
+                    {slot.leafSlot.slice(0, 14)}...
+                  </Mono>
+                )}
+              </SlotLabel>
+              <SlotHeatmap
+                histogram={slot.histogram}
+                focalBin={slot.focalBin}
+                blockRange={slot.blockRange}
+              />
+              <Badge color={theme.colors.accent} style={{ flexShrink: 0 }}>
+                {slot.totalWrites}
+              </Badge>
+            </SlotRow>
+            {expandedSlot === slot.leafSlot &&
+              slot.nearbyWrites.length > 0 && (
+                <NearbyList>
+                  {slot.nearbyWrites.map((w, i) => (
+                    <Fragment key={i}>
+                      {w.isFocalTx ? (
+                        <Badge
+                          color={theme.colors.warning}
+                          style={{ fontSize: "10px" }}
+                        >
+                          This tx (Block{" "}
+                          {w.blockNumber?.toLocaleString() ?? "?"})
+                        </Badge>
+                      ) : (
+                        <Link
+                          to={`/tx/${w.txHash}`}
+                          style={{ textDecoration: "none" }}
+                        >
+                          <Badge
+                            color={theme.colors.primary}
+                            style={{ fontSize: "10px", cursor: "pointer" }}
+                          >
+                            {abbreviateHex(w.txHash)} (Block{" "}
+                            {w.blockNumber?.toLocaleString() ?? "?"})
+                          </Badge>
+                        </Link>
+                      )}
+                    </Fragment>
+                  ))}
+                </NearbyList>
               )}
-            </SlotLabel>
-            <HTimeline>
-              <HTimelineLine />
-              {slot.writes.map((w, i) => {
-                const pct =
-                  w.blockNumber != null
-                    ? ((w.blockNumber - minBlock) / blockRange) * 90 + 5
-                    : 95;
-                return (
-                  <TimelineDotWithTooltip
-                    key={`${w.txId}-${i}`}
-                    write={w}
-                    positionPct={pct}
-                  />
-                );
-              })}
-            </HTimeline>
-            <Badge color={theme.colors.accent} style={{ flexShrink: 0 }}>
-              {slot.writes.length}
-            </Badge>
-          </SlotRow>
+          </div>
         ))}
       </Card>
     </Collapsible>

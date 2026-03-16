@@ -9,12 +9,11 @@ import {
   buildSlotLookup,
 } from "@clustec/common";
 
+const NUM_BINS = 24;
+const NEARBY_RADIUS = 50; // blocks
+const NEARBY_CAP = 10;
+
 export function registerGraphRoutes(app: FastifyInstance, db: Db) {
-  /**
-   * Per-transaction slot timeline: for each public data write slot this tx
-   * touches, return all other txs that wrote to the same slot, ordered by
-   * block number. The focal tx is flagged so the UI can highlight it.
-   */
   app.get<{
     Params: { id: string; hash: string };
   }>("/api/networks/:id/txs/:hash/graph", async (request, reply) => {
@@ -46,115 +45,177 @@ export function registerGraphRoutes(app: FastifyInstance, db: Db) {
     }
 
     const slotValues = focalSlots.map((s) => s.leafSlot);
+    const slotIn = sql`${publicDataWrites.leafSlot} IN (${sql.join(
+      slotValues.map((v) => sql`${v}`),
+      sql`, `,
+    )})`;
 
-    // Find all writes to these slots across the network, with block timestamps
-    const writeRows = await db
+    // Get per-slot total write counts and block range in a single aggregation query
+    const slotStats = await db
       .select({
         leafSlot: publicDataWrites.leafSlot,
-        txId: publicDataWrites.txId,
-        txHash: transactions.txHash,
-        blockNumber: transactions.blockNumber,
-        blockTimestamp: blocks.timestamp,
+        totalWrites: sql<number>`COUNT(*)`.as("total_writes"),
+        minBlock: sql<number>`MIN(${transactions.blockNumber})`.as("min_block"),
+        maxBlock: sql<number>`MAX(${transactions.blockNumber})`.as("max_block"),
       })
       .from(publicDataWrites)
       .innerJoin(
         transactions,
-        sql`${transactions.id} = ${publicDataWrites.txId} AND ${transactions.networkId} = ${id}`
+        sql`${transactions.id} = ${publicDataWrites.txId} AND ${transactions.networkId} = ${id}`,
       )
-      .leftJoin(
-        blocks,
-        and(
-          eq(blocks.networkId, transactions.networkId),
-          eq(blocks.blockNumber, transactions.blockNumber)
-        )
+      .where(slotIn)
+      .groupBy(publicDataWrites.leafSlot);
+
+    const statsMap = new Map(slotStats.map((s) => [s.leafSlot, s]));
+
+    // Get block numbers per slot for histogram binning (only block numbers, not full rows)
+    const blockRows = await db
+      .select({
+        leafSlot: publicDataWrites.leafSlot,
+        blockNumber: transactions.blockNumber,
+      })
+      .from(publicDataWrites)
+      .innerJoin(
+        transactions,
+        sql`${transactions.id} = ${publicDataWrites.txId} AND ${transactions.networkId} = ${id}`,
       )
-      .where(
-        sql`${publicDataWrites.leafSlot} IN (${sql.join(
-          slotValues.map((v) => sql`${v}`),
-          sql`, `
-        )})`
-      )
+      .where(slotIn)
       .orderBy(transactions.blockNumber);
 
-    // Resolve leaf slots using known contract labels
+    // Get nearby writes (within ±NEARBY_RADIUS blocks of the focal tx)
+    const focalBlock = focalTx.blockNumber;
+    const nearbyRows = focalBlock != null
+      ? await db
+          .select({
+            leafSlot: publicDataWrites.leafSlot,
+            txHash: transactions.txHash,
+            blockNumber: transactions.blockNumber,
+            blockTimestamp: blocks.timestamp,
+            txId: publicDataWrites.txId,
+          })
+          .from(publicDataWrites)
+          .innerJoin(
+            transactions,
+            sql`${transactions.id} = ${publicDataWrites.txId} AND ${transactions.networkId} = ${id}`,
+          )
+          .leftJoin(
+            blocks,
+            and(
+              eq(blocks.networkId, transactions.networkId),
+              eq(blocks.blockNumber, transactions.blockNumber),
+            ),
+          )
+          .where(
+            and(
+              slotIn,
+              sql`${transactions.blockNumber} BETWEEN ${focalBlock - NEARBY_RADIUS} AND ${focalBlock + NEARBY_RADIUS}`,
+            ),
+          )
+          .orderBy(transactions.blockNumber)
+      : [];
+
+    // Resolve leaf slots
     const labels = await db
       .select()
       .from(contractLabels)
       .where(eq(contractLabels.networkId, id));
 
-    // Collect known addresses from txs that wrote to these slots
-    const txIds = [...new Set(writeRows.map((r) => r.txId))];
-    const writerTxs = txIds.length > 0
-      ? await db
-          .select({ feePayer: transactions.feePayer, publicCalls: transactions.publicCalls })
-          .from(transactions)
-          .where(and(
+    const knownAddresses: string[] = [];
+    if (nearbyRows.length > 0) {
+      const nearbyTxIds = [...new Set(nearbyRows.map((r) => r.txId))];
+      const writerTxs = await db
+        .select({ feePayer: transactions.feePayer, publicCalls: transactions.publicCalls })
+        .from(transactions)
+        .where(
+          and(
             eq(transactions.networkId, id),
-            sql`${transactions.id} IN (${sql.join(txIds.map((tid) => sql`${tid}`), sql`, `)})`
-          ))
-      : [];
-    const knownAddresses = writerTxs.flatMap((t) => {
-      const addrs: string[] = [];
-      if (t.feePayer) addrs.push(t.feePayer);
-      const calls = (t.publicCalls ?? []) as { contractAddress: string; msgSender: string }[];
-      for (const c of calls) {
-        addrs.push(c.contractAddress, c.msgSender);
+            sql`${transactions.id} IN (${sql.join(nearbyTxIds.map((tid) => sql`${tid}`), sql`, `)})`,
+          ),
+        );
+      for (const t of writerTxs) {
+        if (t.feePayer) knownAddresses.push(t.feePayer);
+        const calls = (t.publicCalls ?? []) as { contractAddress: string; msgSender: string }[];
+        for (const c of calls) {
+          knownAddresses.push(c.contractAddress, c.msgSender);
+        }
       }
-      return addrs;
-    });
+    }
 
     const labelMap = new Map(labels.map((l) => [l.address, l.label]));
     const slotLookup = await buildSlotLookup(
       labels.map((l) => l.address),
       labelMap,
-      knownAddresses
+      knownAddresses,
     );
 
-    // Group by slot and build timeline entries
-    const slotMap = new Map<string, {
-      txId: number;
-      txHash: string;
-      blockNumber: number | null;
-      blockTimestamp: number | null;
-      isFocalTx: boolean;
-    }[]>();
+    // Build response per slot
+    const slots = slotValues.map((leafSlot) => {
+      const stats = statsMap.get(leafSlot);
+      const totalWrites = stats ? Number(stats.totalWrites) : 0;
+      const minBlock = stats ? Number(stats.minBlock) : 0;
+      const maxBlock = stats ? Number(stats.maxBlock) : 0;
+      const blockRange = maxBlock - minBlock || 1;
 
-    for (const row of writeRows) {
-      let entries = slotMap.get(row.leafSlot);
-      if (!entries) {
-        entries = [];
-        slotMap.set(row.leafSlot, entries);
+      // Build histogram
+      const histogram = new Array(NUM_BINS).fill(0) as number[];
+      const slotBlocks = blockRows.filter((r) => r.leafSlot === leafSlot);
+      for (const r of slotBlocks) {
+        if (r.blockNumber != null) {
+          const bin = Math.min(
+            Math.floor(((r.blockNumber - minBlock) / blockRange) * NUM_BINS),
+            NUM_BINS - 1,
+          );
+          histogram[bin]++;
+        }
       }
-      entries.push({
-        txId: row.txId,
-        txHash: row.txHash,
-        blockNumber: row.blockNumber,
-        blockTimestamp: row.blockTimestamp,
-        isFocalTx: row.txId === focalTx.id,
-      });
-    }
 
-    return {
-      slots: [...slotMap.entries()].map(([leafSlot, entries]) => {
-        const preimage = slotLookup.get(leafSlot);
-        const label = preimage
-          ? labels.find(
-              (l) => l.address.toLowerCase() === preimage.contractAddress.toLowerCase()
+      // Focal bin
+      const focalBin =
+        focalBlock != null
+          ? Math.min(
+              Math.floor(((focalBlock - minBlock) / blockRange) * NUM_BINS),
+              NUM_BINS - 1,
             )
-          : undefined;
-        return {
-          leafSlot,
-          resolvedContract: preimage
-            ? {
-                address: preimage.contractAddress,
-                label: preimage.contractLabel ?? label?.label ?? null,
-                contractType: label?.contractType ?? null,
-                storageSlotIndex: preimage.storageSlotIndex,
-              }
-            : null,
-          writes: entries,
-        };
-      }),
-    };
+          : null;
+
+      // Nearby writes
+      const slotNearby = nearbyRows
+        .filter((r) => r.leafSlot === leafSlot)
+        .slice(0, NEARBY_CAP)
+        .map((r) => ({
+          txHash: r.txHash,
+          blockNumber: r.blockNumber,
+          blockTimestamp: r.blockTimestamp,
+          isFocalTx: r.txId === focalTx.id,
+        }));
+
+      // Resolve contract
+      const preimage = slotLookup.get(leafSlot);
+      const label = preimage
+        ? labels.find(
+            (l) => l.address.toLowerCase() === preimage.contractAddress.toLowerCase(),
+          )
+        : undefined;
+
+      return {
+        leafSlot,
+        resolvedContract: preimage
+          ? {
+              address: preimage.contractAddress,
+              label: preimage.contractLabel ?? label?.label ?? null,
+              contractType: label?.contractType ?? null,
+              storageSlotIndex: preimage.storageSlotIndex,
+            }
+          : null,
+        totalWrites,
+        focalBlockNumber: focalBlock,
+        blockRange: { min: minBlock, max: maxBlock },
+        histogram,
+        focalBin,
+        nearbyWrites: slotNearby,
+      };
+    });
+
+    return { slots };
   });
 }
