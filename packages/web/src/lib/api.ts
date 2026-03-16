@@ -220,22 +220,26 @@ export interface PublicDataWrite {
   resolvedContract: ResolvedContract | null;
 }
 
-export interface SlotWrite {
-  txId: number;
+export interface NearbyWrite {
   txHash: string;
   blockNumber: number | null;
   blockTimestamp: number | null;
   isFocalTx: boolean;
 }
 
-export interface SlotTimeline {
+export interface SlotSummary {
   leafSlot: string;
   resolvedContract: ResolvedContract | null;
-  writes: SlotWrite[];
+  totalWrites: number;
+  focalBlockNumber: number | null;
+  blockRange: { min: number; max: number };
+  histogram: number[];
+  focalBin: number | null;
+  nearbyWrites: NearbyWrite[];
 }
 
 export interface TxGraphData {
-  slots: SlotTimeline[];
+  slots: SlotSummary[];
 }
 
 export interface SimilarTx {

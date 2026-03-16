@@ -67,38 +67,77 @@ function feePayerPattern(
   switch (patternIndex) {
     case 0:
       return (
-        <pattern key={id} id={id} width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+        <pattern
+          key={id}
+          id={id}
+          width="4"
+          height="4"
+          patternUnits="userSpaceOnUse"
+          patternTransform="rotate(45)"
+        >
           <rect width="2" height="4" fill={color} />
         </pattern>
       );
     case 1:
       return (
-        <pattern key={id} id={id} width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)">
+        <pattern
+          key={id}
+          id={id}
+          width="4"
+          height="4"
+          patternUnits="userSpaceOnUse"
+          patternTransform="rotate(-45)"
+        >
           <rect width="2" height="4" fill={color} />
         </pattern>
       );
     case 2:
       return (
-        <pattern key={id} id={id} width="4" height="4" patternUnits="userSpaceOnUse">
+        <pattern
+          key={id}
+          id={id}
+          width="4"
+          height="4"
+          patternUnits="userSpaceOnUse"
+        >
           <rect width="4" height="2" fill={color} />
         </pattern>
       );
     case 3:
       return (
-        <pattern key={id} id={id} width="4" height="4" patternUnits="userSpaceOnUse">
+        <pattern
+          key={id}
+          id={id}
+          width="4"
+          height="4"
+          patternUnits="userSpaceOnUse"
+        >
           <rect width="2" height="4" fill={color} />
         </pattern>
       );
     case 4:
       return (
-        <pattern key={id} id={id} width="4" height="4" patternUnits="userSpaceOnUse">
+        <pattern
+          key={id}
+          id={id}
+          width="4"
+          height="4"
+          patternUnits="userSpaceOnUse"
+        >
           <rect width="2" height="2" fill={color} />
           <rect x="2" y="2" width="2" height="2" fill={color} />
         </pattern>
       );
     default:
       return (
-        <pattern key={id} id={id} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+        <pattern
+          key={id}
+          id={id}
+          width="6"
+          height="6"
+          patternUnits="userSpaceOnUse"
+          patternTransform="rotate(45)"
+        >
           <rect width="3" height="3" fill={color} />
           <rect x="3" y="3" width="3" height="3" fill={color} />
         </pattern>
@@ -106,19 +145,39 @@ function feePayerPattern(
   }
 }
 
-function normalizeNumeric(value: number, index: number, maxValues?: number[]): number {
+function normalizeNumeric(
+  value: number,
+  index: number,
+  maxValues?: number[],
+): number {
   if (maxValues && maxValues[index] > 0) {
     return Math.sqrt(Math.min(value / maxValues[index], 1));
   }
   const caps: Record<number, number> = {
-    0: 64, 1: 64, 2: 8, 3: 64, 4: 1, 5: 64,
-    6: 786_432, 7: 6_540_000, 8: 1e9, 9: 1e9,
-    10: 32, 11: 32, 12: 1_000, 13: 172_800,
+    0: 64, // numNoteHashes — MAX_NOTE_HASHES_PER_TX
+    1: 64, // numNullifiers — MAX_NULLIFIERS_PER_TX
+    2: 8, // numL2ToL1Msgs — MAX_L2_TO_L1_MSGS_PER_TX
+    3: 64, // numPrivateLogs — MAX_PRIVATE_LOGS_PER_TX
+    4: 1, // numContractClassLogs — MAX_CONTRACT_CLASS_LOGS_PER_TX
+    5: 64, // numPublicLogs — practical cap; DA-derived max ~85 @ 16 fields/log avg
+    6: 786_432, // gasLimitDa — MAX_PROCESSABLE_DA_GAS_PER_CHECKPOINT
+    7: 6_540_000, // gasLimitL2 — MAX_PROCESSABLE_L2_GAS
+    8: 1e9, // maxFeePerDaGas — 1 gwei/gas → max fee ~$0.25 DA at $2500/ETH
+    9: 1e9, // maxFeePerL2Gas — 1 gwei/gas → max fee ~$16 L2 at $2500/ETH
+    10: 32, // numSetupCalls — MAX_ENQUEUED_CALLS_PER_TX
+    11: 32, // numAppCalls — MAX_ENQUEUED_CALLS_PER_TX
+    12: 1_000, // totalPublicCalldataSize (fields) — practical cap; AVM bench test max is 300/call
+    13: 86400, // expirationDelta (seconds) — MAX_TX_LIFETIME
   };
   return Math.sqrt(Math.min(value / (caps[index] ?? 1), 1));
 }
 
-function computeLayout(numBars: number, viewWidth: number, viewHeight: number, withGroupLabels: boolean) {
+function computeLayout(
+  numBars: number,
+  viewWidth: number,
+  viewHeight: number,
+  withGroupLabels: boolean,
+) {
   const topPad = withGroupLabels ? PAD_TOP : 4;
   const botPad = withGroupLabels ? PAD_BOT : 4;
   const waveArea = viewHeight - topPad - botPad;
@@ -141,7 +200,14 @@ function computeLayout(numBars: number, viewWidth: number, viewHeight: number, w
   return { centerY, maxBarH, barW, barSpacing, barX, topPad, botPad };
 }
 
-function barPathDouble(x: number, centerY: number, w: number, hUp: number, hDown: number, r: number): string {
+function barPathDouble(
+  x: number,
+  centerY: number,
+  w: number,
+  hUp: number,
+  hDown: number,
+  r: number,
+): string {
   const crUp = Math.min(r, w / 2, hUp);
   const crDown = Math.min(r, w / 2, hDown);
   const top = centerY - hUp;
@@ -169,18 +235,29 @@ function formatValue(value: number | string, index: number): string {
 
 // ── Tooltip ──
 
-interface Tooltip { text: string; x: number; y: number }
-type TooltipCallback = (text: string, barCenterX: number, barTopY: number) => void;
+interface Tooltip {
+  text: string;
+  x: number;
+  y: number;
+}
+type TooltipCallback = (
+  text: string,
+  barCenterX: number,
+  barTopY: number,
+) => void;
 
 /** Delayed-show (hover) / instant (tap) tooltip state. */
 function useTooltip(delayMs = 150) {
   const [tip, setTip] = useState<Tooltip | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const show = useCallback((text: string, x: number, y: number) => {
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => setTip({ text, x, y }), delayMs);
-  }, [delayMs]);
+  const show = useCallback(
+    (text: string, x: number, y: number) => {
+      if (timer.current) clearTimeout(timer.current);
+      timer.current = setTimeout(() => setTip({ text, x, y }), delayMs);
+    },
+    [delayMs],
+  );
 
   const hide = useCallback(() => {
     if (timer.current) clearTimeout(timer.current);
@@ -195,23 +272,52 @@ function useTooltip(delayMs = 150) {
   return { tip, show, hide, tap };
 }
 
-function TooltipOverlay({ tip, vbW, vbH }: { tip: Tooltip; vbW: number; vbH: number }) {
+function TooltipOverlay({
+  tip,
+  vbW,
+  vbH,
+}: {
+  tip: Tooltip;
+  vbW: number;
+  vbH: number;
+}) {
   const lines = tip.text.split("\n");
   const lineH = 10;
   const padX = 6;
   const padY = 5;
-  const boxW = Math.min(Math.max(...lines.map((l) => l.length)) * 5.5 + padX * 2, vbW - 8);
+  const boxW = Math.min(
+    Math.max(...lines.map((l) => l.length)) * 5.5 + padX * 2,
+    vbW - 8,
+  );
   const boxH = lines.length * lineH + padY * 2;
   const bx = Math.max(4, Math.min(tip.x - boxW / 2, vbW - boxW - 4));
   const margin = 4;
-  const by = tip.y - boxH - margin < 4
-    ? Math.min(tip.y + margin, vbH - boxH - 4)
-    : tip.y - boxH - margin;
+  const by =
+    tip.y - boxH - margin < 4
+      ? Math.min(tip.y + margin, vbH - boxH - 4)
+      : tip.y - boxH - margin;
   return (
     <g style={{ pointerEvents: "none" }}>
-      <rect x={bx} y={by} width={boxW} height={boxH} rx="4" fill="#1a1a2e" stroke="#4444aa" strokeWidth="0.8" opacity="0.95" />
+      <rect
+        x={bx}
+        y={by}
+        width={boxW}
+        height={boxH}
+        rx="4"
+        fill="#1a1a2e"
+        stroke="#4444aa"
+        strokeWidth="0.8"
+        opacity="0.95"
+      />
       {lines.map((line, idx) => (
-        <text key={idx} x={bx + padX} y={by + padY + (idx + 0.75) * lineH} fontSize="8" fontFamily="'SF Mono', 'Fira Code', monospace" fill="#ccccff">
+        <text
+          key={idx}
+          x={bx + padX}
+          y={by + padY + (idx + 0.75) * lineH}
+          fontSize="8"
+          fontFamily="'SF Mono', 'Fira Code', monospace"
+          fill="#ccccff"
+        >
           {line}
         </text>
       ))}
@@ -265,16 +371,40 @@ function renderBars({
       elements.push(
         <g key={i}>
           <defs>{feePayerPattern(patId, patIdx, catColor)}</defs>
-          <path d={barPathDouble(x, centerY, barW, barH, barH, r)} fill={`url(#${patId})`} />
-          <path d={barPathDouble(x, centerY, barW, barH, barH, r)} fill="none" stroke={catColor} strokeWidth="0.6" opacity="0.5" />
+          <path
+            d={barPathDouble(x, centerY, barW, barH, barH, r)}
+            fill={`url(#${patId})`}
+          />
+          <path
+            d={barPathDouble(x, centerY, barW, barH, barH, r)}
+            fill="none"
+            stroke={catColor}
+            strokeWidth="0.6"
+            opacity="0.5"
+          />
           <rect
-            x={x} y={barTopY} width={barW} height={barH * 2} fill="transparent"
-            onTouchStart={(e) => { e.stopPropagation(); onTap(tooltip, barCenterX, barTopY); }}
+            x={x}
+            y={barTopY}
+            width={barW}
+            height={barH * 2}
+            fill="transparent"
+            onTouchStart={(e) => {
+              e.stopPropagation();
+              onTap(tooltip, barCenterX, barTopY);
+            }}
             onMouseEnter={() => onHover(tooltip, barCenterX, barTopY)}
             onMouseLeave={onHoverEnd}
           />
           {withGroupLabels && (
-            <text x={0} y={0} transform={`translate(${x + barW * 0.3}, ${centerY + maxBarH + 6}) rotate(65)`} fontSize="6" fontFamily="'SF Mono', 'Fira Code', monospace" fill={catColor} fontWeight="600">
+            <text
+              x={0}
+              y={0}
+              transform={`translate(${x + barW * 0.3}, ${centerY + maxBarH + 6}) rotate(65)`}
+              fontSize="6"
+              fontFamily="'SF Mono', 'Fira Code', monospace"
+              fill={catColor}
+              fontWeight="600"
+            >
               {FEATURE_LABELS[i]}
             </text>
           )}
@@ -290,15 +420,34 @@ function renderBars({
 
       elements.push(
         <g key={i}>
-          <path d={barPathDouble(x, centerY, barW, barH, barH, r)} fill={active ? color : ZERO_COLOR} opacity={active ? 0.85 : 0.5} />
+          <path
+            d={barPathDouble(x, centerY, barW, barH, barH, r)}
+            fill={active ? color : ZERO_COLOR}
+            opacity={active ? 0.85 : 0.5}
+          />
           <rect
-            x={x} y={barTopY} width={barW} height={hitH * 2} fill="transparent"
-            onTouchStart={(e) => { e.stopPropagation(); onTap(tooltip, barCenterX, barTopY); }}
+            x={x}
+            y={barTopY}
+            width={barW}
+            height={hitH * 2}
+            fill="transparent"
+            onTouchStart={(e) => {
+              e.stopPropagation();
+              onTap(tooltip, barCenterX, barTopY);
+            }}
             onMouseEnter={() => onHover(tooltip, barCenterX, barTopY)}
             onMouseLeave={onHoverEnd}
           />
           {withGroupLabels && (
-            <text x={0} y={0} transform={`translate(${x + barW * 0.3}, ${centerY + maxBarH + 6}) rotate(65)`} fontSize="6" fontFamily="'SF Mono', 'Fira Code', monospace" fill={active ? theme.colors.text : theme.colors.textMuted} opacity={active ? 0.7 : 0.35}>
+            <text
+              x={0}
+              y={0}
+              transform={`translate(${x + barW * 0.3}, ${centerY + maxBarH + 6}) rotate(65)`}
+              fontSize="6"
+              fontFamily="'SF Mono', 'Fira Code', monospace"
+              fill={active ? theme.colors.text : theme.colors.textMuted}
+              opacity={active ? 0.7 : 0.35}
+            >
               {FEATURE_LABELS[i]}
             </text>
           )}
@@ -374,22 +523,69 @@ function renderComparisonBars({
             {feePayerPattern(patIdA, patIdxA, catColorA)}
             {!sameAddr && feePayerPattern(patIdB, patIdxB, catColorB)}
           </defs>
-          <path d={barPathDouble(x, centerY, halfW, barH, barH, r)} fill={`url(#${patIdA})`} />
-          <path d={barPathDouble(x, centerY, halfW, barH, barH, r)} fill="none" stroke={catColorA} strokeWidth="0.6" opacity="0.5" />
+          <path
+            d={barPathDouble(x, centerY, halfW, barH, barH, r)}
+            fill={`url(#${patIdA})`}
+          />
+          <path
+            d={barPathDouble(x, centerY, halfW, barH, barH, r)}
+            fill="none"
+            stroke={catColorA}
+            strokeWidth="0.6"
+            opacity="0.5"
+          />
           {!sameAddr && (
             <>
-              <path d={barPathDouble(x + halfW + gap, centerY, halfW, barH, barH, r)} fill={`url(#${patIdB})`} />
-              <path d={barPathDouble(x + halfW + gap, centerY, halfW, barH, barH, r)} fill="none" stroke={catColorB} strokeWidth="0.6" opacity="0.5" />
+              <path
+                d={barPathDouble(
+                  x + halfW + gap,
+                  centerY,
+                  halfW,
+                  barH,
+                  barH,
+                  r,
+                )}
+                fill={`url(#${patIdB})`}
+              />
+              <path
+                d={barPathDouble(
+                  x + halfW + gap,
+                  centerY,
+                  halfW,
+                  barH,
+                  barH,
+                  r,
+                )}
+                fill="none"
+                stroke={catColorB}
+                strokeWidth="0.6"
+                opacity="0.5"
+              />
             </>
           )}
           <rect
-            x={x} y={barTopY} width={barW} height={barH * 2} fill="transparent"
-            onTouchStart={(e) => { e.stopPropagation(); onTap(tooltip, barCenterX, barTopY); }}
+            x={x}
+            y={barTopY}
+            width={barW}
+            height={barH * 2}
+            fill="transparent"
+            onTouchStart={(e) => {
+              e.stopPropagation();
+              onTap(tooltip, barCenterX, barTopY);
+            }}
             onMouseEnter={() => onHover(tooltip, barCenterX, barTopY)}
             onMouseLeave={onHoverEnd}
           />
           {withGroupLabels && (
-            <text x={0} y={0} transform={`translate(${x + barW * 0.3}, ${centerY + maxBarH + 6}) rotate(65)`} fontSize="6" fontFamily="'SF Mono', 'Fira Code', monospace" fill={catColorA} fontWeight="600">
+            <text
+              x={0}
+              y={0}
+              transform={`translate(${x + barW * 0.3}, ${centerY + maxBarH + 6}) rotate(65)`}
+              fontSize="6"
+              fontFamily="'SF Mono', 'Fira Code', monospace"
+              fill={catColorA}
+              fontWeight="600"
+            >
               {FEATURE_LABELS[i]}
             </text>
           )}
@@ -420,34 +616,73 @@ function renderComparisonBars({
               strokeWidth="0.8"
               strokeOpacity={anyActive ? 0.75 : 0.35}
             />
-          ) : (() => {
-            const clipIdUp = `clip-up-${idScope}-${i}`;
-            const clipIdDn = `clip-dn-${idScope}-${i}`;
-            const d = barPathDouble(x, centerY, barW, barHA, barHB, r);
-            const top = centerY - barHA;
-            return (
-              <>
-                <defs>
-                  <clipPath id={clipIdUp}>
-                    <rect x={x - 1} y={top - 1} width={barW + 2} height={barHA + 1} />
-                  </clipPath>
-                  <clipPath id={clipIdDn}>
-                    <rect x={x - 1} y={centerY} width={barW + 2} height={barHB + 1} />
-                  </clipPath>
-                </defs>
-                <path d={d} fill={activeA ? colorA : ZERO_COLOR} opacity={activeA ? 0.85 : 0.4} clipPath={`url(#${clipIdUp})`} />
-                <path d={d} fill={activeB ? colorB : ZERO_COLOR} opacity={activeB ? 0.85 : 0.4} clipPath={`url(#${clipIdDn})`} />
-              </>
-            );
-          })()}
+          ) : (
+            (() => {
+              const clipIdUp = `clip-up-${idScope}-${i}`;
+              const clipIdDn = `clip-dn-${idScope}-${i}`;
+              const d = barPathDouble(x, centerY, barW, barHA, barHB, r);
+              const top = centerY - barHA;
+              return (
+                <>
+                  <defs>
+                    <clipPath id={clipIdUp}>
+                      <rect
+                        x={x - 1}
+                        y={top - 1}
+                        width={barW + 2}
+                        height={barHA + 1}
+                      />
+                    </clipPath>
+                    <clipPath id={clipIdDn}>
+                      <rect
+                        x={x - 1}
+                        y={centerY}
+                        width={barW + 2}
+                        height={barHB + 1}
+                      />
+                    </clipPath>
+                  </defs>
+                  <path
+                    d={d}
+                    fill={activeA ? colorA : ZERO_COLOR}
+                    opacity={activeA ? 0.85 : 0.4}
+                    clipPath={`url(#${clipIdUp})`}
+                  />
+                  <path
+                    d={d}
+                    fill={activeB ? colorB : ZERO_COLOR}
+                    opacity={activeB ? 0.85 : 0.4}
+                    clipPath={`url(#${clipIdDn})`}
+                  />
+                </>
+              );
+            })()
+          )}
           <rect
-            x={x} y={barTopY} width={barW} height={hitH * 2} fill="transparent"
-            onTouchStart={(e) => { e.stopPropagation(); onTap(tooltip, barCenterX, barTopY); }}
+            x={x}
+            y={barTopY}
+            width={barW}
+            height={hitH * 2}
+            fill="transparent"
+            onTouchStart={(e) => {
+              e.stopPropagation();
+              onTap(tooltip, barCenterX, barTopY);
+            }}
             onMouseEnter={() => onHover(tooltip, barCenterX, barTopY)}
             onMouseLeave={onHoverEnd}
           />
           {withGroupLabels && (
-            <text x={0} y={0} transform={`translate(${x + barW * 0.3}, ${centerY + maxBarH + 6}) rotate(65)`} fontSize="6" fontFamily="'SF Mono', 'Fira Code', monospace" fill={activeA || activeB ? theme.colors.text : theme.colors.textMuted} opacity={activeA || activeB ? 0.7 : 0.35}>
+            <text
+              x={0}
+              y={0}
+              transform={`translate(${x + barW * 0.3}, ${centerY + maxBarH + 6}) rotate(65)`}
+              fontSize="6"
+              fontFamily="'SF Mono', 'Fira Code', monospace"
+              fill={
+                activeA || activeB ? theme.colors.text : theme.colors.textMuted
+              }
+              opacity={activeA || activeB ? 0.7 : 0.35}
+            >
               {FEATURE_LABELS[i]}
             </text>
           )}
@@ -458,7 +693,9 @@ function renderComparisonBars({
   return elements;
 }
 
-function renderGroupLabelsAndSeparators(layout: ReturnType<typeof computeLayout>) {
+function renderGroupLabelsAndSeparators(
+  layout: ReturnType<typeof computeLayout>,
+) {
   const { barX, barW, centerY, maxBarH } = layout;
   const elements: React.ReactElement[] = [];
 
@@ -468,7 +705,17 @@ function renderGroupLabelsAndSeparators(layout: ReturnType<typeof computeLayout>
     const x2 = barX(g.end) + barW;
 
     elements.push(
-      <text key={`lbl-${g.label}`} x={(x1 + x2) / 2} y={10} textAnchor="middle" fontSize="7" fontWeight="700" fontFamily="'SF Mono', 'Fira Code', monospace" fill={theme.colors.textMuted} letterSpacing="0.06em">
+      <text
+        key={`lbl-${g.label}`}
+        x={(x1 + x2) / 2}
+        y={10}
+        textAnchor="middle"
+        fontSize="7"
+        fontWeight="700"
+        fontFamily="'SF Mono', 'Fira Code', monospace"
+        fill={theme.colors.textMuted}
+        letterSpacing="0.06em"
+      >
         {g.label.toUpperCase()}
       </text>,
     );
@@ -477,7 +724,16 @@ function renderGroupLabelsAndSeparators(layout: ReturnType<typeof computeLayout>
       const nextX = barX(GROUPS[gi + 1].start);
       const sepX = (x2 + nextX) / 2;
       elements.push(
-        <line key={`sep-${gi}`} x1={sepX} y1={centerY - maxBarH} x2={sepX} y2={centerY + maxBarH} stroke={theme.colors.border} strokeWidth="0.5" strokeDasharray="2 2" />,
+        <line
+          key={`sep-${gi}`}
+          x1={sepX}
+          y1={centerY - maxBarH}
+          x2={sepX}
+          y2={centerY + maxBarH}
+          stroke={theme.colors.border}
+          strokeWidth="0.5"
+          strokeDasharray="2 2"
+        />,
       );
     }
   }
@@ -487,7 +743,7 @@ function renderGroupLabelsAndSeparators(layout: ReturnType<typeof computeLayout>
 // ── Viewbox dimensions ──
 
 const VB_W = 500;
-const VB_H_FULL = 200;  // with group labels + bar axis labels
+const VB_H_FULL = 200; // with group labels + bar axis labels
 const VB_H_COMPACT = 90; // bars only
 
 // ── SVG building blocks — each one handles its own tooltip state ──
@@ -496,7 +752,14 @@ const VB_H_COMPACT = 90; // bars only
  * Single-tx bars, full height with group/axis labels. Desktop hover tooltip.
  */
 function FullBarsSvg({
-  vector, maxValues, layout, color, vbH, idScope, svgRef, extraSvgProps,
+  vector,
+  maxValues,
+  layout,
+  color,
+  vbH,
+  idScope,
+  svgRef,
+  extraSvgProps,
 }: {
   vector: (number | string)[];
   maxValues?: number[];
@@ -509,10 +772,26 @@ function FullBarsSvg({
 }) {
   const tt = useTooltip();
   return (
-    <ResponsiveSvg ref={svgRef} viewBox={`0 0 ${VB_W} ${vbH}`} preserveAspectRatio="xMidYMid meet" onMouseLeave={tt.hide} {...extraSvgProps}>
+    <ResponsiveSvg
+      ref={svgRef}
+      viewBox={`0 0 ${VB_W} ${vbH}`}
+      preserveAspectRatio="xMidYMid meet"
+      onMouseLeave={tt.hide}
+      {...extraSvgProps}
+    >
       {extraSvgProps?.children}
       {renderGroupLabelsAndSeparators(layout)}
-      {renderBars({ vector, maxValues, layout, color, withGroupLabels: true, idScope, onTap: tt.tap, onHover: tt.show, onHoverEnd: tt.hide })}
+      {renderBars({
+        vector,
+        maxValues,
+        layout,
+        color,
+        withGroupLabels: true,
+        idScope,
+        onTap: tt.tap,
+        onHover: tt.show,
+        onHoverEnd: tt.hide,
+      })}
       {tt.tip && <TooltipOverlay tip={tt.tip} vbW={VB_W} vbH={vbH} />}
     </ResponsiveSvg>
   );
@@ -522,7 +801,15 @@ function FullBarsSvg({
  * Single-tx bars, compact (no labels). Both hover and tap tooltips.
  */
 function CompactBarsSvg({
-  vector, maxValues, layout, color, vbH, idScope, className, svgRef, extraSvgProps,
+  vector,
+  maxValues,
+  layout,
+  color,
+  vbH,
+  idScope,
+  className,
+  svgRef,
+  extraSvgProps,
 }: {
   vector: (number | string)[];
   maxValues?: number[];
@@ -546,7 +833,17 @@ function CompactBarsSvg({
       {...extraSvgProps}
     >
       {extraSvgProps?.children}
-      {renderBars({ vector, maxValues, layout, color, withGroupLabels: false, idScope, onTap: tt.tap, onHover: tt.show, onHoverEnd: tt.hide })}
+      {renderBars({
+        vector,
+        maxValues,
+        layout,
+        color,
+        withGroupLabels: false,
+        idScope,
+        onTap: tt.tap,
+        onHover: tt.show,
+        onHoverEnd: tt.hide,
+      })}
       {tt.tip && <TooltipOverlay tip={tt.tip} vbW={VB_W} vbH={vbH} />}
     </ResponsiveSvg>
   );
@@ -556,7 +853,16 @@ function CompactBarsSvg({
  * Comparison bars, full height with group/axis labels. Desktop hover tooltip.
  */
 function FullCompareSvg({
-  vectorA, vectorB, maxValues, layout, colorA, colorB, labelA, labelB, vbH, idScope,
+  vectorA,
+  vectorB,
+  maxValues,
+  layout,
+  colorA,
+  colorB,
+  labelA,
+  labelB,
+  vbH,
+  idScope,
 }: {
   vectorA: (number | string)[];
   vectorB: (number | string)[];
@@ -571,9 +877,27 @@ function FullCompareSvg({
 }) {
   const tt = useTooltip();
   return (
-    <ResponsiveSvg viewBox={`0 0 ${VB_W} ${vbH}`} preserveAspectRatio="xMidYMid meet" onMouseLeave={tt.hide}>
+    <ResponsiveSvg
+      viewBox={`0 0 ${VB_W} ${vbH}`}
+      preserveAspectRatio="xMidYMid meet"
+      onMouseLeave={tt.hide}
+    >
       {renderGroupLabelsAndSeparators(layout)}
-      {renderComparisonBars({ vectorA, vectorB, maxValues, layout, colorA, colorB, labelA, labelB, withGroupLabels: true, idScope, onTap: tt.tap, onHover: tt.show, onHoverEnd: tt.hide })}
+      {renderComparisonBars({
+        vectorA,
+        vectorB,
+        maxValues,
+        layout,
+        colorA,
+        colorB,
+        labelA,
+        labelB,
+        withGroupLabels: true,
+        idScope,
+        onTap: tt.tap,
+        onHover: tt.show,
+        onHoverEnd: tt.hide,
+      })}
       {tt.tip && <TooltipOverlay tip={tt.tip} vbW={VB_W} vbH={vbH} />}
     </ResponsiveSvg>
   );
@@ -583,7 +907,17 @@ function FullCompareSvg({
  * Comparison bars, compact (no labels). Both hover and tap tooltips.
  */
 function CompactCompareSvg({
-  vectorA, vectorB, maxValues, layout, colorA, colorB, labelA, labelB, vbH, idScope, className,
+  vectorA,
+  vectorB,
+  maxValues,
+  layout,
+  colorA,
+  colorB,
+  labelA,
+  labelB,
+  vbH,
+  idScope,
+  className,
 }: {
   vectorA: (number | string)[];
   vectorB: (number | string)[];
@@ -606,7 +940,21 @@ function CompactCompareSvg({
       onMouseLeave={tt.hide}
       onTouchStart={() => tt.hide()}
     >
-      {renderComparisonBars({ vectorA, vectorB, maxValues, layout, colorA, colorB, labelA, labelB, withGroupLabels: false, idScope, onTap: tt.tap, onHover: tt.show, onHoverEnd: tt.hide })}
+      {renderComparisonBars({
+        vectorA,
+        vectorB,
+        maxValues,
+        layout,
+        colorA,
+        colorB,
+        labelA,
+        labelB,
+        withGroupLabels: false,
+        idScope,
+        onTap: tt.tap,
+        onHover: tt.show,
+        onHoverEnd: tt.hide,
+      })}
       {tt.tip && <TooltipOverlay tip={tt.tip} vbW={VB_W} vbH={vbH} />}
     </ResponsiveSvg>
   );
@@ -640,14 +988,24 @@ export function TxFingerprint({
   className,
 }: TxFingerprintProps) {
   const vbH = compact ? VB_H_COMPACT : showLabels ? VB_H_FULL : VB_H_COMPACT;
-  const layout = computeLayout(vector.length, VB_W, vbH, showLabels && !compact);
+  const layout = computeLayout(
+    vector.length,
+    VB_W,
+    vbH,
+    showLabels && !compact,
+  );
 
   if (!showLabels || compact) {
     // Compact: single SVG for all screen sizes, hover+tap both work
     return (
       <CompactBarsSvg
-        vector={vector} maxValues={maxValues} layout={layout} color={color}
-        vbH={vbH} idScope="c" className={className}
+        vector={vector}
+        maxValues={maxValues}
+        layout={layout}
+        color={color}
+        vbH={vbH}
+        idScope="c"
+        className={className}
       />
     );
   }
@@ -657,10 +1015,24 @@ export function TxFingerprint({
   return (
     <div className={className}>
       <DesktopOnly>
-        <FullBarsSvg vector={vector} maxValues={maxValues} layout={layout} color={color} vbH={vbH} idScope="d" />
+        <FullBarsSvg
+          vector={vector}
+          maxValues={maxValues}
+          layout={layout}
+          color={color}
+          vbH={vbH}
+          idScope="d"
+        />
       </DesktopOnly>
       <MobileOnly>
-        <CompactBarsSvg vector={vector} maxValues={maxValues} layout={compactLayout} color={color} vbH={VB_H_COMPACT} idScope="m" />
+        <CompactBarsSvg
+          vector={vector}
+          maxValues={maxValues}
+          layout={compactLayout}
+          color={color}
+          vbH={VB_H_COMPACT}
+          idScope="m"
+        />
       </MobileOnly>
     </div>
   );
@@ -698,33 +1070,65 @@ export function FingerprintCompare({
   className,
 }: FingerprintCompareProps) {
   const vbH = compact ? VB_H_COMPACT : showLabels ? VB_H_FULL : VB_H_COMPACT;
-  const layout = computeLayout(vectorA.length, VB_W, vbH, showLabels && !compact);
+  const layout = computeLayout(
+    vectorA.length,
+    VB_W,
+    vbH,
+    showLabels && !compact,
+  );
 
   if (!showLabels || compact) {
     return (
       <CompactCompareSvg
-        vectorA={vectorA} vectorB={vectorB} maxValues={maxValues}
-        layout={layout} colorA={colorA} colorB={colorB}
-        labelA={labelA} labelB={labelB} vbH={vbH} idScope="cc" className={className}
+        vectorA={vectorA}
+        vectorB={vectorB}
+        maxValues={maxValues}
+        layout={layout}
+        colorA={colorA}
+        colorB={colorB}
+        labelA={labelA}
+        labelB={labelB}
+        vbH={vbH}
+        idScope="cc"
+        className={className}
       />
     );
   }
 
-  const compactLayout = computeLayout(vectorA.length, VB_W, VB_H_COMPACT, false);
+  const compactLayout = computeLayout(
+    vectorA.length,
+    VB_W,
+    VB_H_COMPACT,
+    false,
+  );
   return (
     <div className={className}>
       <DesktopOnly>
         <FullCompareSvg
-          vectorA={vectorA} vectorB={vectorB} maxValues={maxValues}
-          layout={layout} colorA={colorA} colorB={colorB}
-          labelA={labelA} labelB={labelB} vbH={vbH} idScope="cd"
+          vectorA={vectorA}
+          vectorB={vectorB}
+          maxValues={maxValues}
+          layout={layout}
+          colorA={colorA}
+          colorB={colorB}
+          labelA={labelA}
+          labelB={labelB}
+          vbH={vbH}
+          idScope="cd"
         />
       </DesktopOnly>
       <MobileOnly>
         <CompactCompareSvg
-          vectorA={vectorA} vectorB={vectorB} maxValues={maxValues}
-          layout={compactLayout} colorA={colorA} colorB={colorB}
-          labelA={labelA} labelB={labelB} vbH={VB_H_COMPACT} idScope="cm"
+          vectorA={vectorA}
+          vectorB={vectorB}
+          maxValues={maxValues}
+          layout={compactLayout}
+          colorA={colorA}
+          colorB={colorB}
+          labelA={labelA}
+          labelB={labelB}
+          vbH={VB_H_COMPACT}
+          idScope="cm"
         />
       </MobileOnly>
     </div>
@@ -732,7 +1136,9 @@ export function FingerprintCompare({
 }
 
 /** Hook to export SVG as PNG data URL */
-export function useFingerprintSnapshot(svgRef: React.RefObject<SVGSVGElement | null>) {
+export function useFingerprintSnapshot(
+  svgRef: React.RefObject<SVGSVGElement | null>,
+) {
   return useCallback(
     (scale = 2): Promise<string> =>
       new Promise((resolve, reject) => {
@@ -740,7 +1146,10 @@ export function useFingerprintSnapshot(svgRef: React.RefObject<SVGSVGElement | n
         if (!svg) return reject(new Error("No SVG ref"));
 
         const svgData = new XMLSerializer().serializeToString(svg);
-        const blob = new Blob([`<?xml version="1.0" encoding="UTF-8"?>${svgData}`], { type: "image/svg+xml" });
+        const blob = new Blob(
+          [`<?xml version="1.0" encoding="UTF-8"?>${svgData}`],
+          { type: "image/svg+xml" },
+        );
         const url = URL.createObjectURL(blob);
         const img = new Image();
         img.onload = () => {
@@ -787,20 +1196,43 @@ export function SnapshotableFingerprint({
     <SnapshotWrapper className={className}>
       <DesktopOnly>
         <FullBarsSvg
-          vector={vector} maxValues={maxValues} layout={layout} color={color}
-          vbH={vbH} idScope="sd" svgRef={svgRef}
+          vector={vector}
+          maxValues={maxValues}
+          layout={layout}
+          color={color}
+          vbH={vbH}
+          idScope="sd"
+          svgRef={svgRef}
           extraSvgProps={{
             xmlns: "http://www.w3.org/2000/svg",
-            children: <rect width={VB_W} height={vbH} fill={theme.colors.bgCard} rx="8" />,
+            children: (
+              <rect
+                width={VB_W}
+                height={vbH}
+                fill={theme.colors.bgCard}
+                rx="8"
+              />
+            ),
           }}
         />
       </DesktopOnly>
       <MobileOnly>
         <CompactBarsSvg
-          vector={vector} maxValues={maxValues} layout={compactLayout} color={color}
-          vbH={VB_H_COMPACT} idScope="sm"
+          vector={vector}
+          maxValues={maxValues}
+          layout={compactLayout}
+          color={color}
+          vbH={VB_H_COMPACT}
+          idScope="sm"
           extraSvgProps={{
-            children: <rect width={VB_W} height={VB_H_COMPACT} fill={theme.colors.bgCard} rx="8" />,
+            children: (
+              <rect
+                width={VB_W}
+                height={VB_H_COMPACT}
+                fill={theme.colors.bgCard}
+                rx="8"
+              />
+            ),
           }}
         />
       </MobileOnly>
@@ -871,7 +1303,13 @@ const DownloadButton = styled.button`
 function DownloadIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-      <path d="M7 1v8m0 0L4 6.5M7 9l3-2.5M2 11h10" stroke={theme.colors.textMuted} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path
+        d="M7 1v8m0 0L4 6.5M7 9l3-2.5M2 11h10"
+        stroke={theme.colors.textMuted}
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
