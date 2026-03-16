@@ -52,23 +52,13 @@ const FieldValue = styled(Mono)`
   word-break: break-all;
 `;
 
-const SlotLabel = styled.div`
+const SlotLabelRow = styled.div`
   font-size: ${theme.fontSize.xs};
   color: ${theme.colors.textMuted};
   white-space: nowrap;
-  width: 160px;
-  flex-shrink: 0;
   overflow: hidden;
-  position: relative;
-
-  & > span {
-    display: inline-block;
-    transition: transform 0.6s ease;
-  }
-
-  &:hover > span {
-    transform: translateX(calc(min(0px, 160px - 100%)));
-  }
+  text-overflow: ellipsis;
+  padding-top: ${theme.spacing.xs};
 `;
 
 const HeatmapBar = styled.div`
@@ -112,6 +102,27 @@ const SlotRow = styled.div`
 
   &:not(:last-child) {
     border-bottom: 1px solid ${theme.colors.border};
+  }
+
+  @media (max-width: 768px) {
+    gap: ${theme.spacing.xs};
+  }
+`;
+
+const SlotEntry = styled.div`
+  &:not(:last-child) {
+    border-bottom: 1px solid ${theme.colors.border};
+  }
+`;
+
+const WriteBadge = styled(Badge)`
+  flex-shrink: 0;
+  width: 56px;
+  text-align: center;
+
+  @media (max-width: 768px) {
+    width: 36px;
+    font-size: 10px;
   }
 `;
 
@@ -546,8 +557,34 @@ function SlotTimelines({
       <Card
         style={{ padding: theme.spacing.md, marginBottom: theme.spacing.md }}
       >
-        {data.slots.map((slot) => (
-          <div key={slot.leafSlot}>
+        {data.slots.map((slot) => {
+          const slotTitle = slot.resolvedContract
+            ? `${slot.resolvedContract.label ?? slot.resolvedContract.address} [${slot.resolvedContract.storageSlotIndex}]`
+            : slot.leafSlot;
+          const slotContent = slot.resolvedContract ? (
+            <>
+              <Badge
+                color={theme.colors.primary}
+                style={{ fontSize: "10px" }}
+              >
+                {slot.resolvedContract.label ??
+                  abbreviateHex(slot.resolvedContract.address)}
+              </Badge>{" "}
+              <span style={{ color: theme.colors.textMuted }}>
+                [{slot.resolvedContract.storageSlotIndex}]
+              </span>
+            </>
+          ) : (
+            <Mono style={{ fontSize: "10px" }}>
+              {abbreviateHex(slot.leafSlot)}
+            </Mono>
+          );
+
+          return (
+          <SlotEntry key={slot.leafSlot}>
+            <SlotLabelRow title={slotTitle}>
+              {slotContent}
+            </SlotLabelRow>
             <SlotRow
               style={{ cursor: "pointer" }}
               onClick={() =>
@@ -556,42 +593,14 @@ function SlotTimelines({
                 )
               }
             >
-              <SlotLabel
-                title={
-                  slot.resolvedContract
-                    ? `${slot.resolvedContract.label ?? slot.resolvedContract.address} [${slot.resolvedContract.storageSlotIndex}]`
-                    : slot.leafSlot
-                }
-              >
-                <span>
-                  {slot.resolvedContract ? (
-                    <>
-                      <Badge
-                        color={theme.colors.primary}
-                        style={{ fontSize: "10px" }}
-                      >
-                        {slot.resolvedContract.label ??
-                          abbreviateHex(slot.resolvedContract.address)}
-                      </Badge>{" "}
-                      <span style={{ color: theme.colors.textMuted }}>
-                        [{slot.resolvedContract.storageSlotIndex}]
-                      </span>
-                    </>
-                  ) : (
-                    <Mono style={{ fontSize: "10px" }}>
-                      {abbreviateHex(slot.leafSlot)}
-                    </Mono>
-                  )}
-                </span>
-              </SlotLabel>
               <SlotHeatmap
                 histogram={slot.histogram}
                 focalBin={slot.focalBin}
                 blockRange={slot.blockRange}
               />
-              <Badge color={theme.colors.accent} style={{ flexShrink: 0 }}>
+              <WriteBadge color={theme.colors.accent}>
                 {slot.totalWrites}
-              </Badge>
+              </WriteBadge>
             </SlotRow>
             {expandedSlot === slot.leafSlot &&
               slot.nearbyWrites.length > 0 && (
@@ -624,8 +633,9 @@ function SlotTimelines({
                   ))}
                 </NearbyList>
               )}
-          </div>
-        ))}
+          </SlotEntry>
+          );
+        })}
       </Card>
     </Collapsible>
   );
