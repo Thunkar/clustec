@@ -8,6 +8,7 @@ import { TxDetail } from "./pages/TxDetail";
 import { Labels } from "./pages/Labels";
 import { MurderBoard } from "./pages/MurderBoard";
 import { Admin } from "./pages/Admin";
+import { Fees } from "./pages/Fees";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -30,6 +31,7 @@ export function App() {
             <Route path="/tx/:hash" element={<TxDetail />} />
             <Route path="/labels" element={<Labels />} />
             <Route path="/murder-board" element={<MurderBoard />} />
+            <Route path="/fees" element={<Fees />} />
             <Route path="/admin" element={<Admin />} />
           </Route>
         </Routes>

@@ -142,10 +142,10 @@ export function TxTable({
             {header("numPrivateLogs", "Priv Logs")}
             {header("numContractClassLogs", "CC Logs")}
             {header("numPublicLogs", "Pub Logs")}
-            {header("gasLimitDa", "DA Limit")}
-            {header("gasLimitL2", "L2 Limit")}
-            {header("maxFeePerDaGas", "Max Fee/DA Gas")}
-            {header("maxFeePerL2Gas", "Max Fee/L2 Gas")}
+            {header("gasLimitDa", "DA Mana Limit")}
+            {header("gasLimitL2", "L2 Mana Limit")}
+            {header("maxFeePerDaGas", "Max Fee/DA Mana")}
+            {header("maxFeePerL2Gas", "Max Fee/L2 Mana")}
             {header("numSetupCalls", "Pub Setup")}
             {header("numAppCalls", "Pub App")}
             {header("totalPublicCalldataSize", "Pub Calldata Size")}

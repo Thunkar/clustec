@@ -10,6 +10,7 @@ import { registerLabelRoutes } from "./labels.ts";
 import { registerAnalyzeRoutes } from "./analyze.ts";
 import { registerGraphRoutes } from "./graph.ts";
 import { registerMurderBoardRoutes } from "./murder-board.ts";
+import { registerFeeRoutes } from "./fees.ts";
 
 export function registerRoutes(
   app: FastifyInstance,
@@ -25,4 +26,5 @@ export function registerRoutes(
   registerAnalyzeRoutes(app, db);
   registerGraphRoutes(app, db);
   registerMurderBoardRoutes(app, db);
+  registerFeeRoutes(app, db, feePricing);
 }
