@@ -125,6 +125,7 @@ const navItems = [
   { path: "/privacy-sets", label: "Privacy Sets" },
   { path: "/labels", label: "Labels" },
   { path: "/murder-board", label: "Murder Board" },
+  { path: "/fees", label: "Fees" },
   { path: "/admin", label: "Admin" },
 ];
 

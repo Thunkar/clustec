@@ -6,7 +6,7 @@ import { theme } from "../lib/theme";
  * Labels match the feature vector indices from features.ts:
  *  0: numNoteHashes, 1: numNullifiers, 2: numL2ToL1Msgs,
  *  3: numPrivateLogs, 4: numContractClassLogs, 5: numPublicLogs,
- *  6: gasLimitDa, 7: gasLimitL2, 8: maxFeePerDaGas, 9: maxFeePerL2Gas,
+ *  6: gasLimitDa (DA mana limit), 7: gasLimitL2 (L2 mana limit), 8: maxFeePerDaGas (max fee/DA mana), 9: maxFeePerL2Gas (max fee/L2 mana),
  * 10: numSetupCalls, 11: numAppCalls, 12: totalPublicCalldataSize,
  * 13: expirationDelta, 14: feePayer
  */
@@ -17,10 +17,10 @@ const FEATURE_LABELS = [
   "Priv Logs",
   "Class Logs",
   "Pub Logs",
-  "DA Limit",
-  "L2 Limit",
-  "Max Fee/DA Gas",
-  "Max Fee/L2 Gas",
+  "DA Mana Limit",
+  "L2 Mana Limit",
+  "Max Fee/DA Mana",
+  "Max Fee/L2 Mana",
   "Setup",
   "App",
   "Calldata Size",
@@ -30,7 +30,7 @@ const FEATURE_LABELS = [
 
 const GROUPS = [
   { start: 0, end: 5, label: "Counts" },
-  { start: 6, end: 9, label: "Gas" },
+  { start: 6, end: 9, label: "Mana" },
   { start: 10, end: 12, label: "Pub Calls" },
   { start: 13, end: 13, label: "Time" },
   { start: 14, end: 14, label: "Identity" },

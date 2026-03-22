@@ -419,6 +419,37 @@ export interface MurderBoardData {
   privacyScore: { score: number; factors: PrivacyScoreFactor[] } | null;
 }
 
+// ── Fee types ──
+
+export interface FeeHistoryPoint {
+  blockNumber: number;
+  timestamp: number | null;
+  feePerDaGas: string | null;
+  feePerL2Gas: string | null;
+  totalFees: string | null;
+  numTxs: number;
+}
+
+export interface FeeSpreadBucket {
+  bucket: number;
+  minBlock: number;
+  maxBlock: number;
+  txCount: number;
+  avgActualFee: string | null;
+  minActualFee: string | null;
+  maxActualFee: string | null;
+  p25ActualFee: string | null;
+  medianActualFee: string | null;
+  p75ActualFee: string | null;
+  avgMaxFeePerDaGas: string | null;
+  avgMaxFeePerL2Gas: string | null;
+}
+
+export interface CurrentFees {
+  block: FeeHistoryPoint | null;
+  pricing: { ethUsdPrice: number; ethPerFeeAssetE12: string } | null;
+}
+
 // ── API functions ──
 
 export const api = {
@@ -478,4 +509,23 @@ export const api = {
     fetchJson<{ feePayers: FeePayerStat[] }>(`/networks/${id}/txs/stats/fee-payers`),
   getMurderBoard: (id: string, address: string) =>
     fetchJson<MurderBoardData>(`/networks/${id}/murder-board/${encodeURIComponent(address)}`),
+  getFeeHistory: (id: string, opts?: { from?: number; to?: number; resolution?: string }) => {
+    const params = new URLSearchParams();
+    if (opts?.from != null) params.set("from", String(opts.from));
+    if (opts?.to != null) params.set("to", String(opts.to));
+    if (opts?.resolution) params.set("resolution", opts.resolution);
+    return fetchJson<{ data: FeeHistoryPoint[]; bucketSize?: number }>(
+      `/networks/${id}/fees/history?${params.toString()}`
+    );
+  },
+  getFeeSpread: (id: string, opts?: { from?: number; to?: number; bucketSize?: number }) => {
+    const params = new URLSearchParams();
+    if (opts?.from != null) params.set("from", String(opts.from));
+    if (opts?.to != null) params.set("to", String(opts.to));
+    if (opts?.bucketSize != null) params.set("bucketSize", String(opts.bucketSize));
+    return fetchJson<{ data: FeeSpreadBucket[]; bucketSize: number }>(
+      `/networks/${id}/fees/spread?${params.toString()}`
+    );
+  },
+  getCurrentFees: (id: string) => fetchJson<CurrentFees>(`/networks/${id}/fees/current`),
 };

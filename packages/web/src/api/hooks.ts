@@ -172,4 +172,33 @@ export function useRevertAnalysisConfig(networkId: string) {
   });
 }
 
+export function useFeeHistory(
+  networkId: string,
+  opts?: { from?: number; to?: number; resolution?: string },
+) {
+  return useQuery({
+    queryKey: ["networks", networkId, "fees", "history", opts],
+    queryFn: () => api.getFeeHistory(networkId, opts),
+    enabled: !!networkId,
+  });
+}
 
+export function useFeeSpread(
+  networkId: string,
+  opts?: { from?: number; to?: number; bucketSize?: number },
+) {
+  return useQuery({
+    queryKey: ["networks", networkId, "fees", "spread", opts],
+    queryFn: () => api.getFeeSpread(networkId, opts),
+    enabled: !!networkId,
+  });
+}
+
+export function useCurrentFees(networkId: string) {
+  return useQuery({
+    queryKey: ["networks", networkId, "fees", "current"],
+    queryFn: () => api.getCurrentFees(networkId),
+    enabled: !!networkId,
+    refetchInterval: 30_000,
+  });
+}

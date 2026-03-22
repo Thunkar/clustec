@@ -36,6 +36,13 @@
       "when": 1774000000000,
       "tag": "0004_fix_note_hash_nullifier_counts",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1774000001000,
+      "tag": "0005_add_block_base_fees",
+      "breakpoints": true
     }
   ]
 }
