@@ -89,8 +89,12 @@ export function registerFeeRoutes(
         p25ActualFee: sql<string>`(percentile_cont(0.25) within group (order by ${transactions.actualFee}::numeric))::text`.as("p25_actual_fee"),
         medianActualFee: sql<string>`(percentile_cont(0.5) within group (order by ${transactions.actualFee}::numeric))::text`.as("median_actual_fee"),
         p75ActualFee: sql<string>`(percentile_cont(0.75) within group (order by ${transactions.actualFee}::numeric))::text`.as("p75_actual_fee"),
-        avgMaxFeePerDaGas: sql<string>`avg(${transactions.maxFeePerDaGas}::numeric)::text`.as("avg_max_fee_da"),
-        avgMaxFeePerL2Gas: sql<string>`avg(${transactions.maxFeePerL2Gas}::numeric)::text`.as("avg_max_fee_l2"),
+        medianMaxFeePerDaGas: sql<string>`(percentile_cont(0.5) within group (order by ${transactions.maxFeePerDaGas}::numeric))::text`.as("median_max_fee_da"),
+        medianMaxFeePerL2Gas: sql<string>`(percentile_cont(0.5) within group (order by ${transactions.maxFeePerL2Gas}::numeric))::text`.as("median_max_fee_l2"),
+        p25MaxFeePerL2Gas: sql<string>`(percentile_cont(0.25) within group (order by ${transactions.maxFeePerL2Gas}::numeric))::text`.as("p25_max_fee_l2"),
+        p75MaxFeePerL2Gas: sql<string>`(percentile_cont(0.75) within group (order by ${transactions.maxFeePerL2Gas}::numeric))::text`.as("p75_max_fee_l2"),
+        medianGasLimitDa: sql<string>`(percentile_cont(0.5) within group (order by ${transactions.gasLimitDa}::numeric))::text`.as("median_gas_limit_da"),
+        medianGasLimitL2: sql<string>`(percentile_cont(0.5) within group (order by ${transactions.gasLimitL2}::numeric))::text`.as("median_gas_limit_l2"),
       })
       .from(transactions)
       .where(and(...conditions))

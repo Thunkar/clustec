@@ -1,4 +1,5 @@
-import { useState, useMemo, useCallback, useRef } from "react";
+import { useState, useMemo, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import styled from "@emotion/styled";
 import {
   ComposedChart,
@@ -11,6 +12,7 @@ import {
   ResponsiveContainer,
   Legend,
   ReferenceArea,
+  Bar,
 } from "recharts";
 import { theme } from "../lib/theme";
 import { useNetworkStore } from "../stores/network";
@@ -97,6 +99,7 @@ function formatUsd(v: number): string {
 
 export function Fees() {
   const { selectedNetwork } = useNetworkStore();
+  const queryClient = useQueryClient();
   const [range, setRange] = useState<TimeRange>("500");
 
   // Zoom state: drag-select on any chart to zoom all three
@@ -125,6 +128,9 @@ export function Fees() {
     setZoomFrom(null);
     setZoomTo(null);
   }, []);
+  const refresh = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ["networks", selectedNetwork, "fees"] });
+  }, [queryClient, selectedNetwork]);
 
   const resolution = resolutionForRange(range);
   const { data: currentData } = useCurrentFees(selectedNetwork);
@@ -160,10 +166,9 @@ export function Fees() {
   );
 
   // Build padded chart data covering the full selected range
-  const { feeChartData, utilizationChartData, spreadChartData } = useMemo(() => {
+  const { priceChartData, costChartData } = useMemo(() => {
     const start = fromBlock ?? 0;
     const end = latestBlock ?? start;
-    const bucketSize = resolution === "raw" ? 1 : (resolution === "10" ? 10 : resolution === "50" ? 50 : 100);
     const spreadBucket = spreadBucketForRange(range);
 
     // Index history data by block number (coerce to number — SQL may return strings)
@@ -178,38 +183,73 @@ export function Fees() {
       spreadByBucket.set(Number(b.bucket), b);
     }
 
-    // Generate full range of buckets
-    const feeRows: { block: number; daGas: number | null; l2Gas: number | null }[] = [];
-    const utilRows: { block: number; totalFees: number | null; numTxs: number }[] = [];
-    const spreadRows: { block: number; avgFee: number | null; minFee: number | null; maxFee: number | null; p25: number | null; median: number | null; p75: number | null; txCount: number }[] = [];
+    // Chart 1: Fee Per Mana — base fee + tx bid spread, per spread bucket
+    // We merge block base fees (averaged over the bucket) with tx bid percentiles
+    const priceRows: {
+      block: number;
+      baseDa: number | null;
+      baseL2: number | null;
+      medianBidL2: number | null;
+      p25BidL2: number | null;
+      p75BidL2: number | null;
+      medianBidDa: number | null;
+      medianManaL2: number | null;
+      medianManaDa: number | null;
+    }[] = [];
 
-    const startBucket = Math.floor(start / bucketSize) * bucketSize;
-    for (let b = startBucket; b <= end; b += bucketSize) {
-      const h = historyByBlock.get(b);
-      feeRows.push({
-        block: b,
-        daGas: h ? toNum(h.feePerDaGas) : null,
-        l2Gas: h ? toNum(h.feePerL2Gas) : null,
-      });
-      utilRows.push({
-        block: b,
-        totalFees: h ? toNum(h.totalFees) : null,
-        numTxs: h?.numTxs ?? 0,
-      });
-    }
+    // Chart 2: Total Fee Paid + utilization
+    const costRows: {
+      block: number;
+      medianFee: number | null;
+      p25Fee: number | null;
+      p75Fee: number | null;
+      minFee: number | null;
+      maxFee: number | null;
+      txCount: number;
+    }[] = [];
 
     const startSpread = Math.floor(start / spreadBucket) * spreadBucket;
     for (let b = startSpread; b <= end; b += spreadBucket) {
       const s = spreadByBucket.get(b);
-      spreadRows.push({
+
+      // Average block base fees within this bucket window
+      let sumDa = 0, sumL2 = 0, countFee = 0;
+      for (let blk = b; blk < b + spreadBucket && blk <= end; blk++) {
+        const h = historyByBlock.get(blk);
+        if (h?.feePerDaGas != null && h?.feePerL2Gas != null) {
+          sumDa += Number(h.feePerDaGas);
+          sumL2 += Number(h.feePerL2Gas);
+          countFee++;
+        }
+      }
+
+      priceRows.push({
         block: b,
-        txCount: s?.txCount ?? 0,
-        avgFee: s ? toNum(s.avgActualFee) : null,
+        baseDa: countFee > 0 ? sumDa / countFee : null,
+        baseL2: countFee > 0 ? sumL2 / countFee : null,
+        medianBidL2: s ? toNum(s.medianMaxFeePerL2Gas) : null,
+        p25BidL2: s ? toNum(s.p25MaxFeePerL2Gas) : null,
+        p75BidL2: s ? toNum(s.p75MaxFeePerL2Gas) : null,
+        medianBidDa: s ? toNum(s.medianMaxFeePerDaGas) : null,
+        medianManaL2: s ? toNum(s.medianGasLimitL2) : null,
+        medianManaDa: s ? toNum(s.medianGasLimitDa) : null,
+      });
+
+      // Aggregate tx count from history blocks in this bucket
+      let txs = 0;
+      for (let blk = b; blk < b + spreadBucket && blk <= end; blk++) {
+        const h = historyByBlock.get(blk);
+        if (h) txs += h.numTxs ?? 0;
+      }
+
+      costRows.push({
+        block: b,
+        medianFee: s ? toNum(s.medianActualFee) : null,
+        p25Fee: s ? toNum(s.p25ActualFee) : null,
+        p75Fee: s ? toNum(s.p75ActualFee) : null,
         minFee: s ? toNum(s.minActualFee) : null,
         maxFee: s ? toNum(s.maxActualFee) : null,
-        p25: s ? toNum(s.p25ActualFee) : null,
-        median: s ? toNum(s.medianActualFee) : null,
-        p75: s ? toNum(s.p75ActualFee) : null,
+        txCount: s ? Number(s.txCount) : txs,
       });
     }
 
@@ -218,11 +258,10 @@ export function Fees() {
       (zoomFrom == null || block >= zoomFrom) && (zoomTo == null || block <= zoomTo);
 
     return {
-      feeChartData: feeRows.filter((r) => inZoom(r.block)),
-      utilizationChartData: utilRows.filter((r) => inZoom(r.block)),
-      spreadChartData: spreadRows.filter((r) => inZoom(r.block)),
+      priceChartData: priceRows.filter((r) => inZoom(r.block)),
+      costChartData: costRows.filter((r) => inZoom(r.block)),
     };
-  }, [historyData, spreadData, fromBlock, latestBlock, resolution, range, zoomFrom, zoomTo]);
+  }, [historyData, spreadData, fromBlock, latestBlock, range, zoomFrom, zoomTo]);
 
   // Shared drag-to-zoom props for all ComposedCharts
   const zoomProps = {
@@ -256,6 +295,7 @@ export function Fees() {
       <Header>
         <PageTitle>Fee Analytics</PageTitle>
         <HeaderControls>
+        <RefreshButton onClick={refresh} title="Refresh data">↻</RefreshButton>
         {isZoomed && (
           <ResetZoomButton onClick={resetZoom}>Reset Zoom</ResetZoomButton>
         )}
@@ -308,257 +348,112 @@ export function Fees() {
         </StatCard>
       </Grid>
 
-      {/* Base fee evolution chart */}
+      {/* Chart 1: Fee Per Mana — base fee vs tx bids */}
       <ChartCard>
-        <ChartTitle>Base Fee Evolution</ChartTitle>
-        <ChartSubtitle>Fee Juice per mana, per block</ChartSubtitle>
-        {historyLoading || !rangeReady ? (
+        <ChartTitle>Fee Per Mana</ChartTitle>
+        <ChartSubtitle>Block base fee vs what txs bid (Fee Juice per mana). Band = p25–p75 of L2 bids. Dashed = mana limits.</ChartSubtitle>
+        {(historyLoading || spreadLoading || !rangeReady) ? (
           <Loading />
         ) : (
-          <ResponsiveContainer width="100%" height={340}>
-            <ComposedChart data={feeChartData} margin={{ top: 10, right: 20, bottom: 10, left: 10 }} {...zoomProps}>
+          <ResponsiveContainer width="100%" height={380}>
+            <ComposedChart data={priceChartData} margin={{ top: 10, right: 20, bottom: 10, left: 10 }} {...zoomProps}>
               <defs>
-                <linearGradient id="gradDa" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={theme.colors.primary} stopOpacity={0.3} />
-                  <stop offset="100%" stopColor={theme.colors.primary} stopOpacity={0.02} />
-                </linearGradient>
-                <linearGradient id="gradL2" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={theme.colors.accent} stopOpacity={0.3} />
+                <linearGradient id="gradBidL2" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={theme.colors.accent} stopOpacity={0.2} />
                   <stop offset="100%" stopColor={theme.colors.accent} stopOpacity={0.02} />
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke={theme.colors.border} opacity={0.3} />
-              <XAxis
-                dataKey="block"
-                stroke={theme.colors.textMuted}
-                fontSize={10}
-                tickFormatter={(v) => `#${v}`}
-              />
-              <YAxis
-                stroke={theme.colors.textMuted}
-                fontSize={10}
-                tickFormatter={(v) => formatFeeJuice(v)}
-              />
+              <XAxis dataKey="block" stroke={theme.colors.textMuted} fontSize={10} tickFormatter={(v) => `#${v}`} />
+              <YAxis yAxisId="fee" stroke={theme.colors.textMuted} fontSize={10} tickFormatter={(v) => formatFeeJuice(v)} />
+              <YAxis yAxisId="mana" orientation="right" stroke={theme.colors.textMuted} fontSize={10} tickFormatter={(v) => formatFeeJuice(v)} />
               <Tooltip
-                contentStyle={{
-                  background: theme.colors.bgCard,
-                  border: `1px solid ${theme.colors.border}`,
-                  borderRadius: theme.radius.sm,
-                  fontSize: 11,
-                  fontFamily: "monospace",
-                }}
+                contentStyle={{ background: theme.colors.bgCard, border: `1px solid ${theme.colors.border}`, borderRadius: theme.radius.sm, fontSize: 11, fontFamily: "monospace" }}
                 labelFormatter={(v) => `Block #${v}`}
-                formatter={(value: number, name: string) => [
-                  `${formatFeeJuiceFull(value)} FJ/mana`,
-                  name === "daGas" ? "DA Mana" : "L2 Mana",
-                ]}
+                formatter={(value: number, name: string) => {
+                  const labels: Record<string, string> = {
+                    baseL2: "Base Fee (L2)",
+                    baseDa: "Base Fee (DA)",
+                    medianBidL2: "Median Bid (L2)",
+                    p25BidL2: "P25 Bid (L2)",
+                    p75BidL2: "P75 Bid (L2)",
+                    medianBidDa: "Median Bid (DA)",
+                    medianManaL2: "Median L2 Mana Limit",
+                    medianManaDa: "Median DA Mana Limit",
+                  };
+                  const isMana = name === "medianManaL2" || name === "medianManaDa";
+                  return [`${formatFeeJuiceFull(value)}${isMana ? "" : " FJ/mana"}`, labels[name] ?? name];
+                }}
               />
-              <Legend
-                formatter={(value) => (value === "daGas" ? "DA Mana" : "L2 Mana")}
-                wrapperStyle={{ fontSize: 11 }}
-              />
-              <Area
-                type="monotone"
-                dataKey="daGas"
-                stroke={theme.colors.primary}
-                fill="url(#gradDa)"
-                strokeWidth={1.5}
-                dot={false}
-                connectNulls
-              />
-              <Area
-                type="monotone"
-                dataKey="l2Gas"
-                stroke={theme.colors.accent}
-                fill="url(#gradL2)"
-                strokeWidth={1.5}
-                dot={false}
-                connectNulls
-              />
+              <Legend wrapperStyle={{ fontSize: 11 }} formatter={(v) => {
+                const m: Record<string, string> = {
+                  baseL2: "L2 Base Fee", baseDa: "DA Base Fee",
+                  medianBidL2: "Median L2 Bid", p75BidL2: "P75 L2 Bid", p25BidL2: "P25 L2 Bid",
+                  medianBidDa: "Median DA Bid",
+                  medianManaL2: "L2 Mana Limit", medianManaDa: "DA Mana Limit",
+                };
+                return m[v] ?? v;
+              }} />
+              {/* L2 bid spread band (p25-p75) */}
+              <Area yAxisId="fee" type="monotone" dataKey="p75BidL2" stroke="none" fill="url(#gradBidL2)" connectNulls name="p75BidL2" />
+              <Area yAxisId="fee" type="monotone" dataKey="p25BidL2" stroke="none" fill={theme.colors.bgCard} connectNulls name="p25BidL2" />
+              {/* Base fees */}
+              <Line yAxisId="fee" type="monotone" dataKey="baseL2" stroke={theme.colors.accent} strokeWidth={2} dot={false} connectNulls name="baseL2" />
+              <Line yAxisId="fee" type="monotone" dataKey="baseDa" stroke={theme.colors.primary} strokeWidth={2} dot={false} connectNulls name="baseDa" />
+              {/* Median bids */}
+              <Line yAxisId="fee" type="monotone" dataKey="medianBidL2" stroke={theme.colors.accent} strokeWidth={1} strokeDasharray="6 3" dot={false} connectNulls name="medianBidL2" />
+              <Line yAxisId="fee" type="monotone" dataKey="medianBidDa" stroke={theme.colors.primary} strokeWidth={1} strokeDasharray="6 3" dot={false} connectNulls name="medianBidDa" />
+              {/* Mana limits on right axis */}
+              <Line yAxisId="mana" type="monotone" dataKey="medianManaL2" stroke={theme.colors.success} strokeWidth={1} strokeDasharray="3 3" dot={false} connectNulls name="medianManaL2" />
+              <Line yAxisId="mana" type="monotone" dataKey="medianManaDa" stroke={theme.colors.warning} strokeWidth={1} strokeDasharray="3 3" dot={false} connectNulls name="medianManaDa" />
               {selectionOverlay}
             </ComposedChart>
           </ResponsiveContainer>
         )}
       </ChartCard>
 
-      {/* Fee spread chart */}
+      {/* Chart 2: Total Fee Paid + utilization */}
       <ChartCard>
-        <ChartTitle>Transaction Fee Spread</ChartTitle>
-        <ChartSubtitle>What txs actually paid (Fee Juice). Band shows p25–p75, line shows median.</ChartSubtitle>
-        {spreadLoading ? (
+        <ChartTitle>Total Fee Paid</ChartTitle>
+        <ChartSubtitle>Actual tx fee distribution (Fee Juice). Band = p25–p75, line = median. Bar = txs per bucket.</ChartSubtitle>
+        {(historyLoading || spreadLoading || !rangeReady) ? (
           <Loading />
-        ) : spreadChartData.length === 0 ? (
-          <EmptyState>No transaction fee data available</EmptyState>
         ) : (
           <ResponsiveContainer width="100%" height={340}>
-            <ComposedChart data={spreadChartData} margin={{ top: 10, right: 20, bottom: 10, left: 10 }} {...zoomProps}>
+            <ComposedChart data={costChartData} margin={{ top: 10, right: 20, bottom: 10, left: 10 }} {...zoomProps}>
               <defs>
-                <linearGradient id="gradSpread" x1="0" y1="0" x2="0" y2="1">
+                <linearGradient id="gradCost" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor={theme.colors.success} stopOpacity={0.25} />
                   <stop offset="100%" stopColor={theme.colors.success} stopOpacity={0.02} />
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke={theme.colors.border} opacity={0.3} />
-              <XAxis
-                dataKey="block"
-                stroke={theme.colors.textMuted}
-                fontSize={10}
-                tickFormatter={(v) => `#${v}`}
-              />
-              <YAxis
-                stroke={theme.colors.textMuted}
-                fontSize={10}
-                tickFormatter={(v) => formatFeeJuice(v)}
-              />
+              <XAxis dataKey="block" stroke={theme.colors.textMuted} fontSize={10} tickFormatter={(v) => `#${v}`} />
+              <YAxis yAxisId="fee" stroke={theme.colors.textMuted} fontSize={10} tickFormatter={(v) => formatFeeJuice(v)} />
+              <YAxis yAxisId="txs" orientation="right" stroke={theme.colors.textMuted} fontSize={10} />
               <Tooltip
-                contentStyle={{
-                  background: theme.colors.bgCard,
-                  border: `1px solid ${theme.colors.border}`,
-                  borderRadius: theme.radius.sm,
-                  fontSize: 11,
-                  fontFamily: "monospace",
-                }}
+                contentStyle={{ background: theme.colors.bgCard, border: `1px solid ${theme.colors.border}`, borderRadius: theme.radius.sm, fontSize: 11, fontFamily: "monospace" }}
                 labelFormatter={(v) => `Block #${v}`}
                 formatter={(value: number, name: string) => {
-                  const labels: Record<string, string> = {
-                    p25: "P25",
-                    median: "Median",
-                    p75: "P75",
-                    minFee: "Min",
-                    maxFee: "Max",
-                    avgFee: "Average",
-                  };
+                  if (name === "txCount") return [`${value}`, "Txs"];
+                  const labels: Record<string, string> = { medianFee: "Median", p25Fee: "P25", p75Fee: "P75", minFee: "Min", maxFee: "Max" };
                   return [`${formatFeeJuiceFull(value)} FJ`, labels[name] ?? name];
                 }}
               />
-              <Legend wrapperStyle={{ fontSize: 11 }} />
-              {/* Min-max whisker lines */}
-              <Line
-                type="monotone"
-                dataKey="maxFee"
-                stroke={theme.colors.textMuted}
-                strokeWidth={0.5}
-                strokeDasharray="3 3"
-                dot={false}
-                connectNulls
-                name="maxFee"
-              />
-              <Line
-                type="monotone"
-                dataKey="minFee"
-                stroke={theme.colors.textMuted}
-                strokeWidth={0.5}
-                strokeDasharray="3 3"
-                dot={false}
-                connectNulls
-                name="minFee"
-              />
+              <Legend wrapperStyle={{ fontSize: 11 }} formatter={(v) => {
+                const m: Record<string, string> = { medianFee: "Median Fee", p25Fee: "P25", p75Fee: "P75", minFee: "Min", maxFee: "Max", txCount: "Tx Count" };
+                return m[v] ?? v;
+              }} />
+              {/* Tx count as subtle area on right axis */}
+              <Bar yAxisId="txs" dataKey="txCount" fill={theme.colors.primary} fillOpacity={0.2} stroke={theme.colors.primary} strokeOpacity={0.4} strokeWidth={0.5} name="txCount" />
+              {/* Min-max whiskers */}
+              <Line yAxisId="fee" type="monotone" dataKey="maxFee" stroke={theme.colors.warning} strokeWidth={0.8} strokeDasharray="3 3" dot={false} connectNulls name="maxFee" />
+              <Line yAxisId="fee" type="monotone" dataKey="minFee" stroke={theme.colors.accent} strokeWidth={0.8} strokeDasharray="3 3" dot={false} connectNulls name="minFee" />
               {/* P25-P75 band */}
-              <Area
-                type="monotone"
-                dataKey="p75"
-                stroke="none"
-                fill="url(#gradSpread)"
-                connectNulls
-                name="p75"
-              />
-              <Area
-                type="monotone"
-                dataKey="p25"
-                stroke="none"
-                fill={theme.colors.bgCard}
-                connectNulls
-                name="p25"
-              />
+              <Area yAxisId="fee" type="monotone" dataKey="p75Fee" stroke="none" fill="url(#gradCost)" connectNulls name="p75Fee" />
+              <Area yAxisId="fee" type="monotone" dataKey="p25Fee" stroke="none" fill={theme.colors.bgCard} connectNulls name="p25Fee" />
               {/* Median line */}
-              <Line
-                type="monotone"
-                dataKey="median"
-                stroke={theme.colors.success}
-                strokeWidth={2}
-                dot={false}
-                connectNulls
-                name="median"
-              />
-              {/* Average line */}
-              <Line
-                type="monotone"
-                dataKey="avgFee"
-                stroke={theme.colors.warning}
-                strokeWidth={1}
-                strokeDasharray="4 2"
-                dot={false}
-                connectNulls
-                name="avgFee"
-              />
-              {selectionOverlay}
-            </ComposedChart>
-          </ResponsiveContainer>
-        )}
-      </ChartCard>
-
-      {/* Txs per block alongside fees */}
-      <ChartCard>
-        <ChartTitle>Block Utilization</ChartTitle>
-        <ChartSubtitle>Transactions per block and total fees collected (Fee Juice)</ChartSubtitle>
-        {historyLoading || !rangeReady ? (
-          <Loading />
-        ) : (
-          <ResponsiveContainer width="100%" height={260}>
-            <ComposedChart data={utilizationChartData} margin={{ top: 10, right: 20, bottom: 10, left: 10 }} {...zoomProps}>
-              <CartesianGrid strokeDasharray="3 3" stroke={theme.colors.border} opacity={0.3} />
-              <XAxis
-                dataKey="block"
-                stroke={theme.colors.textMuted}
-                fontSize={10}
-                tickFormatter={(v) => `#${v}`}
-              />
-              <YAxis
-                yAxisId="txs"
-                stroke={theme.colors.textMuted}
-                fontSize={10}
-              />
-              <YAxis
-                yAxisId="fees"
-                hide
-              />
-              <Tooltip
-                contentStyle={{
-                  background: theme.colors.bgCard,
-                  border: `1px solid ${theme.colors.border}`,
-                  borderRadius: theme.radius.sm,
-                  fontSize: 11,
-                  fontFamily: "monospace",
-                }}
-                labelFormatter={(v) => `Block #${v}`}
-                formatter={(value: number, name: string) => {
-                  if (name === "numTxs") return [`${value}`, "Txs"];
-                  return [`${formatFeeJuice(value)} FJ`, "Total Fees"];
-                }}
-              />
-              <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Area
-                yAxisId="txs"
-                type="monotone"
-                dataKey="numTxs"
-                stroke={theme.colors.primary}
-                fill={theme.colors.primary}
-                fillOpacity={0.15}
-                strokeWidth={1}
-                dot={false}
-                connectNulls
-                name="numTxs"
-              />
-              <Line
-                yAxisId="fees"
-                type="monotone"
-                dataKey="totalFees"
-                stroke={theme.colors.warning}
-                strokeWidth={1.5}
-                dot={false}
-                connectNulls
-                name="totalFees"
-              />
+              <Line yAxisId="fee" type="monotone" dataKey="medianFee" stroke={theme.colors.success} strokeWidth={2} dot={false} connectNulls name="medianFee" />
               {selectionOverlay}
             </ComposedChart>
           </ResponsiveContainer>
@@ -588,6 +483,23 @@ const HeaderControls = styled.div`
   display: flex;
   align-items: center;
   gap: ${theme.spacing.sm};
+`;
+
+const RefreshButton = styled.button`
+  padding: 4px 10px;
+  background: ${theme.colors.bgCard};
+  color: ${theme.colors.textMuted};
+  border: 1px solid ${theme.colors.border};
+  border-radius: ${theme.radius.sm};
+  cursor: pointer;
+  font-size: ${theme.fontSize.md};
+  line-height: 1;
+  transition: color 0.15s, background 0.15s;
+
+  &:hover {
+    color: ${theme.colors.text};
+    background: ${theme.colors.bgHover};
+  }
 `;
 
 const ResetZoomButton = styled.button`
@@ -662,9 +574,3 @@ const SubStat = styled.div`
   font-family: monospace;
 `;
 
-const EmptyState = styled.div`
-  text-align: center;
-  padding: ${theme.spacing.xl};
-  color: ${theme.colors.textMuted};
-  font-size: ${theme.fontSize.sm};
-`;
