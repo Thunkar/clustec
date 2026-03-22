@@ -83,21 +83,19 @@ export function registerFeeRoutes(
     const rows = await db
       .select({
         bucket: sql<number>`(${transactions.blockNumber} / ${bucketSize}) * ${bucketSize}`.as("bucket"),
-        minBlock: sql<number>`min(${transactions.blockNumber})`.as("min_block"),
-        maxBlock: sql<number>`max(${transactions.blockNumber})`.as("max_block"),
         txCount: sql<number>`count(*)`.as("tx_count"),
         avgActualFee: sql<string>`avg(${transactions.actualFee}::numeric)::text`.as("avg_actual_fee"),
         minActualFee: sql<string>`min(${transactions.actualFee}::numeric)::text`.as("min_actual_fee"),
         maxActualFee: sql<string>`max(${transactions.actualFee}::numeric)::text`.as("max_actual_fee"),
-        p25ActualFee: sql<string>`percentile_cont(0.25) within group (order by ${transactions.actualFee}::numeric)::text`.as("p25_actual_fee"),
-        medianActualFee: sql<string>`percentile_cont(0.5) within group (order by ${transactions.actualFee}::numeric)::text`.as("median_actual_fee"),
-        p75ActualFee: sql<string>`percentile_cont(0.75) within group (order by ${transactions.actualFee}::numeric)::text`.as("p75_actual_fee"),
+        p25ActualFee: sql<string>`(percentile_cont(0.25) within group (order by ${transactions.actualFee}::numeric))::text`.as("p25_actual_fee"),
+        medianActualFee: sql<string>`(percentile_cont(0.5) within group (order by ${transactions.actualFee}::numeric))::text`.as("median_actual_fee"),
+        p75ActualFee: sql<string>`(percentile_cont(0.75) within group (order by ${transactions.actualFee}::numeric))::text`.as("p75_actual_fee"),
         avgMaxFeePerDaGas: sql<string>`avg(${transactions.maxFeePerDaGas}::numeric)::text`.as("avg_max_fee_da"),
         avgMaxFeePerL2Gas: sql<string>`avg(${transactions.maxFeePerL2Gas}::numeric)::text`.as("avg_max_fee_l2"),
       })
       .from(transactions)
       .where(and(...conditions))
-      .groupBy(sql`(${transactions.blockNumber} / ${bucketSize}) * ${bucketSize}`)
+      .groupBy(sql`bucket`)
       .orderBy(sql`bucket`)
       .limit(500);
 
