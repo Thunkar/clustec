@@ -439,8 +439,12 @@ export interface FeeSpreadBucket {
   p25ActualFee: string | null;
   medianActualFee: string | null;
   p75ActualFee: string | null;
-  avgMaxFeePerDaGas: string | null;
-  avgMaxFeePerL2Gas: string | null;
+  medianMaxFeePerDaGas: string | null;
+  medianMaxFeePerL2Gas: string | null;
+  p25MaxFeePerL2Gas: string | null;
+  p75MaxFeePerL2Gas: string | null;
+  medianGasLimitDa: string | null;
+  medianGasLimitL2: string | null;
 }
 
 export interface CurrentFees {

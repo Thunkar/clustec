@@ -199,6 +199,5 @@ export function useCurrentFees(networkId: string) {
     queryKey: ["networks", networkId, "fees", "current"],
     queryFn: () => api.getCurrentFees(networkId),
     enabled: !!networkId,
-    refetchInterval: 30_000,
   });
 }

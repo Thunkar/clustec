@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc --noEmit",
-    "dev": "node --experimental-transform-types --watch src/main.ts --config ../../configs/networks/devnet.json",
+    "dev": "node --experimental-transform-types --watch src/main.ts --config ../../configs/networks/testnet.json",
     "start": "node --experimental-transform-types src/main.ts",
     "test": "vitest run"
   },
