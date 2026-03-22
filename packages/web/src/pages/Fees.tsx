@@ -22,8 +22,6 @@ import {
   PageContainer,
   PageTitle,
   Card,
-  Grid,
-  StatCard,
   StatValue,
   StatLabel,
   Loading,
@@ -66,16 +64,13 @@ function toNum(v: string | null | undefined): number | null {
   return isNaN(n) ? null : n;
 }
 
-/** Format raw Fee Juice amount with compact notation */
+/** Format raw Fee Juice amount with scientific notation */
 function formatFeeJuice(v: number | null): string {
   if (v == null) return "-";
-  if (v >= 1e12) return `${(v / 1e12).toFixed(2)}T`;
-  if (v >= 1e9) return `${(v / 1e9).toFixed(2)}B`;
-  if (v >= 1e6) return `${(v / 1e6).toFixed(2)}M`;
-  if (v >= 1e3) return `${(v / 1e3).toFixed(1)}K`;
+  if (v === 0) return "0";
+  if (v >= 1e6 || (v > 0 && v < 0.01)) return v.toExponential(2);
   if (v >= 1) return v.toFixed(0);
-  if (v > 0) return v.toExponential(2);
-  return "0";
+  return v.toFixed(2);
 }
 
 /** Format raw Fee Juice with full precision for stat cards */
@@ -100,7 +95,7 @@ function formatUsd(v: number): string {
 export function Fees() {
   const { selectedNetwork } = useNetworkStore();
   const queryClient = useQueryClient();
-  const [range, setRange] = useState<TimeRange>("500");
+  const [range, setRange] = useState<TimeRange>("100");
 
   // Zoom state: drag-select on any chart to zoom all three
   const [zoomFrom, setZoomFrom] = useState<number | null>(null);
@@ -342,30 +337,26 @@ export function Fees() {
       </Header>
 
       {/* Current stats */}
-      <Grid columns={3}>
-        <StatCard>
-          <StatLabel>Base Fee (DA Mana)</StatLabel>
+      <StatsRow>
+        <CompactStatCard>
+          <StatLabel>DA Base Fee</StatLabel>
           <StatValue style={{ color: theme.colors.primary }}>
-            {formatFeeJuiceFull(currentDaFee)} <Unit>FJ/mana</Unit>
+            {formatFeeJuice(currentDaFee)} <Unit>FJ/mana</Unit>
           </StatValue>
           {ethPrice != null && ethPerFeeAssetE12 != null && currentDaFee != null && (
-            <SubStat>
-              ~{formatUsd(feeToUsd(currentDaFee, ethPerFeeAssetE12, ethPrice))} / mana
-            </SubStat>
+            <SubStat>~{formatUsd(feeToUsd(currentDaFee, ethPerFeeAssetE12, ethPrice))}/mana</SubStat>
           )}
-        </StatCard>
-        <StatCard>
-          <StatLabel>Base Fee (L2 Mana)</StatLabel>
+        </CompactStatCard>
+        <CompactStatCard>
+          <StatLabel>L2 Base Fee</StatLabel>
           <StatValue style={{ color: theme.colors.accent }}>
-            {formatFeeJuiceFull(currentL2Fee)} <Unit>FJ/mana</Unit>
+            {formatFeeJuice(currentL2Fee)} <Unit>FJ/mana</Unit>
           </StatValue>
           {ethPrice != null && ethPerFeeAssetE12 != null && currentL2Fee != null && (
-            <SubStat>
-              ~{formatUsd(feeToUsd(currentL2Fee, ethPerFeeAssetE12, ethPrice))} / mana
-            </SubStat>
+            <SubStat>~{formatUsd(feeToUsd(currentL2Fee, ethPerFeeAssetE12, ethPrice))}/mana</SubStat>
           )}
-        </StatCard>
-        <StatCard>
+        </CompactStatCard>
+        <CompactStatCard>
           <StatLabel>ETH / USD</StatLabel>
           <StatValue>
             {ethPrice != null ? `$${ethPrice.toLocaleString()}` : "-"}
@@ -373,8 +364,8 @@ export function Fees() {
           {currentData?.block && (
             <SubStat>Block #{currentData.block.blockNumber}</SubStat>
           )}
-        </StatCard>
-      </Grid>
+        </CompactStatCard>
+      </StatsRow>
 
       {/* Chart 1: Fee Per Mana — base fee vs tx bids */}
       <ChartCard>
@@ -573,6 +564,33 @@ const RangeButton = styled.button<{ active: boolean }>`
   &:hover {
     background: ${(p) => (p.active ? theme.colors.primaryHover : theme.colors.bgHover)};
     color: ${theme.colors.text};
+  }
+`;
+
+const StatsRow = styled.div`
+  display: flex;
+  gap: ${theme.spacing.md};
+
+  @media (max-width: 768px) {
+    gap: ${theme.spacing.xs};
+  }
+`;
+
+const CompactStatCard = styled(Card)`
+  flex: 1;
+  padding: ${theme.spacing.md};
+  min-width: 0;
+  text-align: center;
+
+  @media (max-width: 768px) {
+    padding: ${theme.spacing.sm};
+
+    ${StatValue} {
+      font-size: ${theme.fontSize.sm};
+    }
+    ${StatLabel} {
+      font-size: 10px;
+    }
   }
 `;
 
