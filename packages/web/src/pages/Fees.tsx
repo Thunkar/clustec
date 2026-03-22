@@ -465,7 +465,11 @@ export function Fees() {
                 formatter={(value: number, name: string) => {
                   if (name === "txCount") return [`${value}`, "Txs"];
                   const labels: Record<string, string> = { medianFee: "Median", p25Fee: "P25", p75Fee: "P75", minFee: "Min", maxFee: "Max" };
-                  return [`${formatFeeJuiceFull(value)} FJ`, labels[name] ?? name];
+                  const fj = `${formatFeeJuiceFull(value)} FJ`;
+                  const usd = ethPrice != null && ethPerFeeAssetE12 != null
+                    ? ` (${formatUsd(feeToUsd(value, ethPerFeeAssetE12, ethPrice))})`
+                    : "";
+                  return [`${fj}${usd}`, labels[name] ?? name];
                 }}
               />
               <Legend wrapperStyle={{ fontSize: 11 }} formatter={(v) => {

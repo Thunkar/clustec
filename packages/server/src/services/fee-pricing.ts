@@ -101,6 +101,22 @@ export class FeePricingService {
   }
 
   /**
+   * Get current pricing data (ETH/USD + ethPerFeeAsset) without needing a fee amount.
+   */
+  async getPricing(): Promise<{
+    ethUsdPrice: number;
+    ethPerFeeAssetE12: string;
+  } | null> {
+    if (!this.enabled) return null;
+    const [ethPerFeeAssetE12, ethUsdPrice] = await Promise.all([
+      this.getEthPerFeeAssetE12(),
+      this.getEthUsdPrice(),
+    ]);
+    if (ethPerFeeAssetE12 == null || ethUsdPrice == null) return null;
+    return { ethUsdPrice, ethPerFeeAssetE12: ethPerFeeAssetE12.toString() };
+  }
+
+  /**
    * Estimate the USD cost of a transaction given its actual fee (in FPA).
    *
    * Math:

@@ -128,20 +128,9 @@ export function registerFeeRoutes(
 
     // Get ETH pricing if available
     const feeService = feePricing?.get(id);
-    let pricing: {
-      ethUsdPrice: number;
-      ethPerFeeAssetE12: string;
-    } | null = null;
-
-    if (feeService?.enabled && latest?.totalFees) {
-      const est = await feeService.estimateTxCostUsd(latest.totalFees);
-      if (est) {
-        pricing = {
-          ethUsdPrice: est.ethUsdPrice,
-          ethPerFeeAssetE12: est.ethPerFeeAssetE12,
-        };
-      }
-    }
+    const pricing = feeService?.enabled
+      ? await feeService.getPricing()
+      : null;
 
     return { block: latest ?? null, pricing };
   });
