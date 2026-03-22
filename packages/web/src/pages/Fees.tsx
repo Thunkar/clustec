@@ -100,18 +100,33 @@ export function Fees() {
   const [range, setRange] = useState<TimeRange>("500");
 
   const resolution = resolutionForRange(range);
-  const fromBlock = range === "all" ? undefined : undefined; // no from constraint — limit handles it
 
   const historyOpts = useMemo(
-    () => ({ from: fromBlock, resolution }),
-    [fromBlock, resolution],
-  );
-  const spreadOpts = useMemo(
-    () => ({ from: fromBlock, bucketSize: spreadBucketForRange(range) }),
-    [fromBlock, range],
+    () => ({ resolution }),
+    [resolution],
   );
 
   const { data: historyData, isLoading: historyLoading } = useFeeHistory(selectedNetwork, historyOpts);
+
+  // Derive block range from history data so spread is aligned
+  const blockRange = useMemo(() => {
+    if (!historyData?.data || historyData.data.length === 0) return null;
+    const blocks = historyData.data;
+    return {
+      from: blocks[0].blockNumber,
+      to: blocks[blocks.length - 1].blockNumber,
+    };
+  }, [historyData]);
+
+  const spreadOpts = useMemo(
+    () => ({
+      from: blockRange?.from,
+      to: blockRange?.to,
+      bucketSize: spreadBucketForRange(range),
+    }),
+    [blockRange, range],
+  );
+
   const { data: spreadData, isLoading: spreadLoading } = useFeeSpread(selectedNetwork, spreadOpts);
   const { data: currentData } = useCurrentFees(selectedNetwork);
 
@@ -411,10 +426,7 @@ export function Fees() {
               />
               <YAxis
                 yAxisId="fees"
-                orientation="right"
-                stroke={theme.colors.textMuted}
-                fontSize={10}
-                tickFormatter={(v) => formatFeeJuice(v)}
+                hide
               />
               <Tooltip
                 contentStyle={{
