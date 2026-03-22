@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import styled from "@emotion/styled";
 import {
@@ -105,25 +105,51 @@ export function Fees() {
   // Zoom state: drag-select on any chart to zoom all three
   const [zoomFrom, setZoomFrom] = useState<number | null>(null);
   const [zoomTo, setZoomTo] = useState<number | null>(null);
-  const [selecting, setSelecting] = useState<number | null>(null); // drag start block
-  const [selectEnd, setSelectEnd] = useState<number | null>(null); // drag current block
+  const [selecting, setSelecting] = useState<number | null>(null);
+  const [selectEnd, setSelectEnd] = useState<number | null>(null);
 
-  const handleMouseDown = useCallback((e: { activeLabel?: string }) => {
-    if (e?.activeLabel) setSelecting(Number(e.activeLabel));
-  }, []);
-  const handleMouseMove = useCallback((e: { activeLabel?: string }) => {
-    if (selecting != null && e?.activeLabel) setSelectEnd(Number(e.activeLabel));
-  }, [selecting]);
-  const handleMouseUp = useCallback(() => {
-    if (selecting != null && selectEnd != null && selecting !== selectEnd) {
-      const lo = Math.min(selecting, selectEnd);
-      const hi = Math.max(selecting, selectEnd);
-      setZoomFrom(lo);
-      setZoomTo(hi);
+  // Refs to avoid stale closures in recharts callbacks
+  const selectingRef = useRef<number | null>(null);
+  const selectEndRef = useRef<number | null>(null);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  type ChartMouseEvent = any;
+  const getBlock = (e: ChartMouseEvent): number | null => {
+    if (!e) return null;
+    if (e.activeLabel !== undefined && e.activeLabel !== null) return Number(e.activeLabel);
+    const block = e.activePayload?.[0]?.payload?.block;
+    if (block != null) return Number(block);
+    return null;
+  };
+  const handleMouseDown = useCallback((e: ChartMouseEvent) => {
+    const block = getBlock(e);
+    if (block != null && !isNaN(block)) {
+      selectingRef.current = block;
+      selectEndRef.current = null;
+      setSelecting(block);
+      setSelectEnd(null);
     }
+  }, []);
+  const handleMouseMove = useCallback((e: ChartMouseEvent) => {
+    if (selectingRef.current == null) return;
+    const block = getBlock(e);
+    if (block != null && !isNaN(block)) {
+      selectEndRef.current = block;
+      setSelectEnd(block);
+    }
+  }, []);
+  const handleMouseUp = useCallback(() => {
+    const start = selectingRef.current;
+    const end = selectEndRef.current;
+    if (start != null && end != null && start !== end) {
+      setZoomFrom(Math.min(start, end));
+      setZoomTo(Math.max(start, end));
+    }
+    selectingRef.current = null;
+    selectEndRef.current = null;
     setSelecting(null);
     setSelectEnd(null);
-  }, [selecting, selectEnd]);
+  }, []);
   const resetZoom = useCallback(() => {
     setZoomFrom(null);
     setZoomTo(null);
@@ -279,6 +305,8 @@ export function Fees() {
       fillOpacity={0.15}
       stroke={theme.colors.primary}
       strokeOpacity={0.4}
+      ifOverflow="extendDomain"
+      yAxisId="fee"
     />
   ) : null;
 
@@ -364,7 +392,7 @@ export function Fees() {
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke={theme.colors.border} opacity={0.3} />
-              <XAxis dataKey="block" stroke={theme.colors.textMuted} fontSize={10} tickFormatter={(v) => `#${v}`} />
+              <XAxis dataKey="block" type="number" domain={["dataMin", "dataMax"]} stroke={theme.colors.textMuted} fontSize={10} tickFormatter={(v) => `#${v}`} />
               <YAxis yAxisId="fee" stroke={theme.colors.textMuted} fontSize={10} tickFormatter={(v) => formatFeeJuice(v)} />
               <YAxis yAxisId="mana" orientation="right" stroke={theme.colors.textMuted} fontSize={10} tickFormatter={(v) => formatFeeJuice(v)} />
               <Tooltip
@@ -428,7 +456,7 @@ export function Fees() {
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke={theme.colors.border} opacity={0.3} />
-              <XAxis dataKey="block" stroke={theme.colors.textMuted} fontSize={10} tickFormatter={(v) => `#${v}`} />
+              <XAxis dataKey="block" type="number" domain={["dataMin", "dataMax"]} stroke={theme.colors.textMuted} fontSize={10} tickFormatter={(v) => `#${v}`} />
               <YAxis yAxisId="fee" stroke={theme.colors.textMuted} fontSize={10} tickFormatter={(v) => formatFeeJuice(v)} />
               <YAxis yAxisId="txs" orientation="right" stroke={theme.colors.textMuted} fontSize={10} />
               <Tooltip
