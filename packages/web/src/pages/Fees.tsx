@@ -166,16 +166,16 @@ export function Fees() {
     const bucketSize = resolution === "raw" ? 1 : (resolution === "10" ? 10 : resolution === "50" ? 50 : 100);
     const spreadBucket = spreadBucketForRange(range);
 
-    // Index history data by block number
+    // Index history data by block number (coerce to number — SQL may return strings)
     const historyByBlock = new Map<number, FeeHistoryPoint>();
     for (const p of historyData?.data ?? []) {
-      historyByBlock.set(p.blockNumber, p);
+      historyByBlock.set(Number(p.blockNumber), p);
     }
 
     // Index spread data by bucket
     const spreadByBucket = new Map<number, FeeSpreadBucket>();
     for (const b of spreadData?.data ?? []) {
-      spreadByBucket.set(b.bucket, b);
+      spreadByBucket.set(Number(b.bucket), b);
     }
 
     // Generate full range of buckets
