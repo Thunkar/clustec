@@ -18,7 +18,6 @@ export function registerFeeRoutes(
 
     const conditions = [
       eq(blocks.networkId, id),
-      isNotNull(blocks.feePerDaGas),
     ];
     if (from) conditions.push(gte(blocks.blockNumber, parseInt(from, 10)));
     if (to) conditions.push(lte(blocks.blockNumber, parseInt(to, 10)));
