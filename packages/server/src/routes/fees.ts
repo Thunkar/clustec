@@ -55,7 +55,7 @@ export function registerFeeRoutes(
       })
       .from(blocks)
       .where(and(...conditions))
-      .groupBy(sql`(${blocks.blockNumber} / ${bucketSize}) * ${bucketSize}`)
+      .groupBy(sql`block_number`)
       .orderBy(sql`block_number`)
       .limit(500);
 
