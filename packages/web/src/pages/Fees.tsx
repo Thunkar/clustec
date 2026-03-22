@@ -150,7 +150,7 @@ export function Fees() {
   const ethPerFeeAssetE12 = currentData?.pricing?.ethPerFeeAssetE12 ?? null;
 
   return (
-    <PageContainer>
+    <FeesContainer>
       <Header>
         <PageTitle>Fee Analytics</PageTitle>
         <RangeSelector>
@@ -457,11 +457,17 @@ export function Fees() {
           </ResponsiveContainer>
         )}
       </ChartCard>
-    </PageContainer>
+    </FeesContainer>
   );
 }
 
 // ── Styled ──
+
+const FeesContainer = styled(PageContainer)`
+  display: flex;
+  flex-direction: column;
+  gap: ${theme.spacing.lg};
+`;
 
 const Header = styled.div`
   display: flex;
