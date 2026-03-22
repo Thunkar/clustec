@@ -100,38 +100,33 @@ export function Fees() {
   const [range, setRange] = useState<TimeRange>("500");
 
   const resolution = resolutionForRange(range);
+  const { data: currentData } = useCurrentFees(selectedNetwork);
+
+  // Compute from/to block range based on latest block
+  const latestBlock = currentData?.block?.blockNumber ?? null;
+  const rangeBlocks = range === "all" ? null : parseInt(range, 10);
+  const fromBlock = latestBlock != null && rangeBlocks != null
+    ? Math.max(0, latestBlock - rangeBlocks)
+    : undefined;
 
   const historyOpts = useMemo(
-    () => ({ resolution }),
-    [resolution],
+    () => ({ from: fromBlock, resolution }),
+    [fromBlock, resolution],
   );
-
-  const { data: historyData, isLoading: historyLoading } = useFeeHistory(selectedNetwork, historyOpts);
-
-  // Derive block range from history data so spread is aligned
-  const blockRange = useMemo(() => {
-    if (!historyData?.data || historyData.data.length === 0) return null;
-    const blocks = historyData.data;
-    return {
-      from: blocks[0].blockNumber,
-      to: blocks[blocks.length - 1].blockNumber,
-    };
-  }, [historyData]);
 
   const spreadOpts = useMemo(
     () => ({
-      from: blockRange?.from,
-      to: blockRange?.to,
+      from: fromBlock,
       bucketSize: spreadBucketForRange(range),
     }),
-    [blockRange, range],
+    [fromBlock, range],
   );
 
+  const { data: historyData, isLoading: historyLoading } = useFeeHistory(selectedNetwork, historyOpts);
   const { data: spreadData, isLoading: spreadLoading } = useFeeSpread(selectedNetwork, spreadOpts);
-  const { data: currentData } = useCurrentFees(selectedNetwork);
 
-  // Transform history data for chart
-  const historyChartData = useMemo(() => {
+  // Transform history data for charts — split into fee data and utilization data
+  const allHistoryData = useMemo(() => {
     if (!historyData?.data) return [];
     return historyData.data.map((p: FeeHistoryPoint) => ({
       block: p.blockNumber,
@@ -142,6 +137,12 @@ export function Fees() {
       numTxs: p.numTxs,
     }));
   }, [historyData]);
+
+  // Base fee chart: only rows with fee data
+  const feeChartData = useMemo(
+    () => allHistoryData.filter((d) => d.daGas != null || d.l2Gas != null),
+    [allHistoryData],
+  );
 
   // Transform spread data for chart
   const spreadChartData = useMemo(() => {
@@ -224,7 +225,7 @@ export function Fees() {
           <Loading />
         ) : (
           <ResponsiveContainer width="100%" height={340}>
-            <ComposedChart data={historyChartData} margin={{ top: 10, right: 20, bottom: 10, left: 10 }}>
+            <ComposedChart data={feeChartData} margin={{ top: 10, right: 20, bottom: 10, left: 10 }}>
               <defs>
                 <linearGradient id="gradDa" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor={theme.colors.primary} stopOpacity={0.3} />
@@ -411,7 +412,7 @@ export function Fees() {
           <Loading />
         ) : (
           <ResponsiveContainer width="100%" height={260}>
-            <ComposedChart data={historyChartData} margin={{ top: 10, right: 20, bottom: 10, left: 10 }}>
+            <ComposedChart data={allHistoryData} margin={{ top: 10, right: 20, bottom: 10, left: 10 }}>
               <CartesianGrid strokeDasharray="3 3" stroke={theme.colors.border} opacity={0.3} />
               <XAxis
                 dataKey="block"
