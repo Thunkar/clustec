@@ -432,8 +432,6 @@ export interface FeeHistoryPoint {
 
 export interface FeeSpreadBucket {
   bucket: number;
-  minBlock: number;
-  maxBlock: number;
   txCount: number;
   avgActualFee: string | null;
   minActualFee: string | null;

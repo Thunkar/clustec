@@ -107,7 +107,7 @@ export function registerFeeRoutes(
   }>("/api/networks/:id/fees/current", async (request) => {
     const { id } = request.params;
 
-    // Latest block with fee data
+    // Latest block (regardless of fee data — needed for range computation)
     const [latest] = await db
       .select({
         blockNumber: blocks.blockNumber,
@@ -118,7 +118,7 @@ export function registerFeeRoutes(
         numTxs: blocks.numTxs,
       })
       .from(blocks)
-      .where(and(eq(blocks.networkId, id), isNotNull(blocks.feePerDaGas)))
+      .where(eq(blocks.networkId, id))
       .orderBy(desc(blocks.blockNumber))
       .limit(1);
 
