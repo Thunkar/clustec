@@ -208,6 +208,7 @@ export function Fees() {
     // We merge block base fees (averaged over the bucket) with tx bid percentiles
     const priceRows: {
       block: number;
+      blockEnd: number;
       baseDa: number | null;
       baseL2: number | null;
       medianBidL2: number | null;
@@ -221,6 +222,7 @@ export function Fees() {
     // Chart 2: Total Fee Paid + utilization
     const costRows: {
       block: number;
+      blockEnd: number;
       medianFee: number | null;
       p25Fee: number | null;
       p75Fee: number | null;
@@ -246,6 +248,7 @@ export function Fees() {
 
       priceRows.push({
         block: b,
+        blockEnd: Math.min(b + spreadBucket - 1, end),
         baseDa: countFee > 0 ? sumDa / countFee : null,
         baseL2: countFee > 0 ? sumL2 / countFee : null,
         medianBidL2: s ? toNum(s.medianMaxFeePerL2Gas) : null,
@@ -265,6 +268,7 @@ export function Fees() {
 
       costRows.push({
         block: b,
+        blockEnd: Math.min(b + spreadBucket - 1, end),
         medianFee: s ? toNum(s.medianActualFee) : null,
         p25Fee: s ? toNum(s.p25ActualFee) : null,
         p75Fee: s ? toNum(s.p75ActualFee) : null,
@@ -388,7 +392,11 @@ export function Fees() {
               <YAxis yAxisId="mana" orientation="right" stroke={theme.colors.textMuted} fontSize={10} tickFormatter={(v) => formatFeeJuice(v)} />
               <Tooltip
                 contentStyle={{ background: theme.colors.bgCard, border: `1px solid ${theme.colors.border}`, borderRadius: theme.radius.sm, fontSize: 11, fontFamily: "monospace" }}
-                labelFormatter={(v) => `Block #${v}`}
+                labelFormatter={(v, payload) => {
+                  const row = payload?.[0]?.payload;
+                  if (row?.blockEnd != null && row.blockEnd !== v) return `Blocks #${v}–#${row.blockEnd}`;
+                  return `Block #${v}`;
+                }}
                 formatter={(value: number, name: string) => {
                   const labels: Record<string, string> = {
                     baseL2: "Base Fee (L2)",
@@ -452,7 +460,11 @@ export function Fees() {
               <YAxis yAxisId="txs" orientation="right" stroke={theme.colors.textMuted} fontSize={10} />
               <Tooltip
                 contentStyle={{ background: theme.colors.bgCard, border: `1px solid ${theme.colors.border}`, borderRadius: theme.radius.sm, fontSize: 11, fontFamily: "monospace" }}
-                labelFormatter={(v) => `Block #${v}`}
+                labelFormatter={(v, payload) => {
+                  const row = payload?.[0]?.payload;
+                  if (row?.blockEnd != null && row.blockEnd !== v) return `Blocks #${v}–#${row.blockEnd}`;
+                  return `Block #${v}`;
+                }}
                 formatter={(value: number, name: string) => {
                   if (name === "txCount") return [`${value}`, "Txs"];
                   const labels: Record<string, string> = { medianFee: "Median", p25Fee: "P25", p75Fee: "P75", minFee: "Min", maxFee: "Max" };
