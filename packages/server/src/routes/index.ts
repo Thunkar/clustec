@@ -11,6 +11,7 @@ import { registerAnalyzeRoutes } from "./analyze.ts";
 import { registerGraphRoutes } from "./graph.ts";
 import { registerMurderBoardRoutes } from "./murder-board.ts";
 import { registerFeeRoutes } from "./fees.ts";
+import { registerServiceApiRoutes } from "./service-api.ts";
 
 export function registerRoutes(
   app: FastifyInstance,
@@ -27,4 +28,5 @@ export function registerRoutes(
   registerGraphRoutes(app, db);
   registerMurderBoardRoutes(app, db);
   registerFeeRoutes(app, db, feePricing);
+  registerServiceApiRoutes(app, db);
 }
