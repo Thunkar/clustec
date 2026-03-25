@@ -23,6 +23,11 @@ output "dns_record" {
   value       = var.domain != "" ? "${var.domain} → A → ${hcloud_server.clustec.ipv4_address}" : "n/a (no domain set)"
 }
 
+output "api_dns_record" {
+  description = "DNS A record for the API subdomain"
+  value       = var.domain != "" ? "api.${var.domain} → A → ${hcloud_server.clustec.ipv4_address}" : "n/a (no domain set)"
+}
+
 output "postgres_password" {
   description = "Generated Postgres password"
   value       = random_password.postgres.result
