@@ -13,7 +13,7 @@
 	header @assets Cache-Control "public, max-age=31536000, immutable"
 }
 
-{$API_DOMAIN:} {
+{$API_DOMAIN:api.localhost} {
 	@service path /networks/*/fees/stats /networks/*/clusters/recommend
 	handle @service {
 		header Access-Control-Allow-Origin "*"
