@@ -87,6 +87,7 @@ services:
       - caddy_config:/config
     environment:
       DOMAIN: ${DOMAIN:-:3001}
+      API_DOMAIN: ${API_DOMAIN:-api.localhost}
     depends_on:
       - server
 
