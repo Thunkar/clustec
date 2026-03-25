@@ -24,7 +24,7 @@
 		@options method OPTIONS
 		respond @options 204
 
-		uri prefix /api
+		rewrite * /api{uri}
 		reverse_proxy server:3002
 	}
 
