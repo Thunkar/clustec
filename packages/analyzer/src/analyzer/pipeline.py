@@ -43,12 +43,11 @@ def run_pipeline(
     )
 
     # 4. UMAP projection for visualization only (does not affect clustering)
-    # Use higher min_dist and spread for better visual separation in 3D
     embedding = compute_umap(
         features,
         n_components=n_components,
         n_neighbors=min(n_neighbors, len(tx_ids) - 1),
-        min_dist=0.5,
+        min_dist=min_dist,
         spread=3.0,
         metric="euclidean",
     )
