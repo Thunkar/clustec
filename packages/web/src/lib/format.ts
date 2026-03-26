@@ -35,16 +35,17 @@ export function formatFJ(raw: number | string | null | undefined): string {
 }
 
 /**
- * Format a per-mana rate (raw FJ units per mana, NOT divided by 1e18).
- * These are already in "FJ-per-mana" units — just need metric suffix.
- * Returns something like "2.57T" or "3.73Q".
+ * Format a per-mana rate (raw FJ per mana) into FJ tokens per mana.
+ * Divides by 1e18, then uses scientific notation for the tiny values.
  */
 export function formatFJPerMana(raw: number | string | null | undefined): string {
   if (raw == null) return "-";
   const n = Number(raw);
   if (isNaN(n)) return "-";
   if (n === 0) return "0";
-  return withSuffix(n);
+  const tokens = n / 1e18;
+  if (tokens >= 0.01) return tokens.toFixed(4);
+  return tokens.toExponential(2);
 }
 
 /**
@@ -60,9 +61,12 @@ export function formatFJCompact(raw: number | null | undefined): string {
 
 /**
  * Format a per-mana rate compactly for chart axes.
+ * Divides by 1e18 and uses scientific notation.
  */
 export function formatPerManaCompact(raw: number | null | undefined): string {
   if (raw == null) return "-";
   if (raw === 0) return "0";
-  return withSuffix(raw, 1);
+  const tokens = raw / 1e18;
+  if (tokens >= 0.01) return tokens.toFixed(2);
+  return tokens.toExponential(1);
 }

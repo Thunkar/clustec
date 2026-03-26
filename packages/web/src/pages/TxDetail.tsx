@@ -3,7 +3,7 @@ import { useParams, Link } from "react-router-dom";
 import styled from "@emotion/styled";
 import { useNetworkStore } from "../stores/network";
 import { useTxDetail, useTxGraph } from "../api/hooks";
-import { formatFJ } from "../lib/format";
+import { formatFJ, formatFJPerMana } from "../lib/format";
 import { useMyTxs } from "../stores/my-txs";
 import { useLabeledAddresses } from "../hooks/useAddressResolver";
 import type {
@@ -1511,6 +1511,8 @@ export function TxDetail() {
                       <FeatureValue>
                         {i === 14 ? (
                           <HexDisplay address={String(featureVector[i])} mode="label" />
+                        ) : (i === 8 || i === 9) ? (
+                          `${formatFJPerMana(featureVector[i])} FJ/mana`
                         ) : typeof featureVector[i] === "number" ? (
                           (featureVector[i] as number).toLocaleString()
                         ) : (
@@ -1529,6 +1531,8 @@ export function TxDetail() {
                       <FeatureValue>
                         {i === 14 ? (
                           <HexDisplay address={String(featureVector[i])} mode="label" />
+                        ) : (i === 8 || i === 9) ? (
+                          `${formatFJPerMana(featureVector[i])} FJ/mana`
                         ) : typeof featureVector[i] === "number" ? (
                           (featureVector[i] as number).toLocaleString()
                         ) : (
