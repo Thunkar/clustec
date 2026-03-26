@@ -57,26 +57,12 @@ function spreadBucketForRange(range: TimeRange): number {
   }
 }
 
-/** Parse bigint string to number (raw units — Fee Juice per mana for base fees, raw Fee Juice for tx fees) */
+import { formatFJ, formatFJCompact, formatPerManaCompact, formatFJPerMana } from "../lib/format";
+
 function toNum(v: string | null | undefined): number | null {
   if (!v) return null;
   const n = Number(v);
   return isNaN(n) ? null : n;
-}
-
-/** Format raw Fee Juice amount with scientific notation */
-function formatFeeJuice(v: number | null): string {
-  if (v == null) return "-";
-  if (v === 0) return "0";
-  if (v >= 1e6 || (v > 0 && v < 0.01)) return v.toExponential(2);
-  if (v >= 1) return v.toFixed(0);
-  return v.toFixed(2);
-}
-
-/** Format raw Fee Juice with full precision for stat cards */
-function formatFeeJuiceFull(v: number | null): string {
-  if (v == null) return "-";
-  return v.toLocaleString();
 }
 
 /** Convert raw Fee Juice amount to USD via ethPerFeeAsset and ethUsdPrice */
@@ -353,7 +339,7 @@ export function Fees() {
         <CompactStatCard>
           <StatLabel>DA Base Fee</StatLabel>
           <StatValue style={{ color: theme.colors.primary }}>
-            {formatFeeJuice(currentDaFee)} <Unit>FJ/mana</Unit>
+            {formatFJPerMana(currentDaFee)} <Unit>FJ/mana</Unit>
           </StatValue>
           {ethPrice != null && ethPerFeeAssetE12 != null && currentDaFee != null && (
             <SubStat>~{formatUsd(feeToUsd(currentDaFee, ethPerFeeAssetE12, ethPrice))}/mana</SubStat>
@@ -362,7 +348,7 @@ export function Fees() {
         <CompactStatCard>
           <StatLabel>L2 Base Fee</StatLabel>
           <StatValue style={{ color: theme.colors.accent }}>
-            {formatFeeJuice(currentL2Fee)} <Unit>FJ/mana</Unit>
+            {formatFJPerMana(currentL2Fee)} <Unit>FJ/mana</Unit>
           </StatValue>
           {ethPrice != null && ethPerFeeAssetE12 != null && currentL2Fee != null && (
             <SubStat>~{formatUsd(feeToUsd(currentL2Fee, ethPerFeeAssetE12, ethPrice))}/mana</SubStat>
@@ -396,8 +382,8 @@ export function Fees() {
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke={theme.colors.border} opacity={0.3} />
               <XAxis dataKey="block" type="number" domain={["dataMin", "dataMax"]} stroke={theme.colors.textMuted} fontSize={10} tickFormatter={(v) => `#${v}`} />
-              <YAxis yAxisId="fee" stroke={theme.colors.textMuted} fontSize={10} tickFormatter={(v) => formatFeeJuice(v)} />
-              <YAxis yAxisId="mana" orientation="right" stroke={theme.colors.textMuted} fontSize={10} tickFormatter={(v) => formatFeeJuice(v)} />
+              <YAxis yAxisId="fee" stroke={theme.colors.textMuted} fontSize={10} tickFormatter={(v) => formatPerManaCompact(v)} />
+              <YAxis yAxisId="mana" orientation="right" stroke={theme.colors.textMuted} fontSize={10} tickFormatter={(v) => formatPerManaCompact(v)} />
               <Tooltip
                 contentStyle={{ background: theme.colors.bgCard, border: `1px solid ${theme.colors.border}`, borderRadius: theme.radius.sm, fontSize: 11, fontFamily: "monospace" }}
                 labelFormatter={(v, payload) => {
@@ -417,7 +403,7 @@ export function Fees() {
                     medianManaDa: "Median DA Mana Limit",
                   };
                   const isMana = name === "medianManaL2" || name === "medianManaDa";
-                  return [`${formatFeeJuiceFull(value)}${isMana ? "" : " FJ/mana"}`, labels[name] ?? name];
+                  return [isMana ? Number(value).toLocaleString() : `${formatFJPerMana(value)} FJ/mana`, labels[name] ?? name];
                 }}
               />
               <Legend wrapperStyle={{ fontSize: 11 }} formatter={(v) => {
@@ -464,7 +450,7 @@ export function Fees() {
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke={theme.colors.border} opacity={0.3} />
               <XAxis dataKey="block" type="number" domain={["dataMin", "dataMax"]} stroke={theme.colors.textMuted} fontSize={10} tickFormatter={(v) => `#${v}`} />
-              <YAxis yAxisId="fee" stroke={theme.colors.textMuted} fontSize={10} tickFormatter={(v) => formatFeeJuice(v)} />
+              <YAxis yAxisId="fee" stroke={theme.colors.textMuted} fontSize={10} tickFormatter={(v) => formatFJCompact(v)} />
               <YAxis yAxisId="txs" orientation="right" stroke={theme.colors.textMuted} fontSize={10} />
               <Tooltip
                 contentStyle={{ background: theme.colors.bgCard, border: `1px solid ${theme.colors.border}`, borderRadius: theme.radius.sm, fontSize: 11, fontFamily: "monospace" }}
@@ -476,7 +462,7 @@ export function Fees() {
                 formatter={(value: number, name: string) => {
                   if (name === "txCount") return [`${value}`, "Txs"];
                   const labels: Record<string, string> = { medianFee: "Median", p25Fee: "P25", p75Fee: "P75", minFee: "Min", maxFee: "Max" };
-                  const fj = `${formatFeeJuiceFull(value)} FJ`;
+                  const fj = formatFJ(value);
                   const usd = ethPrice != null && ethPerFeeAssetE12 != null
                     ? ` (${formatUsd(feeToUsd(value, ethPerFeeAssetE12, ethPrice))})`
                     : "";

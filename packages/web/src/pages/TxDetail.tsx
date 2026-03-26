@@ -3,6 +3,7 @@ import { useParams, Link } from "react-router-dom";
 import styled from "@emotion/styled";
 import { useNetworkStore } from "../stores/network";
 import { useTxDetail, useTxGraph } from "../api/hooks";
+import { formatFJ } from "../lib/format";
 import { useMyTxs } from "../stores/my-txs";
 import { useLabeledAddresses } from "../hooks/useAddressResolver";
 import type {
@@ -1471,7 +1472,7 @@ export function TxDetail() {
               <Field>
                 <FieldLabel>Actual Fee</FieldLabel>
                 <FieldValue>
-                  {Number(tx.actualFee).toLocaleString()} mana
+                  {formatFJ(tx.actualFee)}
                   {data.feePricingData && (
                     <span style={{ marginLeft: 8, opacity: 0.7 }}>
                       ≈ {formatSmallNumber(data.feePricingData.costUsd)} USD (
