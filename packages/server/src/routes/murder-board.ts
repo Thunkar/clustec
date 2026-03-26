@@ -5,7 +5,7 @@ import {
   transactions,
   clusterRuns,
   clusterMemberships,
-  featureVectors,
+  contractInteractions,
   contractLabels,
 } from "@clustec/common";
 
@@ -69,51 +69,56 @@ export function registerMurderBoardRoutes(app: FastifyInstance, db: Db) {
     const limit = Math.min(100, Math.max(1, parseInt(request.query.limit ?? "50", 10)));
     const offset = (page - 1) * limit;
 
-    // ── Step 1: Get matched tx IDs (lightweight — no JSONB columns) ──
-    // First try fast feePayer path; then check if JSONB scan finds more
-    const feePayerIds = await db
-      .select({ id: transactions.id })
-      .from(transactions)
-      .where(and(eq(transactions.networkId, id), buildFeePayerCondition(address)));
-
-    const feePayerIdSet = new Set(feePayerIds.map((r) => r.id));
-
-    // Only run expensive JSONB scan if we might have non-feePayer matches
-    // (Always run it, but it's still expensive — future optimization: skip if
-    // the address is not a contract. For now, we run both and merge.)
-    const jsonbIds = await db
-      .select({ id: transactions.id })
-      .from(transactions)
-      .where(
-        and(
+    // ── Step 1: Get matched tx IDs ──
+    // Phase A: fast indexed lookups in parallel
+    const lower = address.toLowerCase();
+    const [feePayerIds, interactionIds] = await Promise.all([
+      db.select({ id: transactions.id })
+        .from(transactions)
+        .where(and(eq(transactions.networkId, id), buildFeePayerCondition(address))),
+      db.selectDistinct({ id: contractInteractions.txId })
+        .from(contractInteractions)
+        .innerJoin(transactions, eq(transactions.id, contractInteractions.txId))
+        .where(and(
           eq(transactions.networkId, id),
-          // Only scan rows NOT already matched by feePayer
-          feePayerIdSet.size > 0
-            ? sql`${transactions.id} != ALL(${sql`ARRAY[${sql.join(
-                [...feePayerIdSet].slice(0, 1000).map((i) => sql`${i}`),
-                sql`, `,
-              )}]::int[]`})`
-            : sql`true`,
-          sql`(
-            EXISTS (
-              SELECT 1 FROM jsonb_array_elements(${transactions.publicCalls}) AS elem
-              WHERE lower(elem->>'contractAddress') = ${address.toLowerCase()}
-                 OR lower(elem->>'msgSender') = ${address.toLowerCase()}
-                 OR EXISTS (
-                   SELECT 1 FROM jsonb_array_elements_text(elem->'calldata') AS cd
-                   WHERE lower(cd) = ${address.toLowerCase()}
-                 )
-            )
-            OR EXISTS (
-              SELECT 1 FROM jsonb_array_elements(${transactions.l2ToL1MsgDetails}) AS msg
-              WHERE lower(msg->>'recipient') = ${address.toLowerCase()}
-                 OR lower(msg->>'senderContract') = ${address.toLowerCase()}
-            )
-          )`,
-        ),
-      );
+          sql`lower(${contractInteractions.contractAddress}) = ${lower}`,
+        )),
+    ]);
 
-    const allIds = [...feePayerIdSet, ...jsonbIds.map((r) => r.id)];
+    const fastIdSet = new Set<number>();
+    for (const r of feePayerIds) fastIdSet.add(r.id);
+    for (const r of interactionIds) fastIdSet.add(r.id);
+
+    // Phase B: JSONB scan for msgSender, calldata, l2ToL1 — exclude already-matched IDs
+    const excludeClause = fastIdSet.size > 0
+      ? sql`AND ${transactions.id} != ALL(${sql`ARRAY[${sql.join(
+          [...fastIdSet].map((i) => sql`${i}`), sql`, `,
+        )}]::int[]`})`
+      : sql``;
+
+    const jsonbIds = await db.execute<{ id: number }>(sql`
+      SELECT id FROM transactions
+      WHERE network_id = ${id}
+        ${excludeClause}
+        AND (
+          EXISTS (
+            SELECT 1 FROM jsonb_array_elements(public_calls) AS elem
+            WHERE lower(elem->>'msgSender') = ${lower}
+               OR EXISTS (
+                 SELECT 1 FROM jsonb_array_elements_text(elem->'calldata') AS cd
+                 WHERE lower(cd) = ${lower}
+               )
+          )
+          OR EXISTS (
+            SELECT 1 FROM jsonb_array_elements(l2_to_l1_msg_details) AS msg
+            WHERE lower(msg->>'recipient') = ${lower}
+               OR lower(msg->>'senderContract') = ${lower}
+          )
+        )
+    `);
+
+    for (const r of jsonbIds) fastIdSet.add(r.id);
+    const allIds = [...fastIdSet];
     const totalTxs = allIds.length;
 
     if (totalTxs === 0) {
@@ -133,19 +138,50 @@ export function registerMurderBoardRoutes(app: FastifyInstance, db: Db) {
       };
     }
 
-    // ── Step 2: Aggregates (on IDs only, no full row fetch) ──
-    const [latestRun] = await db
-      .select({ id: clusterRuns.id })
-      .from(clusterRuns)
-      .where(eq(clusterRuns.networkId, id))
-      .orderBy(desc(clusterRuns.computedAt))
-      .limit(1);
+    // ── Step 2: Aggregates — all independent queries in parallel ──
+    const idArray = sql`ARRAY[${sql.join(allIds.map((i) => sql`${i}`), sql`, `)}]::int[]`;
 
-    // Cluster memberships for ALL matched txs (for aggregates + score)
+    const [
+      [latestRun],
+      fpcAggRows,
+      [{ count: networkTxCount }],
+      labels,
+      contractAggRows,
+    ] = await Promise.all([
+      db.select({ id: clusterRuns.id })
+        .from(clusterRuns)
+        .where(eq(clusterRuns.networkId, id))
+        .orderBy(desc(clusterRuns.computedAt))
+        .limit(1),
+      db.select({ feePayer: transactions.feePayer, count: sql<number>`count(*)` })
+        .from(transactions)
+        .where(sql`${transactions.id} = ANY(${idArray})`)
+        .groupBy(transactions.feePayer),
+      db.select({ count: sql<number>`count(*)` })
+        .from(transactions)
+        .where(eq(transactions.networkId, id)),
+      db.select()
+        .from(contractLabels)
+        .where(eq(contractLabels.networkId, id)),
+      db.select({
+          contractAddress: contractInteractions.contractAddress,
+          count: sql<number>`count(*)`,
+        })
+        .from(contractInteractions)
+        .where(sql`${contractInteractions.txId} = ANY(${idArray})`)
+        .groupBy(contractInteractions.contractAddress)
+        .orderBy(desc(sql`count(*)`)),
+    ]);
+
+    const labelMap = new Map(
+      labels.map((l) => [l.address.toLowerCase(), { label: l.label, contractType: l.contractType }]),
+    );
+
+    // Cluster memberships (depends on latestRun)
     let membershipRows: { txId: number; clusterId: number; outlierScore: number | null }[] = [];
     let clusterSizeMap = new Map<number, number>();
 
-    if (latestRun && allIds.length > 0) {
+    if (latestRun) {
       membershipRows = await db
         .select({
           txId: clusterMemberships.txId,
@@ -153,33 +189,22 @@ export function registerMurderBoardRoutes(app: FastifyInstance, db: Db) {
           outlierScore: clusterMemberships.outlierScore,
         })
         .from(clusterMemberships)
-        .where(
-          and(
-            eq(clusterMemberships.runId, latestRun.id),
-            sql`${clusterMemberships.txId} = ANY(${sql`ARRAY[${sql.join(
-              allIds.map((i) => sql`${i}`),
-              sql`, `,
-            )}]::int[]`})`,
-          ),
-        );
+        .where(and(
+          eq(clusterMemberships.runId, latestRun.id),
+          sql`${clusterMemberships.txId} = ANY(${idArray})`,
+        ));
 
       const clusterIds = [...new Set(membershipRows.map((m) => m.clusterId).filter((c) => c !== -1))];
       if (clusterIds.length > 0) {
         const sizes = await db
-          .select({
-            clusterId: clusterMemberships.clusterId,
-            count: sql<number>`count(*)`,
-          })
+          .select({ clusterId: clusterMemberships.clusterId, count: sql<number>`count(*)` })
           .from(clusterMemberships)
-          .where(
-            and(
-              eq(clusterMemberships.runId, latestRun.id),
-              sql`${clusterMemberships.clusterId} = ANY(${sql`ARRAY[${sql.join(
-                clusterIds.map((cid) => sql`${cid}`),
-                sql`, `,
-              )}]::int[]`})`,
-            ),
-          )
+          .where(and(
+            eq(clusterMemberships.runId, latestRun.id),
+            sql`${clusterMemberships.clusterId} = ANY(${sql`ARRAY[${sql.join(
+              clusterIds.map((cid) => sql`${cid}`), sql`, `,
+            )}]::int[]`})`,
+          ))
           .groupBy(clusterMemberships.clusterId);
 
         for (const s of sizes) clusterSizeMap.set(s.clusterId, Number(s.count));
@@ -188,45 +213,20 @@ export function registerMurderBoardRoutes(app: FastifyInstance, db: Db) {
 
     const membershipMap = new Map(membershipRows.map((m) => [m.txId, m]));
 
-    // FPC aggregates — use a single query on the matched IDs
-    const fpcAggRows = await db
-      .select({
-        feePayer: transactions.feePayer,
-        count: sql<number>`count(*)`,
-      })
-      .from(transactions)
-      .where(sql`${transactions.id} = ANY(${sql`ARRAY[${sql.join(
-        allIds.map((i) => sql`${i}`),
-        sql`, `,
-      )}]::int[]`})`)
-      .groupBy(transactions.feePayer);
-
+    // FPC network shares (depends on fpcAggRows + networkTxCount)
     const fpcAgg = new Map(fpcAggRows.map((r) => [r.feePayer, Number(r.count)]));
-
-    // Network tx count + FPC network shares
-    const [{ count: networkTxCount }] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(transactions)
-      .where(eq(transactions.networkId, id));
-
     const fpcAddressList = [...fpcAgg.keys()];
     let fpcNetworkShares = new Map<string, number>();
     if (fpcAddressList.length > 0) {
       const fpcCounts = await db
-        .select({
-          feePayer: transactions.feePayer,
-          count: sql<number>`count(*)`,
-        })
+        .select({ feePayer: transactions.feePayer, count: sql<number>`count(*)` })
         .from(transactions)
-        .where(
-          and(
-            eq(transactions.networkId, id),
-            sql`${transactions.feePayer} = ANY(${sql`ARRAY[${sql.join(
-              fpcAddressList.map((a) => sql`${a}`),
-              sql`, `,
-            )}]::text[]`})`,
-          ),
-        )
+        .where(and(
+          eq(transactions.networkId, id),
+          sql`${transactions.feePayer} = ANY(${sql`ARRAY[${sql.join(
+            fpcAddressList.map((a) => sql`${a}`), sql`, `,
+          )}]::text[]`})`,
+        ))
         .groupBy(transactions.feePayer);
 
       const total = Number(networkTxCount);
@@ -235,32 +235,11 @@ export function registerMurderBoardRoutes(app: FastifyInstance, db: Db) {
       }
     }
 
-    // Labels
-    const labels = await db
-      .select()
-      .from(contractLabels)
-      .where(eq(contractLabels.networkId, id));
-    const labelMap = new Map(
-      labels.map((l) => [l.address.toLowerCase(), { label: l.label, contractType: l.contractType }]),
-    );
-
-    // Contract interaction aggregates
-    const contractAggRows = await db.execute<{ contract_address: string; call_count: number }>(sql`
-      SELECT elem->>'contractAddress' AS contract_address, count(*)::int AS call_count
-      FROM transactions, jsonb_array_elements(public_calls) AS elem
-      WHERE ${transactions.id} = ANY(${sql`ARRAY[${sql.join(
-        allIds.map((i) => sql`${i}`),
-        sql`, `,
-      )}]::int[]`})
-        AND elem->>'contractAddress' IS NOT NULL
-      GROUP BY elem->>'contractAddress'
-      ORDER BY call_count DESC
-    `);
     const contractsInteracted = contractAggRows.map((r) => ({
-      address: r.contract_address,
-      label: labelMap.get(r.contract_address.toLowerCase())?.label ?? null,
-      contractType: labelMap.get(r.contract_address.toLowerCase())?.contractType ?? null,
-      callCount: r.call_count,
+      address: r.contractAddress,
+      label: labelMap.get(r.contractAddress.toLowerCase())?.label ?? null,
+      contractType: labelMap.get(r.contractAddress.toLowerCase())?.contractType ?? null,
+      callCount: Number(r.count),
     }));
 
     // Cluster aggregates
