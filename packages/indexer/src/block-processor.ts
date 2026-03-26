@@ -3,6 +3,7 @@ import type { L2BlockStreamEvent } from "@aztec/stdlib/block";
 import { L2TipsMemoryStore } from "@aztec/stdlib/block";
 import { TxHash } from "@aztec/stdlib/tx";
 import type { BlockNumber } from "@aztec/foundation/branded-types";
+import type { Logger } from "@aztec/foundation/log";
 import { eq, and, gt, lte, inArray } from "drizzle-orm";
 import {
   type Db,
@@ -34,6 +35,7 @@ export class BlockProcessor extends L2TipsMemoryStore {
     private readonly networkId: string,
     private readonly node: AztecNode,
     private readonly db: Db,
+    private readonly log?: Logger,
   ) {
     super();
   }
@@ -138,10 +140,9 @@ export class BlockProcessor extends L2TipsMemoryStore {
           // Block-first tx: fetch full Tx from node to get pending data
           const fullTx = await this.node.getTxByHash(TxHash.fromString(mined.txHash));
           if (!fullTx) {
-            console.warn(
-              `[${this.networkId}] Skipping tx ${mined.txHash} in block ${block.number}: ` +
-              `not in DB and not available from node (likely already finalized). ` +
-              `This should not happen during normal operation — check startingBlock config.`
+            this.log?.warn(
+              `Skipping tx ${mined.txHash} in block ${block.number}: ` +
+              `not in DB and not available from node (likely already finalized)`
             );
             continue;
           }
@@ -300,8 +301,8 @@ export class BlockProcessor extends L2TipsMemoryStore {
       (sum, b) => sum + b.body.txEffects.length,
       0,
     );
-    console.log(
-      `[${this.networkId}] Blocks ${first}..${last}: ${totalTxs} txs proposed`,
+    this.log?.info(
+      ` Blocks ${first}..${last}: ${totalTxs} txs proposed`,
     );
   }
 
@@ -329,8 +330,8 @@ export class BlockProcessor extends L2TipsMemoryStore {
       })
       .where(eq(syncCursors.networkId, this.networkId));
 
-    console.log(
-      `[${this.networkId}] Chain checkpointed at block ${event.block.number}`,
+    this.log?.info(
+      ` Chain checkpointed at block ${event.block.number}`,
     );
   }
 
@@ -358,8 +359,8 @@ export class BlockProcessor extends L2TipsMemoryStore {
       })
       .where(eq(syncCursors.networkId, this.networkId));
 
-    console.log(
-      `[${this.networkId}] Chain proven at block ${event.block.number}`,
+    this.log?.info(
+      ` Chain proven at block ${event.block.number}`,
     );
   }
 
@@ -387,8 +388,8 @@ export class BlockProcessor extends L2TipsMemoryStore {
       })
       .where(eq(syncCursors.networkId, this.networkId));
 
-    console.log(
-      `[${this.networkId}] Chain finalized at block ${event.block.number}`,
+    this.log?.info(
+      ` Chain finalized at block ${event.block.number}`,
     );
   }
 
@@ -398,8 +399,8 @@ export class BlockProcessor extends L2TipsMemoryStore {
     event: Extract<L2BlockStreamEvent, { type: "chain-pruned" }>,
   ): Promise<void> {
     const prunedAfter = event.block.number;
-    console.log(
-      `[${this.networkId}] Chain pruned to block ${prunedAfter}, reverting...`,
+    this.log?.info(
+      ` Chain pruned to block ${prunedAfter}, reverting...`,
     );
 
     // 1. Query all affected txs
@@ -493,8 +494,8 @@ export class BlockProcessor extends L2TipsMemoryStore {
       })
       .where(eq(syncCursors.networkId, this.networkId));
 
-    console.log(
-      `[${this.networkId}] Reverted ${affectedTxs.length} txs from pruned blocks`,
+    this.log?.info(
+      ` Reverted ${affectedTxs.length} txs from pruned blocks`,
     );
   }
 }

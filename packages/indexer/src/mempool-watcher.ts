@@ -1,4 +1,5 @@
 import type { AztecNode } from "@aztec/stdlib/interfaces/client";
+import type { Logger } from "@aztec/foundation/log";
 import * as Sentry from "@sentry/node";
 import {
   type Db,
@@ -17,14 +18,13 @@ export class MempoolWatcher {
     private readonly networkId: string,
     private readonly node: AztecNode,
     private readonly db: Db,
-    private readonly pollIntervalMs: number = 500
+    private readonly pollIntervalMs: number = 500,
+    private readonly log?: Logger,
   ) {}
 
   start(): void {
     this.running = true;
-    console.log(
-      `[${this.networkId}] Mempool watcher started (every ${this.pollIntervalMs}ms)`
-    );
+    this.log?.info(`Mempool watcher started (every ${this.pollIntervalMs}ms)`);
     this.poll();
   }
 
@@ -42,7 +42,7 @@ export class MempoolWatcher {
     try {
       await this.fetchPendingTxs();
     } catch (err) {
-      console.error(`[${this.networkId}] Mempool watcher error:`, err);
+      this.log?.error("Mempool watcher error", err);
       Sentry.captureException(err, { tags: { networkId: this.networkId, component: "mempool-watcher" } });
     }
 
@@ -145,18 +145,13 @@ export class MempoolWatcher {
         await Promise.all(inserts);
         processed++;
       } catch (err) {
-        console.error(
-          `[${this.networkId}] Failed to process pending tx ${txHash}:`,
-          err
-        );
+        this.log?.error(`Failed to process pending tx ${txHash}`, err);
         Sentry.captureException(err, { tags: { networkId: this.networkId, component: "mempool-watcher", txHash } });
       }
     }
 
     if (processed > 0) {
-      console.log(
-        `[${this.networkId}] Processed ${processed} pending txs (${this.seen.size} total seen)`
-      );
+      this.log?.info(`Processed ${processed} pending txs (${this.seen.size} total seen)`);
     }
   }
 }

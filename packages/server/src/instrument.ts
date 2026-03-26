@@ -4,7 +4,12 @@ Sentry.init({
   dsn: process.env.SENTRY_DSN,
   environment: process.env.NODE_ENV ?? "development",
   enabled: !!process.env.SENTRY_DSN,
+  enableLogs: true,
   tracesSampleRate: 0.2,
+  integrations: [
+    Sentry.pinoIntegration({ log: { levels: ["info", "warn", "error"] } }),
+    Sentry.postgresIntegration(),
+  ],
   ignoreErrors: [
     // Expected auth failures
     /jwt/i,

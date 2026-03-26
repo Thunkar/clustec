@@ -97,7 +97,7 @@ export function registerAnalyzeRoutes(app: FastifyInstance, db: Db) {
     "/api/networks/:id/analyze/status",
     async (request) => {
       const config = await getConfig(db, request.params.id);
-      return { scheduled: true, intervalMinutes: 10, config };
+      return { scheduled: true, intervalMinutes: 10, config, running: runningNetworks.has(request.params.id) };
     }
   );
 
@@ -176,18 +176,37 @@ export function startAnalysisScheduler(
   networks: string[],
   intervalMs = 10 * 60 * 1000
 ): NodeJS.Timeout {
+  const SLOW_THRESHOLD_MS = 120_000; // 2 minutes
+
   const runAll = async (label: string) => {
     for (const networkId of networks) {
+      if (runningNetworks.has(networkId)) {
+        app.log.info({ networkId }, `${label} skipped — already running`);
+        continue;
+      }
+      runningNetworks.add(networkId);
+      const start = Date.now();
       try {
         const config = await getConfig(db, networkId);
         app.log.info({ networkId, config }, `${label} starting`);
         await runAnalysis(networkId, config, app.log);
+        const durationMs = Date.now() - start;
+        app.log.info({ networkId, durationMs }, `${label} completed`);
+        if (durationMs > SLOW_THRESHOLD_MS) {
+          Sentry.captureMessage(`Slow analysis: ${networkId} took ${(durationMs / 1000).toFixed(1)}s`, {
+            level: "warning",
+            tags: { networkId, component: "analyzer" },
+            extra: { durationMs, label, thresholdMs: SLOW_THRESHOLD_MS },
+          });
+        }
       } catch (err) {
-        app.log.error({ err, networkId }, `${label} failed`);
+        app.log.error({ err, networkId, durationMs: Date.now() - start }, `${label} failed`);
         Sentry.captureException(err, {
           tags: { networkId, component: "analyzer" },
-          extra: { label },
+          extra: { label, durationMs: Date.now() - start },
         });
+      } finally {
+        runningNetworks.delete(networkId);
       }
     }
   };
