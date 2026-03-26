@@ -3,33 +3,9 @@ import {
   type Db,
   blocks,
   transactions,
-  clusterRuns,
-  clusterMemberships,
-  featureVectors,
 } from "@clustec/common";
 import { eq, and, gte, lte, isNotNull, desc, sql } from "drizzle-orm";
-
-// Mirror of packages/indexer/src/features.ts dimensions
-const NUMERIC_DIM = 14;
-const FEATURE_DIM = 15;
-
-const DIM_NAMES = [
-  "numNoteHashes",
-  "numNullifiers",
-  "numL2ToL1Msgs",
-  "numPrivateLogs",
-  "numContractClassLogs",
-  "numPublicLogs",
-  "gasLimitDa",
-  "gasLimitL2",
-  "maxFeePerDaGas",
-  "maxFeePerL2Gas",
-  "numSetupCalls",
-  "numAppCalls",
-  "totalPublicCalldataSize",
-  "expirationDelta",
-  "feePayer",
-] as const;
+import { FEATURE_DIM, DIM_NAMES, gowerDistance, loadClusterCentroids } from "../lib/gower.ts";
 
 interface StatBlock {
   min: string;
@@ -37,25 +13,6 @@ interface StatBlock {
   mean: string;
   median: string;
   p75: string;
-}
-
-function gowerDistance(a: (number | string)[], b: (number | string)[], ranges: number[]): number {
-  let sum = 0;
-  let count = 0;
-  for (let i = 0; i < NUMERIC_DIM; i++) {
-    const ai = Number(a[i]);
-    const bi = Number(b[i]);
-    if (ranges[i] === 0) {
-      sum += ai === bi ? 0 : 1;
-    } else {
-      sum += Math.abs(ai - bi) / ranges[i];
-    }
-    count++;
-  }
-  // Categorical dim (feePayer)
-  sum += a[NUMERIC_DIM] === b[NUMERIC_DIM] ? 0 : 1;
-  count++;
-  return sum / count;
 }
 
 export function registerServiceApiRoutes(app: FastifyInstance, db: Db) {
@@ -219,137 +176,35 @@ export function registerServiceApiRoutes(app: FastifyInstance, db: Db) {
       return { error: "Invalid JSON for vector parameter" };
     }
 
-    // Get the target run
-    let runId: number;
-    if (request.query.runId) {
-      runId = parseInt(request.query.runId, 10);
-    } else {
-      const [latest] = await db
-        .select({ id: clusterRuns.id })
-        .from(clusterRuns)
-        .where(eq(clusterRuns.networkId, id))
-        .orderBy(desc(clusterRuns.computedAt))
-        .limit(1);
-      if (!latest) return { error: "No cluster runs found", recommendations: [] };
-      runId = latest.id;
-    }
+    const parsed = request.query.runId ? parseInt(request.query.runId, 10) : undefined;
+    const result = await loadClusterCentroids(db, id, parsed);
+    if (!result) return { error: "No cluster runs found", recommendations: [] };
 
-    // Fetch all memberships with their feature vectors (exclude outliers)
-    const rows = await db
-      .select({
-        clusterId: clusterMemberships.clusterId,
-        vector: featureVectors.vector,
-      })
-      .from(clusterMemberships)
-      .innerJoin(featureVectors, eq(clusterMemberships.txId, featureVectors.txId))
-      .where(
-        and(
-          eq(clusterMemberships.runId, runId),
-          gte(clusterMemberships.clusterId, 0),
-        ),
-      );
+    const { centroids, ranges, runId } = result;
 
-    if (rows.length === 0) return { runId, recommendations: [] };
+    const recommendations = centroids.map((c) => {
+      const distance = gowerDistance(inputVector, c.centroid, ranges);
+      const score = c.count / (1 + distance);
 
-    // Group by cluster, compute centroids and ranges
-    const clusterData = new Map<
-      number,
-      { vectors: (number | string)[][]; count: number }
-    >();
-
-    for (const row of rows) {
-      const vec = row.vector as (number | string)[];
-      let entry = clusterData.get(row.clusterId);
-      if (!entry) {
-        entry = { vectors: [], count: 0 };
-        clusterData.set(row.clusterId, entry);
-      }
-      entry.vectors.push(vec);
-      entry.count++;
-    }
-
-    // Compute global ranges for Gower normalization
-    const allVectors = rows.map((r) => r.vector as (number | string)[]);
-    const ranges: number[] = [];
-    for (let d = 0; d < NUMERIC_DIM; d++) {
-      const vals = allVectors.map((v) => Number(v[d]));
-      const min = Math.min(...vals);
-      const max = Math.max(...vals);
-      ranges.push(max - min);
-    }
-
-    // For each cluster, compute centroid (median for numeric, mode for categorical)
-    const recommendations: {
-      clusterId: number;
-      clusterSize: number;
-      distance: number;
-      score: number;
-      centroid: (number | string)[];
-      deltas: Record<
-        string,
-        { current: number | string; target: number | string }
-      >;
-    }[] = [];
-
-    for (const [clusterId, data] of clusterData) {
-      const centroid: (number | string)[] = [];
-
-      // Numeric dims: median
-      for (let d = 0; d < NUMERIC_DIM; d++) {
-        const sorted = data.vectors.map((v) => Number(v[d])).sort((a, b) => a - b);
-        const mid = Math.floor(sorted.length / 2);
-        centroid.push(
-          sorted.length % 2 === 0
-            ? (sorted[mid - 1] + sorted[mid]) / 2
-            : sorted[mid],
-        );
-      }
-
-      // Categorical dim: mode
-      const freqs = new Map<string, number>();
-      for (const v of data.vectors) {
-        const val = String(v[NUMERIC_DIM]);
-        freqs.set(val, (freqs.get(val) ?? 0) + 1);
-      }
-      let modeCat = "";
-      let modeCount = 0;
-      for (const [val, count] of freqs) {
-        if (count > modeCount) {
-          modeCat = val;
-          modeCount = count;
-        }
-      }
-      centroid.push(modeCat);
-
-      const distance = gowerDistance(inputVector, centroid, ranges);
-      const score = data.count / (1 + distance);
-
-      // Compute per-dimension deltas
-      const deltas: Record<
-        string,
-        { current: number | string; target: number | string }
-      > = {};
-
+      const deltas: Record<string, { current: number | string; target: number | string }> = {};
       for (let d = 0; d < FEATURE_DIM; d++) {
-        const name = DIM_NAMES[d];
         const current = inputVector[d];
-        const target = centroid[d];
+        const target = c.centroid[d];
         if (current !== target) {
-          deltas[name] = { current, target };
+          deltas[DIM_NAMES[d]] = { current, target };
         }
       }
 
-      recommendations.push({
-        clusterId,
-        clusterSize: data.count,
+      return {
+        clusterId: c.clusterId,
+        clusterSize: c.count,
         distance: Math.round(distance * 10000) / 10000,
         score: Math.round(score * 100) / 100,
-        centroid,
+        centroid: c.centroid,
         deltas,
-      });
-    }
+      };
+    });
 
-    // Sort by score descending (biggest clusters with least distance first)
     recommendations.sort((a, b) => b.score - a.score);
 
     return {
