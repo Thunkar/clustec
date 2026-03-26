@@ -124,11 +124,12 @@ export function useFeePayerStats(networkId: string) {
   });
 }
 
-export function useMurderBoard(networkId: string, address: string) {
+export function useMurderBoard(networkId: string, address: string, page = 1, limit = 50) {
   return useQuery({
-    queryKey: ["networks", networkId, "murder-board", address],
-    queryFn: () => api.getMurderBoard(networkId, address),
+    queryKey: ["networks", networkId, "murder-board", address, page, limit],
+    queryFn: () => api.getMurderBoard(networkId, address, { page, limit }),
     enabled: !!networkId && !!address,
+    placeholderData: (prev) => prev,
   });
 }
 

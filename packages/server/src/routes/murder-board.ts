@@ -5,38 +5,14 @@ import {
   transactions,
   clusterRuns,
   clusterMemberships,
-  featureVectors,
+  contractInteractions,
   contractLabels,
 } from "@clustec/common";
 
-/**
- * Find all transactions where `address` appears publicly:
- * - feePayer
- * - publicCalls[].contractAddress
- * - publicCalls[].msgSender
- * - publicCalls[].calldata[] (hex match)
- * - l2ToL1MsgDetails[].recipient
- * - l2ToL1MsgDetails[].senderContract
- */
-function buildAddressMatchCondition(address: string) {
+/** Quick feePayer-only match (uses index). */
+function buildFeePayerCondition(address: string) {
   const lower = address.toLowerCase();
-  return sql`(
-    lower(${transactions.feePayer}) = ${lower}
-    OR EXISTS (
-      SELECT 1 FROM jsonb_array_elements(${transactions.publicCalls}) AS elem
-      WHERE lower(elem->>'contractAddress') = ${lower}
-         OR lower(elem->>'msgSender') = ${lower}
-         OR EXISTS (
-           SELECT 1 FROM jsonb_array_elements_text(elem->'calldata') AS cd
-           WHERE lower(cd) = ${lower}
-         )
-    )
-    OR EXISTS (
-      SELECT 1 FROM jsonb_array_elements(${transactions.l2ToL1MsgDetails}) AS msg
-      WHERE lower(msg->>'recipient') = ${lower}
-         OR lower(msg->>'senderContract') = ${lower}
-    )
-  )`;
+  return sql`lower(${transactions.feePayer}) = ${lower}`;
 }
 
 /** Determine how an address appears in a transaction. */
@@ -86,168 +62,190 @@ function detectRoles(
 export function registerMurderBoardRoutes(app: FastifyInstance, db: Db) {
   app.get<{
     Params: { id: string; address: string };
+    Querystring: { page?: string; limit?: string };
   }>("/api/networks/:id/murder-board/:address", async (request) => {
     const { id, address } = request.params;
+    const page = Math.max(1, parseInt(request.query.page ?? "1", 10));
+    const limit = Math.min(100, Math.max(1, parseInt(request.query.limit ?? "50", 10)));
+    const offset = (page - 1) * limit;
 
-    // 1. Find all txs where this address appears publicly
-    const matchedTxs = await db
-      .select({
-        id: transactions.id,
-        txHash: transactions.txHash,
-        status: transactions.status,
-        executionResult: transactions.executionResult,
-        blockNumber: transactions.blockNumber,
-        actualFee: transactions.actualFee,
-        feePayer: transactions.feePayer,
-        publicCalls: transactions.publicCalls,
-        l2ToL1MsgDetails: transactions.l2ToL1MsgDetails,
-        numNoteHashes: transactions.numNoteHashes,
-        numNullifiers: transactions.numNullifiers,
-        numL2ToL1Msgs: transactions.numL2ToL1Msgs,
-        numPrivateLogs: transactions.numPrivateLogs,
-        numPublicLogs: transactions.numPublicLogs,
-        numSetupCalls: transactions.numSetupCalls,
-        numAppCalls: transactions.numAppCalls,
-        totalPublicCalldataSize: transactions.totalPublicCalldataSize,
-        createdAt: transactions.createdAt,
-      })
-      .from(transactions)
-      .where(and(eq(transactions.networkId, id), buildAddressMatchCondition(address)))
-      .orderBy(desc(transactions.blockNumber));
+    // ── Step 1: Get matched tx IDs ──
+    // Phase A: fast indexed lookups in parallel
+    const lower = address.toLowerCase();
+    const [feePayerIds, interactionIds] = await Promise.all([
+      db.select({ id: transactions.id })
+        .from(transactions)
+        .where(and(eq(transactions.networkId, id), buildFeePayerCondition(address))),
+      db.selectDistinct({ id: contractInteractions.txId })
+        .from(contractInteractions)
+        .innerJoin(transactions, eq(transactions.id, contractInteractions.txId))
+        .where(and(
+          eq(transactions.networkId, id),
+          sql`lower(${contractInteractions.contractAddress}) = ${lower}`,
+        )),
+    ]);
 
-    if (matchedTxs.length === 0) {
+    const fastIdSet = new Set<number>();
+    for (const r of feePayerIds) fastIdSet.add(r.id);
+    for (const r of interactionIds) fastIdSet.add(r.id);
+
+    // Phase B: JSONB scan for msgSender, calldata, l2ToL1 — exclude already-matched IDs
+    const excludeClause = fastIdSet.size > 0
+      ? sql`AND ${transactions.id} != ALL(${sql`ARRAY[${sql.join(
+          [...fastIdSet].map((i) => sql`${i}`), sql`, `,
+        )}]::int[]`})`
+      : sql``;
+
+    const jsonbIds = await db.execute<{ id: number }>(sql`
+      SELECT id FROM transactions
+      WHERE network_id = ${id}
+        ${excludeClause}
+        AND (
+          EXISTS (
+            SELECT 1 FROM jsonb_array_elements(public_calls) AS elem
+            WHERE lower(elem->>'msgSender') = ${lower}
+               OR EXISTS (
+                 SELECT 1 FROM jsonb_array_elements_text(elem->'calldata') AS cd
+                 WHERE lower(cd) = ${lower}
+               )
+          )
+          OR EXISTS (
+            SELECT 1 FROM jsonb_array_elements(l2_to_l1_msg_details) AS msg
+            WHERE lower(msg->>'recipient') = ${lower}
+               OR lower(msg->>'senderContract') = ${lower}
+          )
+        )
+    `);
+
+    for (const r of jsonbIds) fastIdSet.add(r.id);
+    const allIds = [...fastIdSet];
+    const totalTxs = allIds.length;
+
+    if (totalTxs === 0) {
       return {
         address,
         totalTxs: 0,
+        networkTxCount: 0,
+        latestRunId: null,
         transactions: [],
         clusters: [],
         fpcsUsed: [],
         contractsInteracted: [],
         privacyScore: null,
+        page,
+        limit,
+        totalPages: 0,
       };
     }
 
-    const txIds = matchedTxs.map((t) => t.id);
+    // ── Step 2: Aggregates — all independent queries in parallel ──
+    const idArray = sql`ARRAY[${sql.join(allIds.map((i) => sql`${i}`), sql`, `)}]::int[]`;
 
-    // 2. Get latest cluster run for this network
-    const [latestRun] = await db
-      .select({ id: clusterRuns.id })
-      .from(clusterRuns)
-      .where(eq(clusterRuns.networkId, id))
-      .orderBy(desc(clusterRuns.computedAt))
-      .limit(1);
-
-    // 3. Get cluster memberships + feature vectors for matched txs
-    let membershipMap = new Map<
-      number,
-      { clusterId: number; outlierScore: number | null; featureVector: unknown }
-    >();
-    let clusterSizeMap = new Map<number, number>();
-
-    if (latestRun) {
-      const memberships = await db
-        .select({
-          txId: clusterMemberships.txId,
-          clusterId: clusterMemberships.clusterId,
-          outlierScore: clusterMemberships.outlierScore,
-          featureVector: featureVectors.vector,
+    const [
+      [latestRun],
+      fpcAggRows,
+      [{ count: networkTxCount }],
+      labels,
+      contractAggRows,
+    ] = await Promise.all([
+      db.select({ id: clusterRuns.id })
+        .from(clusterRuns)
+        .where(eq(clusterRuns.networkId, id))
+        .orderBy(desc(clusterRuns.computedAt))
+        .limit(1),
+      db.select({ feePayer: transactions.feePayer, count: sql<number>`count(*)` })
+        .from(transactions)
+        .where(sql`${transactions.id} = ANY(${idArray})`)
+        .groupBy(transactions.feePayer),
+      db.select({ count: sql<number>`count(*)` })
+        .from(transactions)
+        .where(eq(transactions.networkId, id)),
+      db.select()
+        .from(contractLabels)
+        .where(eq(contractLabels.networkId, id)),
+      db.select({
+          contractAddress: contractInteractions.contractAddress,
+          count: sql<number>`count(*)`,
         })
-        .from(clusterMemberships)
-        .leftJoin(featureVectors, eq(featureVectors.txId, clusterMemberships.txId))
-        .where(
-          and(
-            eq(clusterMemberships.runId, latestRun.id),
-            sql`${clusterMemberships.txId} IN (${sql.join(
-              txIds.map((tid) => sql`${tid}`),
-              sql`, `,
-            )})`,
-          ),
-        );
+        .from(contractInteractions)
+        .where(sql`${contractInteractions.txId} = ANY(${idArray})`)
+        .groupBy(contractInteractions.contractAddress)
+        .orderBy(desc(sql`count(*)`)),
+    ]);
 
-      for (const m of memberships) {
-        membershipMap.set(m.txId, {
-          clusterId: m.clusterId,
-          outlierScore: m.outlierScore,
-          featureVector: m.featureVector,
-        });
-      }
-
-      // Get cluster sizes for all clusters these txs belong to
-      const clusterIds = [
-        ...new Set(memberships.map((m) => m.clusterId).filter((c) => c !== -1)),
-      ];
-      if (clusterIds.length > 0) {
-        const sizes = await db
-          .select({
-            clusterId: clusterMemberships.clusterId,
-            count: sql<number>`count(*)`,
-          })
-          .from(clusterMemberships)
-          .where(
-            and(
-              eq(clusterMemberships.runId, latestRun.id),
-              sql`${clusterMemberships.clusterId} IN (${sql.join(
-                clusterIds.map((cid) => sql`${cid}`),
-                sql`, `,
-              )})`,
-            ),
-          )
-          .groupBy(clusterMemberships.clusterId);
-
-        for (const s of sizes) {
-          clusterSizeMap.set(s.clusterId, Number(s.count));
-        }
-      }
-    }
-
-    // 4. Get labels for address resolution
-    const labels = await db
-      .select()
-      .from(contractLabels)
-      .where(eq(contractLabels.networkId, id));
     const labelMap = new Map(
       labels.map((l) => [l.address.toLowerCase(), { label: l.label, contractType: l.contractType }]),
     );
 
-    // 5. Build transaction list with roles and cluster info
-    const txList = matchedTxs.map((tx) => {
-      const membership = membershipMap.get(tx.id);
-      const clusterId = membership?.clusterId ?? null;
-      return {
-        txHash: tx.txHash,
-        blockNumber: tx.blockNumber,
-        status: tx.status,
-        executionResult: tx.executionResult,
-        actualFee: tx.actualFee,
-        roles: detectRoles(address, tx),
-        clusterId,
-        clusterSize:
-          clusterId === null
-            ? null
-            : clusterId === -1
-              ? 1
-              : clusterSizeMap.get(clusterId) ?? null,
-        outlierScore: membership?.outlierScore ?? null,
-        featureVector: membership?.featureVector ?? null,
-        feePayer: tx.feePayer,
-        numNoteHashes: tx.numNoteHashes,
-        numNullifiers: tx.numNullifiers,
-        numL2ToL1Msgs: tx.numL2ToL1Msgs,
-        numPrivateLogs: tx.numPrivateLogs,
-        numPublicLogs: tx.numPublicLogs,
-        numSetupCalls: tx.numSetupCalls,
-        numAppCalls: tx.numAppCalls,
-        totalPublicCalldataSize: tx.totalPublicCalldataSize,
-        createdAt: tx.createdAt,
-      };
-    });
+    // Cluster memberships (depends on latestRun)
+    let membershipRows: { txId: number; clusterId: number; outlierScore: number | null }[] = [];
+    let clusterSizeMap = new Map<number, number>();
 
-    // 6. Aggregate clusters
-    const clusterAgg = new Map<number, number>();
-    for (const tx of txList) {
-      if (tx.clusterId !== null) {
-        clusterAgg.set(tx.clusterId, (clusterAgg.get(tx.clusterId) ?? 0) + 1);
+    if (latestRun) {
+      membershipRows = await db
+        .select({
+          txId: clusterMemberships.txId,
+          clusterId: clusterMemberships.clusterId,
+          outlierScore: clusterMemberships.outlierScore,
+        })
+        .from(clusterMemberships)
+        .where(and(
+          eq(clusterMemberships.runId, latestRun.id),
+          sql`${clusterMemberships.txId} = ANY(${idArray})`,
+        ));
+
+      const clusterIds = [...new Set(membershipRows.map((m) => m.clusterId).filter((c) => c !== -1))];
+      if (clusterIds.length > 0) {
+        const sizes = await db
+          .select({ clusterId: clusterMemberships.clusterId, count: sql<number>`count(*)` })
+          .from(clusterMemberships)
+          .where(and(
+            eq(clusterMemberships.runId, latestRun.id),
+            sql`${clusterMemberships.clusterId} = ANY(${sql`ARRAY[${sql.join(
+              clusterIds.map((cid) => sql`${cid}`), sql`, `,
+            )}]::int[]`})`,
+          ))
+          .groupBy(clusterMemberships.clusterId);
+
+        for (const s of sizes) clusterSizeMap.set(s.clusterId, Number(s.count));
       }
+    }
+
+    const membershipMap = new Map(membershipRows.map((m) => [m.txId, m]));
+
+    // FPC network shares (depends on fpcAggRows + networkTxCount)
+    const fpcAgg = new Map(fpcAggRows.map((r) => [r.feePayer, Number(r.count)]));
+    const fpcAddressList = [...fpcAgg.keys()];
+    let fpcNetworkShares = new Map<string, number>();
+    if (fpcAddressList.length > 0) {
+      const fpcCounts = await db
+        .select({ feePayer: transactions.feePayer, count: sql<number>`count(*)` })
+        .from(transactions)
+        .where(and(
+          eq(transactions.networkId, id),
+          sql`${transactions.feePayer} = ANY(${sql`ARRAY[${sql.join(
+            fpcAddressList.map((a) => sql`${a}`), sql`, `,
+          )}]::text[]`})`,
+        ))
+        .groupBy(transactions.feePayer);
+
+      const total = Number(networkTxCount);
+      for (const row of fpcCounts) {
+        fpcNetworkShares.set(row.feePayer, total > 0 ? Number(row.count) / total : 0);
+      }
+    }
+
+    const contractsInteracted = contractAggRows.map((r) => ({
+      address: r.contractAddress,
+      label: labelMap.get(r.contractAddress.toLowerCase())?.label ?? null,
+      contractType: labelMap.get(r.contractAddress.toLowerCase())?.contractType ?? null,
+      callCount: Number(r.count),
+    }));
+
+    // Cluster aggregates
+    const clusterAgg = new Map<number, number>();
+    for (const m of membershipRows) {
+      clusterAgg.set(m.clusterId, (clusterAgg.get(m.clusterId) ?? 0) + 1);
     }
     const clusters = [...clusterAgg.entries()]
       .map(([clusterId, txCount]) => ({
@@ -256,44 +254,6 @@ export function registerMurderBoardRoutes(app: FastifyInstance, db: Db) {
         txCount,
       }))
       .sort((a, b) => b.txCount - a.txCount);
-
-    // 7. Aggregate FPCs used (fee payers across this address's txs)
-    const fpcAgg = new Map<string, number>();
-    for (const tx of matchedTxs) {
-      fpcAgg.set(tx.feePayer, (fpcAgg.get(tx.feePayer) ?? 0) + 1);
-    }
-    const fpcAddressList = [...fpcAgg.keys()];
-
-    // 7b. Network-wide FPC usage counts (needed for both response and scoring)
-    const [{ count: networkTxCount }] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(transactions)
-      .where(eq(transactions.networkId, id));
-
-    let fpcNetworkShares = new Map<string, number>();
-    if (fpcAddressList.length > 0) {
-      const fpcCounts = await db
-        .select({
-          feePayer: transactions.feePayer,
-          count: sql<number>`count(*)`,
-        })
-        .from(transactions)
-        .where(
-          and(
-            eq(transactions.networkId, id),
-            sql`${transactions.feePayer} IN (${sql.join(
-              fpcAddressList.map((a) => sql`${a}`),
-              sql`, `,
-            )})`,
-          ),
-        )
-        .groupBy(transactions.feePayer);
-
-      const total = Number(networkTxCount);
-      for (const row of fpcCounts) {
-        fpcNetworkShares.set(row.feePayer, total > 0 ? Number(row.count) / total : 0);
-      }
-    }
 
     const fpcsUsed = [...fpcAgg.entries()]
       .map(([addr, txCount]) => ({
@@ -305,41 +265,114 @@ export function registerMurderBoardRoutes(app: FastifyInstance, db: Db) {
       }))
       .sort((a, b) => b.txCount - a.txCount);
 
-    // 8. Aggregate contracts interacted with (from public calls)
-    const contractAgg = new Map<string, number>();
-    for (const tx of matchedTxs) {
-      const calls = (tx.publicCalls ?? []) as { contractAddress: string }[];
-      for (const c of calls) {
-        if (c.contractAddress) {
-          contractAgg.set(
-            c.contractAddress,
-            (contractAgg.get(c.contractAddress) ?? 0) + 1,
-          );
-        }
+    // Privacy score (uses aggregates, not full tx rows)
+    const txListForScore = membershipRows.map((m) => ({
+      clusterId: m.clusterId as number | null,
+      clusterSize: m.clusterId === -1 ? 1 : clusterSizeMap.get(m.clusterId) ?? null,
+      outlierScore: m.outlierScore,
+      feePayer: "", // not needed for score
+    }));
+    // Add unanalyzed txs
+    for (const txId of allIds) {
+      if (!membershipMap.has(txId)) {
+        txListForScore.push({ clusterId: null, clusterSize: null, outlierScore: null, feePayer: "" });
       }
     }
-    const contractsInteracted = [...contractAgg.entries()]
-      .map(([addr, callCount]) => ({
-        address: addr,
-        label: labelMap.get(addr.toLowerCase())?.label ?? null,
-        contractType: labelMap.get(addr.toLowerCase())?.contractType ?? null,
-        callCount,
-      }))
-      .sort((a, b) => b.callCount - a.callCount);
+    const privacyScore = computePrivacyScore(txListForScore, clusters, fpcsUsed, fpcNetworkShares);
 
-    // 9. Privacy score
-    const privacyScore = computePrivacyScore(txList, clusters, fpcsUsed, fpcNetworkShares);
+    // ── Step 3: Paginated tx rows (only fetch the page we need) ──
+    const pageIds = allIds.slice(offset, offset + limit);
+    let pageTxs: {
+      txHash: string;
+      blockNumber: number | null;
+      status: string;
+      executionResult: string | null;
+      actualFee: string | null;
+      roles: string[];
+      clusterId: number | null;
+      clusterSize: number | null;
+      outlierScore: number | null;
+      feePayer: string;
+      numNoteHashes: number;
+      numNullifiers: number;
+      numL2ToL1Msgs: number;
+      numPrivateLogs: number;
+      numPublicLogs: number | null;
+      numSetupCalls: number;
+      numAppCalls: number;
+      totalPublicCalldataSize: number;
+      createdAt: Date;
+    }[] = [];
+
+    if (pageIds.length > 0) {
+      const rows = await db
+        .select({
+          id: transactions.id,
+          txHash: transactions.txHash,
+          status: transactions.status,
+          executionResult: transactions.executionResult,
+          blockNumber: transactions.blockNumber,
+          actualFee: transactions.actualFee,
+          feePayer: transactions.feePayer,
+          publicCalls: transactions.publicCalls,
+          l2ToL1MsgDetails: transactions.l2ToL1MsgDetails,
+          numNoteHashes: transactions.numNoteHashes,
+          numNullifiers: transactions.numNullifiers,
+          numL2ToL1Msgs: transactions.numL2ToL1Msgs,
+          numPrivateLogs: transactions.numPrivateLogs,
+          numPublicLogs: transactions.numPublicLogs,
+          numSetupCalls: transactions.numSetupCalls,
+          numAppCalls: transactions.numAppCalls,
+          totalPublicCalldataSize: transactions.totalPublicCalldataSize,
+          createdAt: transactions.createdAt,
+        })
+        .from(transactions)
+        .where(sql`${transactions.id} = ANY(${sql`ARRAY[${sql.join(
+          pageIds.map((i) => sql`${i}`),
+          sql`, `,
+        )}]::int[]`})`)
+        .orderBy(desc(transactions.blockNumber));
+
+      pageTxs = rows.map((tx) => {
+        const membership = membershipMap.get(tx.id);
+        const clusterId = membership?.clusterId ?? null;
+        return {
+          txHash: tx.txHash,
+          blockNumber: tx.blockNumber,
+          status: tx.status,
+          executionResult: tx.executionResult,
+          actualFee: tx.actualFee,
+          roles: detectRoles(address, tx),
+          clusterId,
+          clusterSize: clusterId === null ? null : clusterId === -1 ? 1 : clusterSizeMap.get(clusterId) ?? null,
+          outlierScore: membership?.outlierScore ?? null,
+          feePayer: tx.feePayer,
+          numNoteHashes: tx.numNoteHashes,
+          numNullifiers: tx.numNullifiers,
+          numL2ToL1Msgs: tx.numL2ToL1Msgs,
+          numPrivateLogs: tx.numPrivateLogs,
+          numPublicLogs: tx.numPublicLogs,
+          numSetupCalls: tx.numSetupCalls,
+          numAppCalls: tx.numAppCalls,
+          totalPublicCalldataSize: tx.totalPublicCalldataSize,
+          createdAt: tx.createdAt,
+        };
+      });
+    }
 
     return {
       address,
-      totalTxs: matchedTxs.length,
+      totalTxs,
       networkTxCount: Number(networkTxCount),
       latestRunId: latestRun?.id ?? null,
-      transactions: txList,
+      transactions: pageTxs,
       clusters,
       fpcsUsed,
       contractsInteracted,
       privacyScore,
+      page,
+      limit,
+      totalPages: Math.ceil(totalTxs / limit),
     };
   });
 }
@@ -351,12 +384,10 @@ function computePrivacyScore(
   fpcNetworkShares: Map<string, number>,
 ): { score: number; factors: { name: string; impact: "good" | "bad" | "neutral"; detail: string }[] } {
   const factors: { name: string; impact: "good" | "bad" | "neutral"; detail: string }[] = [];
-  let score = 50; // Start neutral
+  let score = 50;
 
   if (txList.length === 0) return { score: 0, factors: [] };
 
-  // --- Cluster concentration ---
-  // All txs in one big cluster = good; spread across many = bad (linkable across patterns)
   const analyzedTxs = txList.filter((t) => t.clusterId !== null);
   const nonOutlierClusters = clusters.filter((c) => c.clusterId !== -1);
 
@@ -384,7 +415,6 @@ function computePrivacyScore(
     });
   }
 
-  // --- Privacy set sizes ---
   const avgClusterSize =
     nonOutlierClusters.length > 0
       ? nonOutlierClusters.reduce((s, c) => s + c.clusterSize, 0) / nonOutlierClusters.length
@@ -406,7 +436,6 @@ function computePrivacyScore(
     });
   }
 
-  // --- Outlier ratio ---
   const outlierTxs = txList.filter((t) => t.clusterId === -1);
   const outlierRatio = analyzedTxs.length > 0 ? outlierTxs.length / analyzedTxs.length : 0;
 
@@ -427,9 +456,6 @@ function computePrivacyScore(
     });
   }
 
-  // --- FPC network share ---
-  // What matters is how much of the network uses the same FPCs as this address.
-  // Weight each FPC's network share by the number of user txs that use it.
   const totalUserTxs = txList.length;
   let weightedShare = 0;
   for (const fpc of fpcsUsed) {
@@ -460,7 +486,6 @@ function computePrivacyScore(
     });
   }
 
-  // --- Unanalyzed txs ---
   const unanalyzed = txList.length - analyzedTxs.length;
   if (unanalyzed > 0) {
     factors.push({

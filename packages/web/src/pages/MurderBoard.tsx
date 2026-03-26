@@ -125,12 +125,14 @@ export function MurderBoard() {
   const [searchParams, setSearchParams] = useSearchParams();
   const addressParam = searchParams.get("address") ?? "";
   const [inputValue, setInputValue] = useState(addressParam);
-  const { data, isLoading } = useMurderBoard(selectedNetwork, addressParam);
+  const [page, setPage] = useState(1);
+  const { data, isLoading } = useMurderBoard(selectedNetwork, addressParam, page);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = inputValue.trim();
     if (trimmed) {
+      setPage(1);
       setSearchParams({ address: trimmed });
     }
   };
@@ -158,15 +160,19 @@ export function MurderBoard() {
 
       {addressParam && isLoading && <Loading />}
 
-      {addressParam && data && <MurderBoardResults data={data} />}
+      {addressParam && data && <MurderBoardResults data={data} page={page} onPageChange={setPage} />}
     </PageContainer>
   );
 }
 
 function MurderBoardResults({
   data,
+  page,
+  onPageChange,
 }: {
   data: MurderBoardData;
+  page: number;
+  onPageChange: (page: number) => void;
 }) {
   const [txSort, setTxSort] = useState<{ key: string; dir: "asc" | "desc" }>({
     key: "blockNumber",
@@ -522,6 +528,27 @@ function MurderBoardResults({
             </tbody>
           </Table>
         </TableWrapper>
+        {data.totalPages > 1 && (
+          <Flex gap="8px" align="center" style={{ padding: theme.spacing.sm, justifyContent: "center" }}>
+            <Button
+              onClick={() => onPageChange(page - 1)}
+              disabled={page <= 1}
+              style={{ padding: "4px 12px", fontSize: theme.fontSize.xs }}
+            >
+              Prev
+            </Button>
+            <span style={{ fontSize: theme.fontSize.xs, color: theme.colors.textMuted }}>
+              Page {page} of {data.totalPages}
+            </span>
+            <Button
+              onClick={() => onPageChange(page + 1)}
+              disabled={page >= data.totalPages}
+              style={{ padding: "4px 12px", fontSize: theme.fontSize.xs }}
+            >
+              Next
+            </Button>
+          </Flex>
+        )}
       </Card>
     </>
   );

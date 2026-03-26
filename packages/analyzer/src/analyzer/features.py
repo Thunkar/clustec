@@ -85,6 +85,13 @@ def prepare_feature_matrix(
         ranges = np.ptp(numeric, axis=0)
         ranges[ranges == 0] = 1.0
         normed = (numeric / ranges).astype(np.float32)
+
+        # Down-weight fee-per-gas dimensions (8: maxFeePerDaGas, 9: maxFeePerL2Gas).
+        # These vary wildly due to user-set bid caps and don't reflect tx shape —
+        # two identical txs can have very different maxFeePerGas.
+        FEE_WEIGHT = 0.25
+        normed[:, 8] *= FEE_WEIGHT
+        normed[:, 9] *= FEE_WEIGHT
     else:
         normed = np.zeros((n, 0), dtype=np.float32)
 
