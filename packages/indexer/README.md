@@ -100,7 +100,7 @@ The block processor maps `L2BlockStream` events to status transitions:
 
 ## Feature Vector (15 dimensions)
 
-Computed at block time (when a tx is proposed) so that post-execution fields are available. Stored as JSON in `feature_vectors.vector`. The Python analyzer splits numeric and categorical features and uses Gower distance for clustering.
+Computed at block time (when a tx is proposed) so that post-execution fields are available. Stored as JSON in `feature_vectors.vector`. The Python analyzer range-normalizes numeric features and frequency-encodes the categorical, then uses UMAP (euclidean, approximate NN) and HDBSCAN for clustering.
 
 | Dim | Field | Type | Notes |
 |-----|-------|------|-------|

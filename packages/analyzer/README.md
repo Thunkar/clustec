@@ -1,6 +1,6 @@
 # @clustec/analyzer
 
-Clusters Aztec L2 transactions by shape to detect privacy leaks. Uses Gower distance (mixed numeric + categorical), HDBSCAN for density-based clustering, and UMAP for visualization.
+Clusters Aztec L2 transactions by shape to detect privacy leaks. Uses UMAP for dimensionality reduction and HDBSCAN for density-based clustering, operating in feature space for O(N) memory scalability.
 
 ## Architecture
 
@@ -13,59 +13,52 @@ Clusters Aztec L2 transactions by shape to detect privacy leaks. Uses Gower dist
               └───────┬───────┘  from feature_vectors table
                       │
                       ▼
-           ┌─────────────────────┐
-           │ gower_distance_matrix│  Mixed-type distance:
-           │                     │  numeric → range-normalized Manhattan
-           │                     │  categorical → simple matching
-           └──────────┬──────────┘
+         ┌─────────────────────────┐
+         │ prepare_feature_matrix  │  Range-normalize numerics to [0,1],
+         │                        │  frequency-encode + weight categorical
+         └────────────┬────────────┘
                       │
-              (N×N distance matrix)
+               (N×15 float32 matrix)
                       │
               ┌───────┴───────┐
               │               │
               ▼               ▼
        ┌────────────┐  ┌───────────┐
        │  HDBSCAN   │  │   UMAP    │
-       │  cluster   │  │  project  │
-       │  labels    │  │  to 2D/3D │
+       │  cluster   │  │  project  │  Approximate NN graph
+       │  on 15D    │  │  to 3D    │  for visualization only
        └─────┬──────┘  └─────┬─────┘
              │               │
              └───────┬───────┘
                      │
-                     ▼  The frontend combines both:
+                     ▼
               ┌─────────────┐  UMAP coordinates position each point,
               │  PostgreSQL  │  HDBSCAN labels color them by cluster.
               └─────────────┘
 ```
 
-Both HDBSCAN and UMAP operate on the **same Gower distance matrix**. UMAP preserves the distance structure in a low-dimensional embedding for visualization. HDBSCAN finds density-based clusters in the full distance space. Because they share the same distance input, the spatial groupings you see in the UMAP plot correspond to the clusters HDBSCAN identifies.
+HDBSCAN clusters on the full 15-dimensional feature matrix for accurate density-based grouping. UMAP projects the same features to 3D for visualization only — it does not affect cluster assignments. Both operate in feature space with euclidean distance and approximate nearest neighbors, scaling to 50K+ transactions on modest hardware (~4GB RAM).
 
 ## Pipeline
 
 | Step | Module | What it does |
 |------|--------|-------------|
 | 1 | `features.load_features` | Loads feature vectors from DB. Splits into 14 numeric dimensions and 1 categorical (fee payer). |
-| 2 | `features.gower_distance_matrix` | Computes N×N pairwise distance matrix using Gower distance. |
-| 3 | `umap_proj.compute_umap` | Projects distance matrix to 2D/3D via UMAP (`metric="precomputed"`). For visualization only. |
-| 4 | `clustering.run_hdbscan` | Clusters on the Gower distance matrix (`metric="precomputed"`). Returns labels, membership scores, outlier scores. |
+| 2 | `features.prepare_feature_matrix` | Range-normalizes numerics to [0,1], frequency-encodes the fee payer categorical. Returns (N, 15) float32 array. |
+| 3 | `clustering.run_hdbscan` | Clusters on the 15D feature matrix with euclidean metric. Returns labels, membership scores, outlier scores. |
+| 4 | `umap_proj.compute_umap` | Projects to 3D via UMAP with euclidean metric and approximate NN search. For visualization only. |
 | 5 | `pipeline.run_pipeline` | Orchestrates steps 1-4, stores results to `cluster_runs`, `cluster_memberships`, `umap_projections`. |
 
-## Gower Distance
+## Feature Encoding
 
-Handles mixed feature types correctly, unlike Euclidean distance which only works with numerics.
+The feature matrix mixes numeric and categorical data:
 
-For two samples `i` and `j`, the Gower distance is the average of per-feature distances:
+- **Numeric features** (dims 0-13): range-normalized to [0, 1] so all dimensions contribute equally
+- **Categorical feature** (dim 14, fee payer): frequency-encoded — each unique address maps to its occurrence fraction. Txs with the same fee payer get identical values (distance = 0), different payers get different values, and rare payers are further from common ones. Scaled by `√14` so it carries equal total weight to the combined numeric dimensions.
 
-| Feature type | Distance formula |
-|---|---|
-| Numeric | `\|x_i - x_j\| / range` (range-normalized Manhattan, values in [0,1]) |
-| Categorical | `0` if same, `1` if different |
+This produces a unified numeric matrix suitable for euclidean distance in both HDBSCAN and UMAP.
 
-```
-gower(i, j) = (sum of numeric distances + sum of categorical distances) / total features
-```
-
-Result is always in [0, 1]. Both HDBSCAN and UMAP accept precomputed distance matrices.
+A full Gower distance function (`features.gower_distance_matrix`) is also available for small-scale comparisons (e.g. the cluster recommend API, which compares a single vector against cluster centroids).
 
 ## Feature Vector Layout (15 dimensions)
 
@@ -109,5 +102,5 @@ uv run pytest tests/ -v
 
 14 tests covering:
 - Gower distance properties (symmetry, bounds, diagonal, categorical vs numeric contributions)
-- UMAP with precomputed distance (output shape, determinism)
-- HDBSCAN with precomputed distance (cluster detection, score bounds)
+- UMAP projection (output shape, determinism)
+- HDBSCAN clustering (cluster detection, score bounds)

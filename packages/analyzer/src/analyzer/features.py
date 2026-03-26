@@ -95,6 +95,13 @@ def prepare_feature_matrix(
     freq_map = {k: v / n for k, v in counts.items()}
     cat_col = np.array([freq_map[c] for c in categoricals], dtype=np.float32).reshape(-1, 1)
 
+    # Scale categorical column so it carries equal total weight to all numerics.
+    # In Gower distance, each of 15 features has weight 1/15. With 14 numeric
+    # columns and 1 categorical, the categorical should contribute 1/15 of total
+    # distance — same as each numeric. Multiply by sqrt(14) so its squared
+    # euclidean contribution matches the combined numeric contribution.
+    cat_col *= np.sqrt(n_num) if n_num > 0 else 1.0
+
     return np.hstack([normed, cat_col])
 
 

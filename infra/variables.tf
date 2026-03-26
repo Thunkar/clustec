@@ -39,3 +39,9 @@ variable "admin_password" {
   type        = string
   sensitive   = true
 }
+
+variable "volume_size" {
+  description = "Size of the data volume in GB (can only grow)"
+  type        = number
+  default     = 50
+}

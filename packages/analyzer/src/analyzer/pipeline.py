@@ -37,18 +37,18 @@ def run_pipeline(
     # 2. Prepare unified numeric feature matrix (range-normalized + encoded categoricals)
     features = prepare_feature_matrix(numeric, categoricals)
 
-    # 3. UMAP projection in feature space (euclidean, no precomputed matrix)
+    # 3. Cluster on the full feature matrix (15D euclidean — O(N log N), no N×N matrix)
+    labels, membership_scores, outlier_scores = run_hdbscan(
+        features, min_cluster_size=min_cluster_size, metric="euclidean"
+    )
+
+    # 4. UMAP projection for visualization only (does not affect clustering)
     embedding = compute_umap(
         features,
         n_components=n_components,
         n_neighbors=min(n_neighbors, len(tx_ids) - 1),
         min_dist=min_dist,
         metric="euclidean",
-    )
-
-    # 4. Cluster on the UMAP embedding (low-dimensional, euclidean)
-    labels, membership_scores, outlier_scores = run_hdbscan(
-        embedding, min_cluster_size=min_cluster_size, metric="euclidean"
     )
 
     # 5. Store results
@@ -60,7 +60,7 @@ def run_pipeline(
         "n_neighbors": n_neighbors,
         "min_dist": min_dist,
         "n_components": n_components,
-        "distance": "euclidean-on-embedding",
+        "distance": "euclidean-on-features",
     }
 
     with conn.cursor() as cur:

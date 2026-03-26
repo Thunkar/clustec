@@ -12,7 +12,6 @@ write_files:
       POSTGRES_PASSWORD=${postgres_password}
       POSTGRES_USER=clustec
       POSTGRES_DB=clustec
-      NETWORK=${network}
       ANALYSIS_INTERVAL_MS=600000
       DOMAIN=${domain}
       API_DOMAIN=api.${domain}
@@ -25,6 +24,9 @@ write_files:
         web:
           ports:
             - "80:80"
+        postgres:
+          volumes:
+            - /mnt/data/pgdata:/var/lib/postgresql/data
 
 runcmd:
   - mkdir -p /opt/clustec/configs/networks
@@ -32,3 +34,5 @@ runcmd:
   - curl -fsSL https://get.docker.com | sh
   - systemctl enable docker
   - systemctl start docker
+  # Mount the Hetzner volume (automount creates the device, we ensure the mount point)
+  - mkdir -p /mnt/data/pgdata
