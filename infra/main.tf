@@ -75,3 +75,26 @@ resource "hcloud_server" "clustec" {
     ignore_changes = [user_data]
   }
 }
+
+# ── Data Volume ─────────────────────────────────────────────────────
+
+resource "hcloud_volume" "data" {
+  name     = "clustec-data"
+  size     = var.volume_size
+  location = var.location
+  format   = "ext4"
+
+  labels = {
+    project = "clustec"
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "hcloud_volume_attachment" "data" {
+  volume_id = hcloud_volume.data.id
+  server_id = hcloud_server.clustec.id
+  automount = true
+}
