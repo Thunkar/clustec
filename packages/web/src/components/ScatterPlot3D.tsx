@@ -132,7 +132,10 @@ function PointCloud({ points, trackedHashes, onClusterClick, onOutlierClick }: P
     const xRange = xMax - xMin || 1;
     const yRange = yMax - yMin || 1;
     const zRange = zMax - zMin || 1;
-    const maxRange = Math.max(xRange, yRange, zRange);
+
+    // Normalize each axis independently to [-8, 8] so UMAP's
+    // spread/separation is preserved across all three dimensions
+    const SCALE = 16;
 
     const posArr = new Float32Array(points.length * 3);
     const oPoints: number[] = [];
@@ -140,9 +143,9 @@ function PointCloud({ points, trackedHashes, onClusterClick, onOutlierClick }: P
 
     for (let i = 0; i < points.length; i++) {
       const p = points[i];
-      const nx = ((p.x - xMin) / maxRange - 0.5) * 10;
-      const ny = ((p.y - yMin) / maxRange - 0.5) * 10;
-      const nz = (((p.z ?? 0) - zMin) / maxRange - 0.5) * 10;
+      const nx = ((p.x - xMin) / xRange - 0.5) * SCALE;
+      const ny = ((p.y - yMin) / yRange - 0.5) * SCALE;
+      const nz = (((p.z ?? 0) - zMin) / zRange - 0.5) * SCALE;
       posArr[i * 3] = nx;
       posArr[i * 3 + 1] = ny;
       posArr[i * 3 + 2] = nz;

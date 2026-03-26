@@ -9,6 +9,7 @@ def compute_umap(
     n_components: int = 2,
     n_neighbors: int = 15,
     min_dist: float = 0.1,
+    spread: float = 2.0,
     metric: str = "euclidean",
     random_state: int | None = None,
 ) -> np.ndarray:
@@ -19,6 +20,7 @@ def compute_umap(
         n_components: output dimensions (2 or 3)
         n_neighbors: controls local vs global structure
         min_dist: minimum distance between points in embedding
+        spread: scale of the embedding (higher = more spread out clusters)
         metric: distance metric
         random_state: seed for reproducibility
 
@@ -29,9 +31,10 @@ def compute_umap(
         n_components=n_components,
         n_neighbors=n_neighbors,
         min_dist=min_dist,
+        spread=spread,
         metric=metric,
         init="random",
         random_state=random_state,
-        n_jobs=1,
+        n_jobs=-1,
     )
     return reducer.fit_transform(data)

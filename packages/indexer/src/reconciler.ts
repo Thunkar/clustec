@@ -1,5 +1,6 @@
 import type { AztecNode } from "@aztec/stdlib/interfaces/client";
 import { TxHash } from "@aztec/stdlib/tx";
+import type { Logger } from "@aztec/foundation/log";
 import * as Sentry from "@sentry/node";
 import { eq, and, notInArray } from "drizzle-orm";
 import {
@@ -20,13 +21,14 @@ const STATUS_ORDER: Record<string, number> = {
   finalized: 5,
 };
 
-const BATCH_SIZE = 20;
+const BATCH_SIZE = 5;
 
 async function reconcileTx(
   networkId: string,
   node: AztecNode,
   db: Db,
   tx: { id: number; txHash: string; status: string; hasPendingData: boolean },
+  log?: Logger,
 ): Promise<void> {
   const hash = TxHash.fromString(tx.txHash);
   const receipt = await node.getTxReceipt(hash);
@@ -45,8 +47,8 @@ async function reconcileTx(
         error: receiptData.error,
       })
       .where(eq(transactions.id, tx.id));
-    console.log(
-      `[${networkId}] Reconciled ${tx.txHash.slice(0, 10)}… pending → dropped`,
+    log?.info(
+      ` Reconciled ${tx.txHash.slice(0, 10)}… pending → dropped`,
     );
     return;
   }
@@ -169,6 +171,7 @@ async function reconcile(
   networkId: string,
   node: AztecNode,
   db: Db,
+  log?: Logger,
 ): Promise<void> {
   const staleTxs = await db
     .select({
@@ -189,37 +192,39 @@ async function reconcile(
     return;
   }
 
-  console.log(
-    `[${networkId}] Reconciling ${staleTxs.length} non-finalized transactions…`,
-  );
+  log?.info(`Reconciling ${staleTxs.length} non-finalized transactions…`);
 
+  let processed = 0;
   for (let i = 0; i < staleTxs.length; i += BATCH_SIZE) {
     const batch = staleTxs.slice(i, i + BATCH_SIZE);
     await Promise.all(
-      batch.map((tx) => reconcileTx(networkId, node, db, tx)),
+      batch.map((tx) => reconcileTx(networkId, node, db, tx, log)),
     );
+    processed += batch.length;
+    if (staleTxs.length > 50 && processed % 50 === 0) {
+      log?.info(`Reconciliation progress: ${processed}/${staleTxs.length}`);
+    }
   }
 
-  console.log(
-    `[${networkId}] Reconciliation complete (${staleTxs.length} txs).`,
-  );
+  log?.info(`Reconciliation complete (${staleTxs.length} txs).`);
 }
 
 export async function startReconciler(
   networkId: string,
   node: AztecNode,
   db: Db,
+  log?: Logger,
   intervalMs: number = DEFAULT_INTERVAL_MS,
 ): Promise<NodeJS.Timeout> {
   // Run immediately on startup
-  await reconcile(networkId, node, db);
+  await reconcile(networkId, node, db, log);
 
   // Then periodically
   return setInterval(async () => {
     try {
-      await reconcile(networkId, node, db);
+      await reconcile(networkId, node, db, log);
     } catch (err) {
-      console.error(`[${networkId}] Reconciliation error:`, err);
+      log?.error("Reconciliation error", err);
       Sentry.captureException(err, { tags: { networkId, component: "reconciler" } });
     }
   }, intervalMs);

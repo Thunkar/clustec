@@ -1,8 +1,9 @@
 import { useState } from "react";
 import styled from "@emotion/styled";
+import { keyframes } from "@emotion/react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { theme } from "../lib/theme";
-import { useNetworks } from "../api/hooks";
+import { useNetworks, useAnalysisStatus } from "../api/hooks";
 import { useNetworkStore } from "../stores/network";
 import { Select } from "./ui";
 import { ClustecLogo } from "./Logo";
@@ -78,6 +79,23 @@ const NavItem = styled(Link)<{ active?: boolean }>`
 const NetworkSelector = styled.div`
   padding: 0 ${theme.spacing.lg};
   margin-bottom: ${theme.spacing.lg};
+  position: relative;
+`;
+
+const pulse = keyframes`
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+`;
+
+const AnalyzingDot = styled.div`
+  position: absolute;
+  top: -2px;
+  right: 14px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: ${theme.colors.accent};
+  animation: ${pulse} 2s ease-in-out infinite;
 `;
 
 const Main = styled.main`
@@ -133,6 +151,7 @@ export function Layout() {
   const location = useLocation();
   const { data: networks } = useNetworks();
   const { selectedNetwork, setNetwork } = useNetworkStore();
+  const { data: analysisStatus } = useAnalysisStatus(selectedNetwork);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const closeSidebar = () => setSidebarOpen(false);
@@ -157,6 +176,7 @@ export function Layout() {
               </option>
             ))}
           </Select>
+          {analysisStatus?.running && <AnalyzingDot title="Analysis running" />}
         </NetworkSelector>
         {navItems.map((item) => (
           <NavItem

@@ -491,7 +491,7 @@ export const api = {
     postJsonAuth<ContractLabel>(`/networks/${id}/labels`, data),
   deleteLabel: (id: string, labelId: number) => deleteJsonAuth(`/networks/${id}/labels/${labelId}`),
   getAnalysisStatus: (networkId: string) =>
-    fetchJson<{ scheduled: boolean; intervalMinutes: number; config: { minClusterSize: number; nNeighbors: number; minDist: number } }>(`/networks/${networkId}/analyze/status`),
+    fetchJson<{ scheduled: boolean; intervalMinutes: number; running: boolean; config: { minClusterSize: number; nNeighbors: number; minDist: number } }>(`/networks/${networkId}/analyze/status`),
   login: (password: string) => postJson<{ token: string }>("/auth/login", { password }),
   triggerAnalysis: (
     networkId: string,

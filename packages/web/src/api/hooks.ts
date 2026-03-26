@@ -137,6 +137,7 @@ export function useAnalysisStatus(networkId: string) {
     queryKey: ["networks", networkId, "analyze-status"],
     queryFn: () => api.getAnalysisStatus(networkId),
     enabled: !!networkId,
+    refetchInterval: 5_000,
   });
 }
 
