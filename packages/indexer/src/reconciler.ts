@@ -1,5 +1,6 @@
 import type { AztecNode } from "@aztec/stdlib/interfaces/client";
 import { TxHash } from "@aztec/stdlib/tx";
+import * as Sentry from "@sentry/node";
 import { eq, and, notInArray } from "drizzle-orm";
 import {
   type Db,
@@ -219,6 +220,7 @@ export async function startReconciler(
       await reconcile(networkId, node, db);
     } catch (err) {
       console.error(`[${networkId}] Reconciliation error:`, err);
+      Sentry.captureException(err, { tags: { networkId, component: "reconciler" } });
     }
   }, intervalMs);
 }

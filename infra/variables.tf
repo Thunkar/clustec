@@ -45,3 +45,9 @@ variable "volume_size" {
   type        = number
   default     = 50
 }
+
+variable "sentry_dsn" {
+  description = "Sentry DSN for error tracking (empty to disable)"
+  type        = string
+  default     = ""
+}

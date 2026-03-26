@@ -1,4 +1,5 @@
 import type { AztecNode } from "@aztec/stdlib/interfaces/client";
+import * as Sentry from "@sentry/node";
 import {
   type Db,
   transactions,
@@ -42,6 +43,7 @@ export class MempoolWatcher {
       await this.fetchPendingTxs();
     } catch (err) {
       console.error(`[${this.networkId}] Mempool watcher error:`, err);
+      Sentry.captureException(err, { tags: { networkId: this.networkId, component: "mempool-watcher" } });
     }
 
     if (this.running) {
@@ -147,6 +149,7 @@ export class MempoolWatcher {
           `[${this.networkId}] Failed to process pending tx ${txHash}:`,
           err
         );
+        Sentry.captureException(err, { tags: { networkId: this.networkId, component: "mempool-watcher", txHash } });
       }
     }
 

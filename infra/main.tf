@@ -65,6 +65,7 @@ resource "hcloud_server" "clustec" {
     admin_password    = var.admin_password
     network           = var.network
     domain            = var.domain
+    sentry_dsn        = var.sentry_dsn
   })
 
   labels = {

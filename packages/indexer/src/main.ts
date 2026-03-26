@@ -1,5 +1,7 @@
 import { loadEnv } from "@clustec/common/env";
 loadEnv();
+import "./instrument.ts";
+import * as Sentry from "@sentry/node";
 import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { createAztecNodeClient } from "@aztec/aztec.js/node";
@@ -154,7 +156,9 @@ async function main() {
   await new Promise(() => {});
 }
 
-main().catch((err) => {
+main().catch(async (err) => {
   console.error("Fatal error:", err);
+  Sentry.captureException(err);
+  await Sentry.flush(2000);
   process.exit(1);
 });

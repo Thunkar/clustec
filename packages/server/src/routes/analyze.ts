@@ -3,6 +3,7 @@ import { promisify } from "node:util";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { eq } from "drizzle-orm";
+import * as Sentry from "@sentry/node";
 import type { FastifyInstance } from "fastify";
 import { type Db, analysisConfig } from "@clustec/common";
 import { requireAdmin } from "../middleware/auth.ts";
@@ -183,6 +184,10 @@ export function startAnalysisScheduler(
         await runAnalysis(networkId, config, app.log);
       } catch (err) {
         app.log.error({ err, networkId }, `${label} failed`);
+        Sentry.captureException(err, {
+          tags: { networkId, component: "analyzer" },
+          extra: { label },
+        });
       }
     }
   };
