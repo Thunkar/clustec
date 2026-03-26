@@ -14,8 +14,8 @@ function withSuffix(v: number, decimals = 2): string {
   if (v === 0) return "0";
   const abs = Math.abs(v);
   const tier = Math.min(Math.floor(Math.log10(abs) / 3), SUFFIXES.length - 1);
-  if (tier === 0) {
-    return abs < 1 ? v.toPrecision(3) : v.toFixed(decimals);
+  if (tier <= 0) {
+    return abs < 0.01 ? v.toExponential(decimals) : abs < 1 ? v.toPrecision(3) : v.toFixed(decimals);
   }
   const scaled = v / Math.pow(10, tier * 3);
   return scaled.toFixed(decimals) + SUFFIXES[tier];
