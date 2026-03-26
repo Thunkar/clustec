@@ -8,8 +8,17 @@ import {
   useSaveAnalysisConfig,
   useRevertAnalysisConfig,
   useAnalysisStatus,
+  useFeatureStats,
 } from "../api/hooks";
-import { ApiError } from "../lib/api";
+import {
+  ApiError,
+  FEATURE_NAMES,
+  FEATURE_LABELS,
+  DEFAULT_WEIGHTS,
+  type FeatureWeights,
+  type NormalizationMode,
+  type FeatureStat,
+} from "../lib/api";
 import {
   PageContainer,
   PageTitle,
@@ -76,6 +85,81 @@ const SubSectionTag = styled.span`
   color: ${theme.colors.textMuted};
 `;
 
+const WeightsColumns = styled.div`
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: ${theme.spacing.md};
+
+  @media (max-width: 768px) {
+    grid-template-columns: 1fr;
+  }
+`;
+
+const WeightGroup = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+`;
+
+const WeightGroupTitle = styled.div`
+  font-size: 10px;
+  font-weight: 600;
+  color: ${theme.colors.textMuted};
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+`;
+
+const WeightRow = styled.div<{ disabled: boolean }>`
+  display: flex;
+  align-items: center;
+  gap: ${theme.spacing.sm};
+  opacity: ${(p) => (p.disabled ? 0.35 : 1)};
+`;
+
+const WeightLabel = styled.span`
+  font-size: 11px;
+  color: ${theme.colors.text};
+  width: 110px;
+  flex-shrink: 0;
+`;
+
+const WeightSlider = styled.input`
+  flex: 1;
+  accent-color: ${theme.colors.primary};
+  min-width: 80px;
+`;
+
+const WeightValue = styled.span`
+  font-size: 10px;
+  font-family: "SF Mono", "Fira Code", monospace;
+  color: ${theme.colors.textMuted};
+  width: 32px;
+  text-align: right;
+  flex-shrink: 0;
+`;
+
+const StatChip = styled.span`
+  font-size: 9px;
+  font-family: "SF Mono", "Fira Code", monospace;
+  color: ${theme.colors.textMuted};
+  opacity: 0.7;
+`;
+
+const NormToggle = styled.div`
+  display: flex;
+  gap: 4px;
+`;
+
+const NormOption = styled.button<{ active: boolean }>`
+  font-size: ${theme.fontSize.xs};
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid ${(p) => (p.active ? theme.colors.primary : theme.colors.border)};
+  background: ${(p) => (p.active ? theme.colors.primary + "22" : "transparent")};
+  color: ${(p) => (p.active ? theme.colors.primary : theme.colors.textMuted)};
+  cursor: pointer;
+`;
+
 const ParamInput = styled(Input)`
   width: 100px;
 `;
@@ -135,13 +219,25 @@ export function Admin() {
   const [minClusterSize, setMinClusterSize] = useState(DEFAULTS.minClusterSize);
   const [nNeighbors, setNNeighbors] = useState(DEFAULTS.nNeighbors);
   const [minDist, setMinDist] = useState(DEFAULTS.minDist);
+  const [weights, setWeights] = useState<FeatureWeights>({ ...DEFAULT_WEIGHTS });
+  const [normalization, setNormalization] = useState<NormalizationMode>("minmax");
+
+  const setWeight = (name: string, value: number) =>
+    setWeights((prev) => ({ ...prev, [name]: value }));
 
   const { data: statusData } = useAnalysisStatus(selectedNetwork);
+  const { data: featureStats } = useFeatureStats(selectedNetwork);
+  const statsByName = new Map<string, FeatureStat>(
+    featureStats?.features.map((f) => [f.name, f]) ?? [],
+  );
+
   useEffect(() => {
     if (statusData?.config) {
       setMinClusterSize(statusData.config.minClusterSize);
       setNNeighbors(statusData.config.nNeighbors);
       setMinDist(statusData.config.minDist);
+      if (statusData.config.weights) setWeights(statusData.config.weights);
+      if (statusData.config.normalization) setNormalization(statusData.config.normalization);
     }
   }, [statusData]);
 
@@ -149,7 +245,7 @@ export function Admin() {
   const saveConfig = useSaveAnalysisConfig(selectedNetwork);
   const revertConfig = useRevertAnalysisConfig(selectedNetwork);
 
-  const currentParams = { minClusterSize, nNeighbors, minDist };
+  const currentParams = { minClusterSize, nNeighbors, minDist, weights, normalization };
 
   const handleUnauthorized = (err: Error) => {
     if (err.message === "Unauthorized") setToken(null);
@@ -171,10 +267,14 @@ export function Admin() {
           setMinClusterSize(data.config.minClusterSize);
           setNNeighbors(data.config.nNeighbors);
           setMinDist(data.config.minDist);
+          setWeights(data.config.weights ?? { ...DEFAULT_WEIGHTS });
+          setNormalization(data.config.normalization ?? "minmax");
         } else {
           setMinClusterSize(DEFAULTS.minClusterSize);
           setNNeighbors(DEFAULTS.nNeighbors);
           setMinDist(DEFAULTS.minDist);
+          setWeights({ ...DEFAULT_WEIGHTS });
+          setNormalization("minmax");
         }
       },
       onError: handleUnauthorized,
@@ -304,6 +404,74 @@ export function Admin() {
               </ParamHint>
             </Label>
           </ParamRow>
+        </SubSection>
+
+        <SubSection>
+          <SubSectionHeader>
+            <SubSectionTitle>Feature Weights</SubSectionTitle>
+            <SubSectionTag>0 = disabled</SubSectionTag>
+            <NormToggle style={{ marginLeft: "auto" }}>
+              <NormOption active={normalization === "minmax"} onClick={() => setNormalization("minmax")}>
+                Min-Max
+              </NormOption>
+              <NormOption active={normalization === "rank"} onClick={() => setNormalization("rank")}>
+                Rank
+              </NormOption>
+            </NormToggle>
+          </SubSectionHeader>
+          <WeightsColumns>
+            {(() => {
+              const groups = new Map<string, typeof FEATURE_NAMES[number][]>();
+              for (const name of FEATURE_NAMES) {
+                const group = FEATURE_LABELS[name].group;
+                if (!groups.has(group)) groups.set(group, []);
+                groups.get(group)!.push(name);
+              }
+              const entries = [...groups.entries()];
+              const col1 = entries.filter(([g]) => g === "Shape");
+              const col2 = entries.filter(([g]) => g !== "Shape");
+
+              const renderGroups = (items: [string, typeof FEATURE_NAMES[number][]][]) =>
+                items.map(([group, names]) => (
+                  <WeightGroup key={group}>
+                    <WeightGroupTitle>{group}</WeightGroupTitle>
+                    {names.map((name) => {
+                      const w = weights[name] ?? 1;
+                      const stat = statsByName.get(name);
+                      const statText = stat?.type === "numeric"
+                        ? `${stat.unique} uniq · ${stat.dominantPct}% same`
+                        : stat?.type === "categorical"
+                          ? `${stat.unique} uniq`
+                          : "";
+                      return (
+                        <WeightRow key={name} disabled={w === 0}>
+                          <WeightLabel>
+                            {FEATURE_LABELS[name].label}
+                            {statText && <StatChip> {statText}</StatChip>}
+                          </WeightLabel>
+                          <WeightSlider
+                            type="range"
+                            min={0}
+                            max={2}
+                            step={0.05}
+                            value={w}
+                            onChange={(e) => setWeight(name, parseFloat(e.target.value))}
+                          />
+                          <WeightValue>{w.toFixed(2)}</WeightValue>
+                        </WeightRow>
+                      );
+                    })}
+                  </WeightGroup>
+                ));
+
+              return (
+                <>
+                  <div>{renderGroups(col1)}</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: theme.spacing.md }}>{renderGroups(col2)}</div>
+                </>
+              );
+            })()}
+          </WeightsColumns>
         </SubSection>
 
         <Flex gap="12px" align="center" style={{ flexWrap: "wrap" }}>

@@ -133,6 +133,15 @@ export function useMurderBoard(networkId: string, address: string, page = 1, lim
   });
 }
 
+export function useFeatureStats(networkId: string) {
+  return useQuery({
+    queryKey: ["networks", networkId, "feature-stats"],
+    queryFn: () => api.getFeatureStats(networkId),
+    enabled: !!networkId,
+    staleTime: 60_000,
+  });
+}
+
 export function useAnalysisStatus(networkId: string) {
   return useQuery({
     queryKey: ["networks", networkId, "analyze-status"],

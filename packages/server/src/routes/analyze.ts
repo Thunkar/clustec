@@ -5,7 +5,8 @@ import { fileURLToPath } from "node:url";
 import { eq } from "drizzle-orm";
 import * as Sentry from "@sentry/node";
 import type { FastifyInstance } from "fastify";
-import { type Db, analysisConfig } from "@clustec/common";
+import { type Db, analysisConfig, featureVectors, transactions } from "@clustec/common";
+import { sql } from "drizzle-orm";
 import { requireAdmin } from "../middleware/auth.ts";
 
 const execFileAsync = promisify(execFile);
@@ -14,16 +15,49 @@ const execFileAsync = promisify(execFile);
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const MONOREPO_ROOT = resolve(__dirname, "..", "..", "..", "..");
 
+export const FEATURE_NAMES = [
+  "numNoteHashes",
+  "numNullifiers",
+  "numL2ToL1Msgs",
+  "numPrivateLogs",
+  "numContractClassLogs",
+  "numPublicLogs",
+  "gasLimitDa",
+  "gasLimitL2",
+  "maxFeePerDaGas",
+  "maxFeePerL2Gas",
+  "numSetupCalls",
+  "numAppCalls",
+  "totalPublicCalldataSize",
+  "expirationDelta",
+  "feePayer",
+] as const;
+
+export type FeatureWeights = Record<string, number>;
+
+export const DEFAULT_WEIGHTS: FeatureWeights = Object.fromEntries(
+  FEATURE_NAMES.map((name) => [
+    name,
+    name === "maxFeePerDaGas" || name === "maxFeePerL2Gas" ? 0.25 : 1.0,
+  ]),
+);
+
+export type NormalizationMode = "minmax" | "rank";
+
 interface AnalysisConfig {
   minClusterSize: number;
   nNeighbors: number;
   minDist: number;
+  weights: FeatureWeights;
+  normalization: NormalizationMode;
 }
 
 const DEFAULT_CONFIG: AnalysisConfig = {
   minClusterSize: 5,
   nNeighbors: 15,
   minDist: 0.1,
+  weights: DEFAULT_WEIGHTS,
+  normalization: "minmax",
 };
 
 async function getConfig(db: Db, networkId: string): Promise<AnalysisConfig> {
@@ -32,7 +66,13 @@ async function getConfig(db: Db, networkId: string): Promise<AnalysisConfig> {
     .from(analysisConfig)
     .where(eq(analysisConfig.networkId, networkId));
   return row
-    ? { minClusterSize: row.minClusterSize, nNeighbors: row.nNeighbors, minDist: row.minDist }
+    ? {
+        minClusterSize: row.minClusterSize,
+        nNeighbors: row.nNeighbors,
+        minDist: row.minDist,
+        weights: (row.weights as FeatureWeights | null) ?? DEFAULT_WEIGHTS,
+        normalization: (row.normalization as NormalizationMode) ?? "minmax",
+      }
     : { ...DEFAULT_CONFIG };
 }
 
@@ -42,7 +82,14 @@ async function persistConfig(db: Db, networkId: string, cfg: AnalysisConfig): Pr
     .values({ networkId, ...cfg })
     .onConflictDoUpdate({
       target: analysisConfig.networkId,
-      set: { minClusterSize: cfg.minClusterSize, nNeighbors: cfg.nNeighbors, minDist: cfg.minDist, updatedAt: new Date() },
+      set: {
+        minClusterSize: cfg.minClusterSize,
+        nNeighbors: cfg.nNeighbors,
+        minDist: cfg.minDist,
+        weights: cfg.weights,
+        normalization: cfg.normalization,
+        updatedAt: new Date(),
+      },
     });
 }
 
@@ -56,25 +103,33 @@ async function runAnalysis(
     throw new Error("DATABASE_URL not configured");
   }
 
+  const args = [
+    "run",
+    "--project",
+    resolve(MONOREPO_ROOT, "packages/analyzer"),
+    "python",
+    "-m",
+    "analyzer",
+    networkId,
+    "--min-cluster-size",
+    String(config.minClusterSize),
+    "--n-neighbors",
+    String(config.nNeighbors),
+    "--min-dist",
+    String(config.minDist),
+    "--dimensions",
+    "3",
+  ];
+  if (config.weights) {
+    args.push("--weights", JSON.stringify(config.weights));
+  }
+  if (config.normalization && config.normalization !== "minmax") {
+    args.push("--normalization", config.normalization);
+  }
+
   const { stdout, stderr } = await execFileAsync(
     "uv",
-    [
-      "run",
-      "--project",
-      resolve(MONOREPO_ROOT, "packages/analyzer"),
-      "python",
-      "-m",
-      "analyzer",
-      networkId,
-      "--min-cluster-size",
-      String(config.minClusterSize),
-      "--n-neighbors",
-      String(config.nNeighbors),
-      "--min-dist",
-      String(config.minDist),
-      "--dimensions",
-      "3",
-    ],
+    args,
     {
       env: { ...process.env, DATABASE_URL: databaseUrl },
       cwd: MONOREPO_ROOT,
@@ -89,9 +144,70 @@ async function runAnalysis(
 // Guard against concurrent trigger runs per network
 const runningNetworks = new Set<string>();
 
-type ConfigBody = { minClusterSize?: number; nNeighbors?: number; minDist?: number };
+type ConfigBody = { minClusterSize?: number; nNeighbors?: number; minDist?: number; weights?: FeatureWeights; normalization?: NormalizationMode };
 
 export function registerAnalyzeRoutes(app: FastifyInstance, db: Db) {
+  // GET feature stats for the admin UI
+  app.get<{ Params: { id: string } }>(
+    "/api/networks/:id/analyze/feature-stats",
+    async (request) => {
+      const { id } = request.params;
+
+      const rows = await db
+        .select({ vector: featureVectors.vector })
+        .from(featureVectors)
+        .innerJoin(transactions, eq(transactions.id, featureVectors.txId))
+        .where(eq(transactions.networkId, id));
+
+      if (rows.length === 0) return { totalVectors: 0, features: [] };
+
+      const vectors = rows.map((r) => r.vector as (number | string)[]);
+      const stats = FEATURE_NAMES.map((name, i) => {
+        if (i === 14) {
+          // Categorical — count unique values
+          const vals = vectors.map((v) => String(v[i]));
+          const unique = new Set(vals);
+          const counts = new Map<string, number>();
+          for (const v of vals) counts.set(v, (counts.get(v) ?? 0) + 1);
+          const top = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+          return {
+            name,
+            type: "categorical" as const,
+            unique: unique.size,
+            topValues: top.map(([value, count]) => ({ value: value.slice(0, 10) + "…", count, pct: +(count / vectors.length * 100).toFixed(1) })),
+          };
+        }
+        const vals = vectors.map((v) => Number(v[i]));
+        const sorted = [...vals].sort((a, b) => a - b);
+        const unique = new Set(vals).size;
+        const sum = vals.reduce((a, b) => a + b, 0);
+        const mean = sum / vals.length;
+        const std = Math.sqrt(vals.reduce((a, b) => a + (b - mean) ** 2, 0) / vals.length);
+        const p = (pct: number) => sorted[Math.min(Math.floor(pct / 100 * sorted.length), sorted.length - 1)];
+        // Concentration: % of txs with the most common value
+        const counts = new Map<number, number>();
+        for (const v of vals) counts.set(v, (counts.get(v) ?? 0) + 1);
+        const maxCount = Math.max(...counts.values());
+        return {
+          name,
+          type: "numeric" as const,
+          unique,
+          min: sorted[0],
+          max: sorted[sorted.length - 1],
+          mean: +mean.toFixed(4),
+          std: +std.toFixed(4),
+          p25: p(25),
+          p50: p(50),
+          p75: p(75),
+          p95: p(95),
+          dominantPct: +(maxCount / vals.length * 100).toFixed(1),
+        };
+      });
+
+      return { totalVectors: vectors.length, features: stats };
+    },
+  );
+
   // GET endpoint to check last analysis status and current config
   app.get<{ Params: { id: string } }>(
     "/api/networks/:id/analyze/status",
@@ -112,6 +228,8 @@ export function registerAnalyzeRoutes(app: FastifyInstance, db: Db) {
         minClusterSize: request.body.minClusterSize ?? current.minClusterSize,
         nNeighbors: request.body.nNeighbors ?? current.nNeighbors,
         minDist: request.body.minDist ?? current.minDist,
+        weights: request.body.weights ?? current.weights,
+        normalization: request.body.normalization ?? current.normalization,
       };
       await persistConfig(db, id, next);
       return { config: next };
@@ -147,6 +265,8 @@ export function registerAnalyzeRoutes(app: FastifyInstance, db: Db) {
         minClusterSize: request.body.minClusterSize ?? current.minClusterSize,
         nNeighbors: request.body.nNeighbors ?? current.nNeighbors,
         minDist: request.body.minDist ?? current.minDist,
+        weights: request.body.weights ?? current.weights,
+        normalization: request.body.normalization ?? current.normalization,
       };
       await persistConfig(db, id, next);
 

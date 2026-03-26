@@ -18,6 +18,8 @@ def run_pipeline(
     n_neighbors: int = 15,
     min_dist: float = 0.1,
     n_components: int = 3,
+    weights: dict[str, float] | None = None,
+    normalization: str = "minmax",
 ) -> dict:
     """Run the full analysis pipeline for a network.
 
@@ -35,7 +37,7 @@ def run_pipeline(
         }
 
     # 2. Prepare unified numeric feature matrix (range-normalized + encoded categoricals)
-    features = prepare_feature_matrix(numeric, categoricals)
+    features = prepare_feature_matrix(numeric, categoricals, weights=weights, normalization=normalization)
 
     # 3. Cluster on the full feature matrix (15D euclidean — O(N log N), no N×N matrix)
     labels, membership_scores, outlier_scores = run_hdbscan(

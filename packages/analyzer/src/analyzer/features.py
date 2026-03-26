@@ -17,6 +17,24 @@ import psycopg
 NUMERIC_DIM = 14
 CATEGORICAL_START = 14
 
+FEATURE_NAMES = [
+    "numNoteHashes",
+    "numNullifiers",
+    "numL2ToL1Msgs",
+    "numPrivateLogs",
+    "numContractClassLogs",
+    "numPublicLogs",
+    "gasLimitDa",
+    "gasLimitL2",
+    "maxFeePerDaGas",
+    "maxFeePerL2Gas",
+    "numSetupCalls",
+    "numAppCalls",
+    "totalPublicCalldataSize",
+    "expirationDelta",
+    "feePayer",
+]
+
 
 def load_features(
     conn: psycopg.Connection, network_id: str
@@ -58,21 +76,20 @@ def load_features(
 
 
 def prepare_feature_matrix(
-    numeric: np.ndarray, categoricals: list[str]
+    numeric: np.ndarray,
+    categoricals: list[str],
+    weights: dict[str, float] | None = None,
+    normalization: str = "minmax",
 ) -> np.ndarray:
     """Prepare a unified numeric feature matrix for UMAP/HDBSCAN.
 
-    Range-normalizes numeric features to [0,1] and label-encodes the
-    categorical (fee payer) as a 0/1 column per unique value would be too
-    wide, so instead we use a single column with values 0 or 1 indicating
-    whether each tx shares the most common fee payer. This preserves the
-    Gower intuition (same=close, different=far) without exploding dimensions.
+    Normalizes numeric features, frequency-encodes the categorical (fee payer),
+    then applies per-dimension weights. A weight of 0 deactivates a feature.
 
-    Actually, for better fidelity: we use frequency-based encoding where
-    each category maps to its frequency ratio. Txs with the same fee payer
-    get the same value (distance=0), different payers get different values,
-    and rare payers are further from common ones — a reasonable proxy for
-    Gower's simple matching in continuous space.
+    normalization modes:
+      - "minmax": (x - min) / range → [0, 1]. Preserves value proportions.
+      - "rank":   rank percentile → [0, 1]. Each unique value gets equal spacing.
+                  Better when some dims have low cardinality (e.g. 0 or 1).
 
     Returns:
         (N, 15) float32 array ready for euclidean UMAP/HDBSCAN.
@@ -80,36 +97,45 @@ def prepare_feature_matrix(
     n = numeric.shape[0]
     n_num = numeric.shape[1] if numeric.ndim == 2 else 0
 
-    # Range-normalize numeric features to [0, 1]
     if n_num > 0:
-        ranges = np.ptp(numeric, axis=0)
-        ranges[ranges == 0] = 1.0
-        normed = (numeric / ranges).astype(np.float32)
-
-        # Down-weight fee-per-gas dimensions (8: maxFeePerDaGas, 9: maxFeePerL2Gas).
-        # These vary wildly due to user-set bid caps and don't reflect tx shape —
-        # two identical txs can have very different maxFeePerGas.
-        FEE_WEIGHT = 0.25
-        normed[:, 8] *= FEE_WEIGHT
-        normed[:, 9] *= FEE_WEIGHT
+        if normalization == "rank":
+            from scipy.stats import rankdata
+            normed = np.empty_like(numeric, dtype=np.float32)
+            for d in range(n_num):
+                col = numeric[:, d]
+                if np.ptp(col) == 0:
+                    normed[:, d] = 0
+                else:
+                    normed[:, d] = (rankdata(col, method="average") - 1) / max(n - 1, 1)
+        else:
+            mins = numeric.min(axis=0)
+            ranges = np.ptp(numeric, axis=0)
+            ranges[ranges == 0] = 1.0
+            normed = ((numeric - mins) / ranges).astype(np.float32)
     else:
         normed = np.zeros((n, 0), dtype=np.float32)
 
     # Frequency-encode the categorical feature
-    # Each unique fee payer maps to its frequency fraction
     from collections import Counter
     counts = Counter(categoricals)
     freq_map = {k: v / n for k, v in counts.items()}
     cat_col = np.array([freq_map[c] for c in categoricals], dtype=np.float32).reshape(-1, 1)
 
-    # Scale categorical column so it carries equal total weight to all numerics.
-    # In Gower distance, each of 15 features has weight 1/15. With 14 numeric
-    # columns and 1 categorical, the categorical should contribute 1/15 of total
-    # distance — same as each numeric. Multiply by sqrt(14) so its squared
-    # euclidean contribution matches the combined numeric contribution.
+    # Scale categorical column so it carries equal total weight to all numerics
     cat_col *= np.sqrt(n_num) if n_num > 0 else 1.0
 
-    return np.hstack([normed, cat_col])
+    result = np.hstack([normed, cat_col])
+
+    # Apply per-dimension weights with exponential curve for dramatic effect.
+    # w=1.0 → 1.0, w=0.75 → 0.32, w=0.5 → 0.06, w=0.25 → 0.004, w=0 → 0
+    # w=1.5 → 2.76, w=2.0 → 7.39 (strong boost)
+    if weights:
+        for i, name in enumerate(FEATURE_NAMES):
+            if name in weights:
+                w = weights[name]
+                result[:, i] *= np.exp(3 * (w - 1)) if w > 0 else 0
+
+    return result
 
 
 def gower_distance_matrix(

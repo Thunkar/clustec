@@ -400,6 +400,78 @@ export interface MurderBoardContract {
   callCount: number;
 }
 
+export type FeatureWeights = Record<string, number>;
+
+export type NormalizationMode = "minmax" | "rank";
+
+export interface AnalysisConfig {
+  minClusterSize: number;
+  nNeighbors: number;
+  minDist: number;
+  weights: FeatureWeights;
+  normalization: NormalizationMode;
+}
+
+export interface FeatureStat {
+  name: string;
+  type: "numeric" | "categorical";
+  unique: number;
+  min?: number;
+  max?: number;
+  std?: number;
+  p50?: number;
+  dominantPct?: number;
+  topValues?: { value: string; count: number; pct: number }[];
+}
+
+export interface FeatureStatsData {
+  totalVectors: number;
+  features: FeatureStat[];
+}
+
+export const FEATURE_NAMES = [
+  "numNoteHashes",
+  "numNullifiers",
+  "numL2ToL1Msgs",
+  "numPrivateLogs",
+  "numContractClassLogs",
+  "numPublicLogs",
+  "gasLimitDa",
+  "gasLimitL2",
+  "maxFeePerDaGas",
+  "maxFeePerL2Gas",
+  "numSetupCalls",
+  "numAppCalls",
+  "totalPublicCalldataSize",
+  "expirationDelta",
+  "feePayer",
+] as const;
+
+export const DEFAULT_WEIGHTS: FeatureWeights = Object.fromEntries(
+  FEATURE_NAMES.map((name) => [
+    name,
+    name === "maxFeePerDaGas" || name === "maxFeePerL2Gas" ? 0.25 : 1.0,
+  ]),
+);
+
+export const FEATURE_LABELS: Record<string, { label: string; group: string }> = {
+  numNoteHashes: { label: "Note hashes", group: "Shape" },
+  numNullifiers: { label: "Nullifiers", group: "Shape" },
+  numL2ToL1Msgs: { label: "L2→L1 msgs", group: "Shape" },
+  numPrivateLogs: { label: "Private logs", group: "Shape" },
+  numContractClassLogs: { label: "Class logs", group: "Shape" },
+  numPublicLogs: { label: "Public logs", group: "Shape" },
+  gasLimitDa: { label: "DA mana limit", group: "Mana" },
+  gasLimitL2: { label: "L2 mana limit", group: "Mana" },
+  maxFeePerDaGas: { label: "Max fee/DA mana", group: "Fees" },
+  maxFeePerL2Gas: { label: "Max fee/L2 mana", group: "Fees" },
+  numSetupCalls: { label: "Setup calls", group: "Calls" },
+  numAppCalls: { label: "App calls", group: "Calls" },
+  totalPublicCalldataSize: { label: "Calldata size", group: "Calls" },
+  expirationDelta: { label: "Expiration delta", group: "Timing" },
+  feePayer: { label: "Fee payer", group: "Identity" },
+};
+
 export interface PrivacyScoreFactor {
   name: string;
   impact: "good" | "bad" | "neutral";
@@ -493,18 +565,20 @@ export const api = {
     postJsonAuth<ContractLabel>(`/networks/${id}/labels`, data),
   deleteLabel: (id: string, labelId: number) => deleteJsonAuth(`/networks/${id}/labels/${labelId}`),
   getAnalysisStatus: (networkId: string) =>
-    fetchJson<{ scheduled: boolean; intervalMinutes: number; running: boolean; config: { minClusterSize: number; nNeighbors: number; minDist: number } }>(`/networks/${networkId}/analyze/status`),
+    fetchJson<{ scheduled: boolean; intervalMinutes: number; running: boolean; config: AnalysisConfig }>(`/networks/${networkId}/analyze/status`),
   login: (password: string) => postJson<{ token: string }>("/auth/login", { password }),
   triggerAnalysis: (
     networkId: string,
-    params: { minClusterSize?: number; nNeighbors?: number; minDist?: number }
+    params: Partial<AnalysisConfig>,
   ) => postJsonAuth<{ status: string; output: string }>(`/networks/${networkId}/analyze/trigger`, params),
   saveAnalysisConfig: (
     networkId: string,
-    params: { minClusterSize?: number; nNeighbors?: number; minDist?: number }
-  ) => postJsonAuth<{ config: { minClusterSize: number; nNeighbors: number; minDist: number } }>(`/networks/${networkId}/analyze/config`, params),
+    params: Partial<AnalysisConfig>,
+  ) => postJsonAuth<{ config: AnalysisConfig }>(`/networks/${networkId}/analyze/config`, params),
   revertAnalysisConfig: (networkId: string) =>
-    deleteJsonAuth<{ config: { minClusterSize: number; nNeighbors: number; minDist: number } }>(`/networks/${networkId}/analyze/config`, true),
+    deleteJsonAuth<{ config: AnalysisConfig }>(`/networks/${networkId}/analyze/config`, true),
+  getFeatureStats: (networkId: string) =>
+    fetchJson<FeatureStatsData>(`/networks/${networkId}/analyze/feature-stats`),
   getTxGraph: (id: string, hash: string) =>
     fetchJson<TxGraphData>(`/networks/${id}/txs/${hash}/graph`),
   getClusterMembers: (id: string, runId: number, clusterId: number) =>
