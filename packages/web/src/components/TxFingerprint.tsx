@@ -162,8 +162,8 @@ function normalizeNumeric(
     5: 64, // numPublicLogs — practical cap; DA-derived max ~85 @ 16 fields/log avg
     6: 786_432, // gasLimitDa — MAX_PROCESSABLE_DA_GAS_PER_CHECKPOINT
     7: 6_540_000, // gasLimitL2 — MAX_PROCESSABLE_L2_GAS
-    8: 1e9, // maxFeePerDaGas — 1 gwei/gas → max fee ~$0.25 DA at $2500/ETH
-    9: 1e9, // maxFeePerL2Gas — 1 gwei/gas → max fee ~$16 L2 at $2500/ETH
+    8: 1e16, // maxFeePerDaGas — FPA units per DA mana
+    9: 1e16, // maxFeePerL2Gas — FPA units per L2 mana
     10: 32, // numSetupCalls — MAX_ENQUEUED_CALLS_PER_TX
     11: 32, // numAppCalls — MAX_ENQUEUED_CALLS_PER_TX
     12: 1_000, // totalPublicCalldataSize (fields) — practical cap; AVM bench test max is 300/call

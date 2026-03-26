@@ -367,7 +367,6 @@ export interface MurderBoardTx {
   clusterId: number | null;
   clusterSize: number | null;
   outlierScore: number | null;
-  featureVector: (number | string)[] | null;
   feePayer: string;
   numNoteHashes: number;
   numNullifiers: number;
@@ -417,6 +416,9 @@ export interface MurderBoardData {
   fpcsUsed: MurderBoardFpc[];
   contractsInteracted: MurderBoardContract[];
   privacyScore: { score: number; factors: PrivacyScoreFactor[] } | null;
+  page: number;
+  limit: number;
+  totalPages: number;
 }
 
 // ── Fee types ──
@@ -509,8 +511,13 @@ export const api = {
     fetchJson<{ clusterId: number; members: ClusterMember[] }>(`/networks/${id}/clusters/${runId}/${clusterId}`),
   getFeePayerStats: (id: string) =>
     fetchJson<{ feePayers: FeePayerStat[] }>(`/networks/${id}/txs/stats/fee-payers`),
-  getMurderBoard: (id: string, address: string) =>
-    fetchJson<MurderBoardData>(`/networks/${id}/murder-board/${encodeURIComponent(address)}`),
+  getMurderBoard: (id: string, address: string, opts?: { page?: number; limit?: number }) => {
+    const params = new URLSearchParams();
+    if (opts?.page) params.set("page", String(opts.page));
+    if (opts?.limit) params.set("limit", String(opts.limit));
+    const qs = params.toString();
+    return fetchJson<MurderBoardData>(`/networks/${id}/murder-board/${encodeURIComponent(address)}${qs ? `?${qs}` : ""}`);
+  },
   getFeeHistory: (id: string, opts?: { from?: number; to?: number; resolution?: string }) => {
     const params = new URLSearchParams();
     if (opts?.from != null) params.set("from", String(opts.from));
