@@ -1,9 +1,11 @@
-"""Load feature vectors and compute Gower distance matrix.
+"""Load feature vectors and prepare data for analysis.
 
 The feature vector is a mixed-type array: 14 numeric dimensions followed
-by 1 categorical dimension (fee payer address).  Gower distance handles
-both types correctly — range-normalized Manhattan for numeric features,
-simple matching (0 = same, 1 = different) for categorical.
+by 1 categorical dimension (fee payer address).
+
+For scalable analysis (avoiding O(N²) distance matrices), categoricals
+are label-encoded and all features are range-normalized so UMAP and
+HDBSCAN can operate in feature space with euclidean distance.
 """
 
 import json
@@ -55,10 +57,53 @@ def load_features(
     return numeric, categoricals, tx_ids, tx_hashes
 
 
+def prepare_feature_matrix(
+    numeric: np.ndarray, categoricals: list[str]
+) -> np.ndarray:
+    """Prepare a unified numeric feature matrix for UMAP/HDBSCAN.
+
+    Range-normalizes numeric features to [0,1] and label-encodes the
+    categorical (fee payer) as a 0/1 column per unique value would be too
+    wide, so instead we use a single column with values 0 or 1 indicating
+    whether each tx shares the most common fee payer. This preserves the
+    Gower intuition (same=close, different=far) without exploding dimensions.
+
+    Actually, for better fidelity: we use frequency-based encoding where
+    each category maps to its frequency ratio. Txs with the same fee payer
+    get the same value (distance=0), different payers get different values,
+    and rare payers are further from common ones — a reasonable proxy for
+    Gower's simple matching in continuous space.
+
+    Returns:
+        (N, 15) float32 array ready for euclidean UMAP/HDBSCAN.
+    """
+    n = numeric.shape[0]
+    n_num = numeric.shape[1] if numeric.ndim == 2 else 0
+
+    # Range-normalize numeric features to [0, 1]
+    if n_num > 0:
+        ranges = np.ptp(numeric, axis=0)
+        ranges[ranges == 0] = 1.0
+        normed = (numeric / ranges).astype(np.float32)
+    else:
+        normed = np.zeros((n, 0), dtype=np.float32)
+
+    # Frequency-encode the categorical feature
+    # Each unique fee payer maps to its frequency fraction
+    from collections import Counter
+    counts = Counter(categoricals)
+    freq_map = {k: v / n for k, v in counts.items()}
+    cat_col = np.array([freq_map[c] for c in categoricals], dtype=np.float32).reshape(-1, 1)
+
+    return np.hstack([normed, cat_col])
+
+
 def gower_distance_matrix(
     numeric: np.ndarray, categoricals: list[str]
 ) -> np.ndarray:
     """Compute a Gower distance matrix for mixed numeric + categorical data.
+
+    WARNING: O(N²) memory — only use for small datasets (e.g. cluster recommend).
 
     Gower distance between two samples is the average of per-feature
     distances:

@@ -231,15 +231,21 @@ export function Fees() {
       txCount: number;
     }[] = [];
 
+    // When history is bucketed, each row key is a bucket start (e.g. 15500, 15510).
+    // Collect all history rows whose key falls within each spread bucket range.
+    const historyKeys = [...historyByBlock.keys()].sort((a, b) => a - b);
+
     const startSpread = Math.floor(start / spreadBucket) * spreadBucket;
     for (let b = startSpread; b <= end; b += spreadBucket) {
       const s = spreadByBucket.get(b);
 
-      // Average block base fees within this bucket window
+      // Average block base fees from all history entries within [b, b+spreadBucket)
       let sumDa = 0, sumL2 = 0, countFee = 0;
-      for (let blk = b; blk < b + spreadBucket && blk <= end; blk++) {
-        const h = historyByBlock.get(blk);
-        if (h?.feePerDaGas != null && h?.feePerL2Gas != null) {
+      for (const hk of historyKeys) {
+        if (hk < b) continue;
+        if (hk >= b + spreadBucket) break;
+        const h = historyByBlock.get(hk)!;
+        if (h.feePerDaGas != null && h.feePerL2Gas != null) {
           sumDa += Number(h.feePerDaGas);
           sumL2 += Number(h.feePerL2Gas);
           countFee++;
@@ -259,11 +265,13 @@ export function Fees() {
         medianManaDa: s ? toNum(s.medianGasLimitDa) : null,
       });
 
-      // Aggregate tx count from history blocks in this bucket
+      // Aggregate tx count from history entries in this bucket
       let txs = 0;
-      for (let blk = b; blk < b + spreadBucket && blk <= end; blk++) {
-        const h = historyByBlock.get(blk);
-        if (h) txs += h.numTxs ?? 0;
+      for (const hk of historyKeys) {
+        if (hk < b) continue;
+        if (hk >= b + spreadBucket) break;
+        const h = historyByBlock.get(hk)!;
+        txs += h.numTxs ?? 0;
       }
 
       costRows.push({
