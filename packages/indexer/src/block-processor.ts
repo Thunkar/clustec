@@ -15,9 +15,12 @@ import {
   noteHashes,
   nullifiers,
   publicDataWrites,
+  publicAddressAppearances,
 } from "@clustec/common";
 import { extractFromTx, extractFromTxEffect } from "./extractor.ts";
 import { computeFeatureVector } from "./features.ts";
+import { extractAddressAppearances } from "./address-appearances.ts";
+import type { PublicCallInfo, L2ToL1MsgInfo } from "./types.ts";
 
 /**
  * Extends L2TipsMemoryStore so it acts as both the local data provider
@@ -254,6 +257,19 @@ export class BlockProcessor extends L2TipsMemoryStore {
 
         await Promise.all(inserts);
 
+        // 2b-2. Insert address appearances for block-first txs
+        // (mempool-seen txs already have these from the mempool watcher)
+        if (pendingFields) {
+          const appearances = extractAddressAppearances(
+            txId,
+            pendingFields.publicCalls as PublicCallInfo[],
+            pendingFields.l2ToL1MsgDetails as L2ToL1MsgInfo[],
+          );
+          if (appearances.length > 0) {
+            await this.db.insert(publicAddressAppearances).values(appearances).onConflictDoNothing();
+          }
+        }
+
         // 2c. Compute and store feature vector now that we have mined data.
         // Pending fields come from either the existing DB row (mempool-seen)
         // or the freshly extracted pendingFields (block-first).
@@ -466,6 +482,9 @@ export class BlockProcessor extends L2TipsMemoryStore {
             this.db
               .delete(featureVectors)
               .where(eq(featureVectors.txId, tx.id)),
+            this.db
+              .delete(publicAddressAppearances)
+              .where(eq(publicAddressAppearances.txId, tx.id)),
           ]);
         }
 

@@ -11,6 +11,7 @@ import {
   jsonb,
   index,
   unique,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 // ── Enums ────────────────────────────────────────────────
@@ -237,6 +238,32 @@ export const contractInteractions = pgTable(
     index("ci_tx_idx").on(t.txId),
     index("ci_contract_idx").on(t.contractAddress),
     index("ci_selector_idx").on(t.functionSelector),
+  ]
+);
+
+// ── Public address appearances (reverse index for murder board) ──
+
+export const addressAppearanceRoleEnum = pgEnum("address_appearance_role", [
+  "msgSender",
+  "calldata",
+  "l2ToL1Recipient",
+  "l2ToL1Sender",
+]);
+
+export const publicAddressAppearances = pgTable(
+  "public_address_appearances",
+  {
+    id: serial("id").primaryKey(),
+    txId: integer("tx_id")
+      .references(() => transactions.id)
+      .notNull(),
+    address: text("address").notNull(),
+    role: addressAppearanceRoleEnum("role").notNull(),
+  },
+  (t) => [
+    index("paa_address_idx").on(t.address),
+    index("paa_tx_idx").on(t.txId),
+    uniqueIndex("paa_unique").on(t.txId, t.address, t.role),
   ]
 );
 

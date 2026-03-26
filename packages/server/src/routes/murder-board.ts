@@ -6,6 +6,7 @@ import {
   clusterRuns,
   clusterMemberships,
   contractInteractions,
+  publicAddressAppearances,
   contractLabels,
 } from "@clustec/common";
 
@@ -89,35 +90,17 @@ export function registerMurderBoardRoutes(app: FastifyInstance, db: Db) {
     for (const r of feePayerIds) fastIdSet.add(r.id);
     for (const r of interactionIds) fastIdSet.add(r.id);
 
-    // Phase B: JSONB scan for msgSender, calldata, l2ToL1 — exclude already-matched IDs
-    const excludeClause = fastIdSet.size > 0
-      ? sql`AND ${transactions.id} != ALL(${sql`ARRAY[${sql.join(
-          [...fastIdSet].map((i) => sql`${i}`), sql`, `,
-        )}]::int[]`})`
-      : sql``;
+    // Phase B: indexed lookup for msgSender, calldata, l2ToL1 appearances
+    const appearanceIds = await db
+      .selectDistinct({ id: publicAddressAppearances.txId })
+      .from(publicAddressAppearances)
+      .innerJoin(transactions, eq(transactions.id, publicAddressAppearances.txId))
+      .where(and(
+        eq(transactions.networkId, id),
+        eq(publicAddressAppearances.address, lower),
+      ));
 
-    const jsonbIds = await db.execute<{ id: number }>(sql`
-      SELECT id FROM transactions
-      WHERE network_id = ${id}
-        ${excludeClause}
-        AND (
-          EXISTS (
-            SELECT 1 FROM jsonb_array_elements(public_calls) AS elem
-            WHERE lower(elem->>'msgSender') = ${lower}
-               OR EXISTS (
-                 SELECT 1 FROM jsonb_array_elements_text(elem->'calldata') AS cd
-                 WHERE lower(cd) = ${lower}
-               )
-          )
-          OR EXISTS (
-            SELECT 1 FROM jsonb_array_elements(l2_to_l1_msg_details) AS msg
-            WHERE lower(msg->>'recipient') = ${lower}
-               OR lower(msg->>'senderContract') = ${lower}
-          )
-        )
-    `);
-
-    for (const r of jsonbIds) fastIdSet.add(r.id);
+    for (const r of appearanceIds) fastIdSet.add(r.id);
     const allIds = [...fastIdSet];
     const totalTxs = allIds.length;
 

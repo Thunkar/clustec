@@ -5,8 +5,10 @@ import {
   type Db,
   transactions,
   contractInteractions,
+  publicAddressAppearances,
 } from "@clustec/common";
 import { extractFromTx } from "./extractor.ts";
+import { extractAddressAppearances } from "./address-appearances.ts";
 
 export class MempoolWatcher {
   private running = false;
@@ -139,6 +141,13 @@ export class MempoolWatcher {
                 }))
               )
               .onConflictDoNothing()
+          );
+        }
+
+        const appearances = extractAddressAppearances(txId, extracted.publicCalls, extracted.l2ToL1MsgDetails);
+        if (appearances.length > 0) {
+          inserts.push(
+            this.db.insert(publicAddressAppearances).values(appearances).onConflictDoNothing()
           );
         }
 
