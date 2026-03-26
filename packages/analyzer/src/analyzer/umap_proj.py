@@ -32,6 +32,6 @@ def compute_umap(
         metric=metric,
         init="random",
         random_state=random_state,
-        n_jobs=-1,
+        n_jobs=1,
     )
     return reducer.fit_transform(data)

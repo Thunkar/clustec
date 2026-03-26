@@ -1,4 +1,4 @@
-"""Full analysis pipeline: load features → Gower distance → UMAP → HDBSCAN → store."""
+"""Full analysis pipeline: load features → normalize → UMAP → HDBSCAN → store."""
 
 import json
 from datetime import datetime, timezone
@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 import numpy as np
 import psycopg
 
-from .features import load_features, gower_distance_matrix
+from .features import load_features, prepare_feature_matrix
 from .umap_proj import compute_umap
 from .clustering import run_hdbscan
 
@@ -21,6 +21,9 @@ def run_pipeline(
 ) -> dict:
     """Run the full analysis pipeline for a network.
 
+    Uses feature-space UMAP (approximate NN) instead of precomputed
+    distance matrices to scale to large datasets without O(N²) memory.
+
     Returns a summary dict with cluster/outlier counts.
     """
     # 1. Load features (numeric + categorical)
@@ -31,21 +34,21 @@ def run_pipeline(
             "num_txs": len(tx_ids),
         }
 
-    # 2. Compute Gower distance matrix (handles mixed numeric + categorical)
-    dist_matrix = gower_distance_matrix(numeric, categoricals)
+    # 2. Prepare unified numeric feature matrix (range-normalized + encoded categoricals)
+    features = prepare_feature_matrix(numeric, categoricals)
 
-    # 3. UMAP projection (precomputed distance)
+    # 3. UMAP projection in feature space (euclidean, no precomputed matrix)
     embedding = compute_umap(
-        dist_matrix,
+        features,
         n_components=n_components,
         n_neighbors=min(n_neighbors, len(tx_ids) - 1),
         min_dist=min_dist,
-        metric="precomputed",
+        metric="euclidean",
     )
 
-    # 4. Cluster on the Gower distance matrix
+    # 4. Cluster on the UMAP embedding (low-dimensional, euclidean)
     labels, membership_scores, outlier_scores = run_hdbscan(
-        dist_matrix, min_cluster_size=min_cluster_size, metric="precomputed"
+        embedding, min_cluster_size=min_cluster_size, metric="euclidean"
     )
 
     # 5. Store results
@@ -57,7 +60,7 @@ def run_pipeline(
         "n_neighbors": n_neighbors,
         "min_dist": min_dist,
         "n_components": n_components,
-        "distance": "gower",
+        "distance": "euclidean-on-embedding",
     }
 
     with conn.cursor() as cur:

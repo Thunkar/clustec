@@ -29,7 +29,7 @@ def run_hdbscan(
         min_cluster_size=min_cluster_size,
         min_samples=min_samples,
         metric=metric,
-        core_dist_n_jobs=-1,
+        core_dist_n_jobs=1,
     )
 
     with warnings.catch_warnings():
