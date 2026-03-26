@@ -3,6 +3,7 @@ import styled from "@emotion/styled";
 import { Table, TableWrapper, Badge, Mono } from "./ui";
 import { HexDisplay } from "./HexDisplay";
 import { theme } from "../lib/theme";
+import { formatFJPerMana } from "../lib/format";
 
 /** Abbreviate a 0x-prefixed hex string: 0x1234...abcd */
 export function abbreviateHex(hex: string): string {
@@ -180,8 +181,8 @@ export function TxTable({
               <td>{num(tx.numPublicLogs)}</td>
               <td>{num(tx.gasLimitDa)}</td>
               <td>{num(tx.gasLimitL2)}</td>
-              <td>{num(tx.maxFeePerDaGas)}</td>
-              <td>{num(tx.maxFeePerL2Gas)}</td>
+              <td>{formatFJPerMana(tx.maxFeePerDaGas)}</td>
+              <td>{formatFJPerMana(tx.maxFeePerL2Gas)}</td>
               <td>{tx.numSetupCalls}</td>
               <td>{tx.numAppCalls}</td>
               <td>{tx.totalPublicCalldataSize}</td>

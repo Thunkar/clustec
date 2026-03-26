@@ -1,6 +1,7 @@
 import React, { useRef, useCallback, useState } from "react";
 import styled from "@emotion/styled";
 import { theme } from "../lib/theme";
+import { formatFJPerMana } from "../lib/format";
 
 /**
  * Labels match the feature vector indices from features.ts:
@@ -229,6 +230,10 @@ function formatValue(value: number | string, index: number): string {
   if (index === 14) {
     const s = String(value);
     return s.length > 14 ? `${s.slice(0, 6)}...${s.slice(-4)}` : s;
+  }
+  // Per-mana fee dimensions: show as FJ tokens per mana
+  if (index === 8 || index === 9) {
+    return `${formatFJPerMana(value)} FJ/mana`;
   }
   return typeof value === "number" ? value.toLocaleString() : String(value);
 }
