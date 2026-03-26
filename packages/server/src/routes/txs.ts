@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import type { AnyColumn } from "drizzle-orm";
-import { eq, desc, and, ne, or, sql, ilike } from "drizzle-orm";
+import { eq, desc, and, ne, or, sql, ilike, inArray } from "drizzle-orm";
 import {
   type Db,
   transactions,
@@ -13,6 +13,7 @@ import {
   buildSlotLookup,
 } from "@clustec/common";
 import type { FeePricingService } from "../services/fee-pricing.ts";
+import { gowerDistance, loadClusterCentroids } from "../lib/gower.ts";
 
 // Allowed sort columns and directions
 const SORT_COLUMNS: Record<string, AnyColumn> = {
@@ -273,7 +274,7 @@ export function registerTxRoutes(app: FastifyInstance, db: Db, feePricing?: Map<
     }
 
     // Find similar transactions with their stored feature vectors
-    let similarTxs: {
+    type SimilarTxRow = {
       txHash: string;
       blockNumber: number | null;
       status: string;
@@ -294,32 +295,37 @@ export function registerTxRoutes(app: FastifyInstance, db: Db, feePricing?: Map<
       feePayer: string;
       outlierScore: number | null;
       featureVector: unknown;
-    }[] = [];
+    };
+
+    const similarTxSelect = {
+      txHash: transactions.txHash,
+      blockNumber: transactions.blockNumber,
+      status: transactions.status,
+      numNoteHashes: transactions.numNoteHashes,
+      numNullifiers: transactions.numNullifiers,
+      numL2ToL1Msgs: transactions.numL2ToL1Msgs,
+      numPrivateLogs: transactions.numPrivateLogs,
+      numContractClassLogs: transactions.numContractClassLogs,
+      numPublicLogs: transactions.numPublicLogs,
+      gasLimitDa: transactions.gasLimitDa,
+      gasLimitL2: transactions.gasLimitL2,
+      maxFeePerDaGas: transactions.maxFeePerDaGas,
+      maxFeePerL2Gas: transactions.maxFeePerL2Gas,
+      numSetupCalls: transactions.numSetupCalls,
+      numAppCalls: transactions.numAppCalls,
+      totalPublicCalldataSize: transactions.totalPublicCalldataSize,
+      expirationTimestamp: transactions.expirationTimestamp,
+      feePayer: transactions.feePayer,
+      outlierScore: clusterMemberships.outlierScore,
+      featureVector: featureVectors.vector,
+    };
+
+    let similarTxs: SimilarTxRow[] = [];
 
     if (latestMembership && latestMembership.clusterId !== -1) {
+      // Cluster member: fetch same-cluster txs
       similarTxs = await db
-        .select({
-          txHash: transactions.txHash,
-          blockNumber: transactions.blockNumber,
-          status: transactions.status,
-          numNoteHashes: transactions.numNoteHashes,
-          numNullifiers: transactions.numNullifiers,
-          numL2ToL1Msgs: transactions.numL2ToL1Msgs,
-          numPrivateLogs: transactions.numPrivateLogs,
-          numContractClassLogs: transactions.numContractClassLogs,
-          numPublicLogs: transactions.numPublicLogs,
-          gasLimitDa: transactions.gasLimitDa,
-          gasLimitL2: transactions.gasLimitL2,
-          maxFeePerDaGas: transactions.maxFeePerDaGas,
-          maxFeePerL2Gas: transactions.maxFeePerL2Gas,
-          numSetupCalls: transactions.numSetupCalls,
-          numAppCalls: transactions.numAppCalls,
-          totalPublicCalldataSize: transactions.totalPublicCalldataSize,
-          expirationTimestamp: transactions.expirationTimestamp,
-          feePayer: transactions.feePayer,
-          outlierScore: clusterMemberships.outlierScore,
-          featureVector: featureVectors.vector,
-        })
+        .select(similarTxSelect)
         .from(clusterMemberships)
         .innerJoin(transactions, eq(transactions.id, clusterMemberships.txId))
         .leftJoin(featureVectors, eq(featureVectors.txId, transactions.id))
@@ -332,6 +338,54 @@ export function registerTxRoutes(app: FastifyInstance, db: Db, feePricing?: Map<
         )
         .orderBy(desc(clusterMemberships.outlierScore))
         .limit(20);
+    } else if (latestMembership && latestMembership.clusterId === -1 && fv?.vector) {
+      // Outlier: find nearest clusters by centroid distance, then fetch members
+      const centroidData = await loadClusterCentroids(db, id, latestMembership.runId);
+      if (centroidData) {
+        const { centroids, ranges } = centroidData;
+        const txVector = fv.vector as (number | string)[];
+
+        // Rank centroids by Gower distance, pick top 10
+        const ranked = centroids
+          .map((c) => ({ ...c, dist: gowerDistance(txVector, c.centroid, ranges) }))
+          .sort((a, b) => a.dist - b.dist)
+          .slice(0, 10);
+
+        // Collect member txIds from those clusters
+        const candidateTxIds = ranked.flatMap((c) => c.txIds).filter((id) => id !== tx.id);
+
+        if (candidateTxIds.length > 0) {
+          const candidates = await db
+            .select({
+              ...similarTxSelect,
+              clusterId: clusterMemberships.clusterId,
+            })
+            .from(clusterMemberships)
+            .innerJoin(transactions, eq(transactions.id, clusterMemberships.txId))
+            .leftJoin(featureVectors, eq(featureVectors.txId, transactions.id))
+            .where(
+              and(
+                eq(clusterMemberships.runId, latestMembership.runId),
+                inArray(clusterMemberships.txId, candidateTxIds),
+              )
+            );
+
+          // Pick the single closest tx per cluster
+          const bestPerCluster = new Map<number, { row: SimilarTxRow; dist: number }>();
+          for (const { clusterId: cId, ...row } of candidates) {
+            const vec = row.featureVector as (number | string)[] | null;
+            const dist = vec ? gowerDistance(txVector, vec, ranges) : 1;
+            const prev = bestPerCluster.get(cId);
+            if (!prev || dist < prev.dist) {
+              bestPerCluster.set(cId, { row, dist });
+            }
+          }
+
+          similarTxs = [...bestPerCluster.values()]
+            .sort((a, b) => a.dist - b.dist)
+            .map(({ row }) => row);
+        }
+      }
     }
 
     // Extract log details from rawTxEffect
