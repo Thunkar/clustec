@@ -266,6 +266,8 @@ export const analysisConfig = pgTable("analysis_config", {
   minClusterSize: integer("min_cluster_size").notNull().default(5),
   nNeighbors: integer("n_neighbors").notNull().default(15),
   minDist: real("min_dist").notNull().default(0.1),
+  weights: jsonb("weights"),
+  normalization: text("normalization").default("minmax"),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
