@@ -61,7 +61,12 @@ jobs:
           platforms: linux/arm64
           push: true
           tags: ${{ matrix.image }}:latest
-          build-args: BASE_IMAGE=thunkar/clustec-base:latest
+          build-args: |
+            BASE_IMAGE=thunkar/clustec-base:latest
+            VITE_SENTRY_DSN=${{ matrix.service == 'web' && vars.VITE_SENTRY_DSN || '' }}
+            SENTRY_ORG=${{ matrix.service == 'web' && vars.SENTRY_ORG || '' }}
+            SENTRY_PROJECT=${{ matrix.service == 'web' && vars.SENTRY_PROJECT || '' }}
+            SENTRY_AUTH_TOKEN=${{ matrix.service == 'web' && secrets.SENTRY_AUTH_TOKEN || '' }}
           cache-from: type=registry,ref=${{ matrix.image }}:buildcache
           cache-to: type=registry,ref=${{ matrix.image }}:buildcache,mode=max
 
@@ -82,6 +87,7 @@ jobs:
         env:
           ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
         run: |
           bash deploy.sh \
             --host ${{ vars.DEPLOY_HOST }} \

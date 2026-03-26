@@ -1,5 +1,7 @@
 import { loadEnv } from "@clustec/common/env";
 loadEnv();
+import "./instrument.ts";
+import * as Sentry from "@sentry/node";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import Fastify from "fastify";
@@ -142,6 +144,7 @@ async function main() {
   }
 
   registerRoutes(app, db, feePricing);
+  Sentry.setupFastifyErrorHandler(app);
 
   await app.listen({ port, host });
 
@@ -195,7 +198,9 @@ async function main() {
   }
 }
 
-main().catch((err) => {
+main().catch(async (err) => {
   console.error("Fatal error:", err);
+  Sentry.captureException(err);
+  await Sentry.flush(2000);
   process.exit(1);
 });
