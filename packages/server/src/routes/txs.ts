@@ -461,10 +461,13 @@ export function registerTxRoutes(app: FastifyInstance, db: Db, feePricing?: Map<
     };
 
     if (tx.feePayer) addAddr(tx.feePayer, "feePayer");
-    for (let ci = 0; ci < rawCalls.length; ci++) {
-      const c = rawCalls[ci];
-      addAddr(c.contractAddress, `${c.phase}[${ci}].contractAddress`);
-      if (c.msgSender) addAddr(c.msgSender, `${c.phase}[${ci}].msgSender`);
+    const phaseCounters: Record<string, number> = {};
+    for (const c of rawCalls) {
+      const idx = phaseCounters[c.phase] ?? 0;
+      phaseCounters[c.phase] = idx + 1;
+      const label = c.phase === "teardown" ? "teardown" : `${c.phase}[${idx}]`;
+      addAddr(c.contractAddress, `${label}.contractAddress`);
+      if (c.msgSender) addAddr(c.msgSender, `${label}.msgSender`);
     }
     for (let mi = 0; mi < l2ToL1Msgs.length; mi++) {
       const msg = l2ToL1Msgs[mi];
