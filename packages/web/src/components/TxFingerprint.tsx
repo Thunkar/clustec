@@ -423,7 +423,9 @@ function renderBars({
       const value = typeof vector[i] === "number" ? (vector[i] as number) : 0;
       const norm = normalizeNumeric(value, i, maxValues);
       const active = value > 0;
-      const barH = active ? Math.max(norm * maxBarH, 3) : ZERO_H;
+      // Binary dims (hasTeardown): cap at 50% height like the categorical bar
+      const effectiveMax = i === 12 ? maxBarH * 0.5 : maxBarH;
+      const barH = active ? Math.max(norm * effectiveMax, 3) : ZERO_H;
       const hitH = Math.max(barH, 6);
       const barTopY = centerY - hitH;
 
@@ -607,8 +609,9 @@ function renderComparisonBars({
       const normB = normalizeNumeric(rawB, i, maxValues);
       const activeA = rawA > 0;
       const activeB = rawB > 0;
-      const barHA = activeA ? Math.max(normA * maxBarH, 3) : ZERO_H;
-      const barHB = activeB ? Math.max(normB * maxBarH, 3) : ZERO_H;
+      const effectiveMax = i === 12 ? maxBarH * 0.5 : maxBarH;
+      const barHA = activeA ? Math.max(normA * effectiveMax, 3) : ZERO_H;
+      const barHB = activeB ? Math.max(normB * effectiveMax, 3) : ZERO_H;
       const equal = rawA === rawB;
       const anyActive = activeA || activeB;
       const hitH = Math.max(barHA, barHB, 6);
