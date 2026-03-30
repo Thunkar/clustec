@@ -57,6 +57,9 @@ function loadNetworkConfigs(): Map<string, NetworkConfig> {
       const raw = readFileSync(join(configDir, file), "utf-8");
       const config = JSON.parse(raw) as NetworkConfig;
       if (config.id) {
+        // Allow env override: NODE_URL_<NETWORK_ID>
+        const envUrl = process.env[`NODE_URL_${config.id.toUpperCase()}`];
+        if (envUrl) config.nodeUrl = envUrl;
         result.set(config.id, config);
       }
     }

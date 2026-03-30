@@ -1,0 +1,9 @@
+{
+  "id": "mainnet",
+  "name": "Mainnet",
+  "nodeUrl": "",
+  "chainId": 1,
+  "pollIntervalMs": 500,
+  "batchSize": 200,
+  "enabled": true
+}

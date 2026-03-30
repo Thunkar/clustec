@@ -105,7 +105,7 @@ remote "[ -f $REMOTE_DIR/.env ] || cp $REMOTE_DIR/.env.example $REMOTE_DIR/.env"
 remote "grep -q '^IMAGE_TAG=' $REMOTE_DIR/.env 2>/dev/null && sed -i 's|^IMAGE_TAG=.*|IMAGE_TAG=$IMAGE_TAG|' $REMOTE_DIR/.env || echo 'IMAGE_TAG=$IMAGE_TAG' >> $REMOTE_DIR/.env"
 
 # Upsert optional env vars if set locally
-for VAR in SENTRY_DSN; do
+for VAR in SENTRY_DSN NODE_URL_MAINNET; do
   VAL="${!VAR}"
   if [[ -n "$VAL" ]]; then
     remote "grep -q '^${VAR}=' $REMOTE_DIR/.env 2>/dev/null && sed -i 's|^${VAR}=.*|${VAR}=${VAL}|' $REMOTE_DIR/.env || echo '${VAR}=${VAL}' >> $REMOTE_DIR/.env"
