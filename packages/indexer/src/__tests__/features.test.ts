@@ -29,7 +29,7 @@ describe("computeFeatureVector", () => {
     const vector = computeFeatureVector(makeTx());
     expect(vector).toHaveLength(FEATURE_DIM);
     expect(FEATURE_DIM).toBe(16);
-    expect(NUMERIC_DIM).toBe(14);
+    expect(NUMERIC_DIM).toBe(15);
   });
 
   it("encodes numeric features in the correct positions", () => {
@@ -46,6 +46,7 @@ describe("computeFeatureVector", () => {
       maxFeePerL2Gas: 20,
       numSetupCalls: 1,
       numAppCalls: 2,
+      hasTeardown: true,
       totalPublicCalldataSize: 50,
       expirationTimestamp: 1000124,
       anchorBlockTimestamp: 1000100, // delta = 24
@@ -64,14 +65,15 @@ describe("computeFeatureVector", () => {
     expect(vector[9]).toBe(20);  // maxFeePerL2Gas
     expect(vector[10]).toBe(1);  // numSetupCalls
     expect(vector[11]).toBe(2);  // numAppCalls
-    expect(vector[12]).toBe(50); // totalPublicCalldataSize
-    expect(vector[13]).toBe(24); // expirationDelta
+    expect(vector[12]).toBe(1);  // hasTeardown
+    expect(vector[13]).toBe(50); // totalPublicCalldataSize
+    expect(vector[14]).toBe(24); // expirationDelta
   });
 
-  it("includes fee payer address at position 14", () => {
+  it("includes fee payer address at position 15", () => {
     const addr = "0x" + "cd".repeat(32);
     const vector = computeFeatureVector(makeTx({ feePayer: addr }));
-    expect(vector[14]).toBe(addr);
+    expect(vector[15]).toBe(addr);
   });
 
   it("preserves different fee payer addresses", () => {
@@ -79,9 +81,9 @@ describe("computeFeatureVector", () => {
     const addrB = "0x" + "bb".repeat(32);
     const vA = computeFeatureVector(makeTx({ feePayer: addrA }));
     const vB = computeFeatureVector(makeTx({ feePayer: addrB }));
-    expect(vA[14]).toBe(addrA);
-    expect(vB[14]).toBe(addrB);
-    expect(vA[14]).not.toBe(vB[14]);
+    expect(vA[15]).toBe(addrA);
+    expect(vB[15]).toBe(addrB);
+    expect(vA[15]).not.toBe(vB[15]);
   });
 
   it("uses 0 for null gas values, null expiration, and null numPublicLogs", () => {
@@ -91,7 +93,7 @@ describe("computeFeatureVector", () => {
     expect(vector[7]).toBe(0);  // gasLimitL2
     expect(vector[8]).toBe(0);  // maxFeePerDaGas
     expect(vector[9]).toBe(0);  // maxFeePerL2Gas
-    expect(vector[13]).toBe(0); // expirationDelta (null → 0)
+    expect(vector[14]).toBe(0); // expirationDelta (null → 0)
   });
 
   it("computes expiration delta from anchor block", () => {
@@ -99,14 +101,21 @@ describe("computeFeatureVector", () => {
       expirationTimestamp: 1000048,
       anchorBlockTimestamp: 1000000,
     }));
-    expect(vector[13]).toBe(48);
+    expect(vector[14]).toBe(48);
   });
 
   it("uses 0 when only one of expiration/anchor is present", () => {
     const v1 = computeFeatureVector(makeTx({ expirationTimestamp: 100 }));
-    expect(v1[13]).toBe(0);
+    expect(v1[14]).toBe(0);
     const v2 = computeFeatureVector(makeTx({ anchorBlockTimestamp: 100 }));
-    expect(v2[13]).toBe(0);
+    expect(v2[14]).toBe(0);
+  });
+
+  it("encodes hasTeardown as 0 or 1", () => {
+    const withTeardown = computeFeatureVector(makeTx({ hasTeardown: true }));
+    const withoutTeardown = computeFeatureVector(makeTx({ hasTeardown: false }));
+    expect(withTeardown[12]).toBe(1);
+    expect(withoutTeardown[12]).toBe(0);
   });
 
   it("produces different vectors for differently shaped txs", () => {
