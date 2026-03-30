@@ -17,8 +17,8 @@
     "db:migrate": "node --experimental-transform-types src/db/migrate.ts"
   },
   "dependencies": {
-    "@aztec/foundation": "4.0.0-devnet.2-patch.3",
-    "@aztec/stdlib": "4.0.0-devnet.2-patch.3",
+    "@aztec/foundation": "4.2.0-aztecnr-rc.2",
+    "@aztec/stdlib": "4.2.0-aztecnr-rc.2",
     "dotenv": "^16",
     "drizzle-orm": "^0.45",
     "postgres": "^3.4"
