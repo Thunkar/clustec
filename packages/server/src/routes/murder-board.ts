@@ -36,14 +36,17 @@ function detectRoles(
     phase: string;
     calldata?: string[];
   }[];
-  for (let i = 0; i < calls.length; i++) {
-    const c = calls[i];
+  const phaseCounters: Record<string, number> = {};
+  for (const c of calls) {
+    const idx = phaseCounters[c.phase] ?? 0;
+    phaseCounters[c.phase] = idx + 1;
+    const label = c.phase === "teardown" ? "teardown" : `${c.phase}[${idx}]`;
     if (c.contractAddress?.toLowerCase() === lower)
-      roles.push(`${c.phase}Call[${i}].contract`);
+      roles.push(`${label}.contract`);
     if (c.msgSender?.toLowerCase() === lower)
-      roles.push(`${c.phase}Call[${i}].msgSender`);
+      roles.push(`${label}.msgSender`);
     if (c.calldata?.some((f) => f.toLowerCase() === lower))
-      roles.push(`${c.phase}Call[${i}].calldata`);
+      roles.push(`${label}.calldata`);
   }
 
   const msgs = (tx.l2ToL1MsgDetails ?? []) as {
