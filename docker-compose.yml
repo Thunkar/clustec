@@ -43,6 +43,7 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env}
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
       SENTRY_DSN: ${SENTRY_DSN:-}
+      NODE_URL_MAINNET: ${NODE_URL_MAINNET:-}
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -73,6 +74,22 @@ services:
       SENTRY_DSN: ${SENTRY_DSN:-}
     volumes:
       - ./configs/networks/testnet.json:/app/config.json:ro
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  indexer-mainnet:
+    image: thunkar/clustec-indexer:${IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: packages/indexer/Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-clustec}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-clustec}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      NODE_URL: ${NODE_URL_MAINNET:-}
+    volumes:
+      - ./configs/networks/mainnet.json:/app/config.json:ro
     depends_on:
       migrate:
         condition: service_completed_successfully

@@ -26,9 +26,13 @@ interface NetworkConfig {
 function loadConfig(configPath: string): NetworkConfig {
   const raw = readFileSync(configPath, "utf-8");
   const config = JSON.parse(raw) as NetworkConfig;
+  // Allow env override: NODE_URL or NODE_URL_<NETWORK_ID>
+  const envUrl = process.env.NODE_URL
+    ?? (config.id ? process.env[`NODE_URL_${config.id.toUpperCase()}`] : undefined);
+  if (envUrl) config.nodeUrl = envUrl;
   if (!config.id || !config.nodeUrl) {
     throw new Error(
-      `Invalid config at ${configPath}: 'id' and 'nodeUrl' are required`
+      `Invalid config at ${configPath}: 'id' and 'nodeUrl' are required (can also set NODE_URL env var)`
     );
   }
   return config;
