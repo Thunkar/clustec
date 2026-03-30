@@ -6,7 +6,7 @@
  * Feature vectors are computed after a tx is mined (proposed),
  * so post-execution fields like numPublicLogs are available.
  *
- * Dimensions (15):
+ * Dimensions (16):
  *  0:  numNoteHashes           (numeric)
  *  1:  numNullifiers           (numeric)
  *  2:  numL2ToL1Msgs           (numeric)
@@ -19,12 +19,13 @@
  *  9:  maxFeePerL2Gas          (numeric)
  * 10:  numSetupCalls           (numeric)
  * 11:  numAppCalls             (numeric)
- * 12:  totalPublicCalldataSize (numeric)
- * 13:  expirationDelta         (numeric) — expirationTimestamp - anchorBlockTimestamp
- * 14:  feePayer                (categorical) — AztecAddress of fee payer
+ * 12:  hasTeardown             (numeric) — 0 or 1
+ * 13:  totalPublicCalldataSize (numeric)
+ * 14:  expirationDelta         (numeric) — expirationTimestamp - anchorBlockTimestamp
+ * 15:  feePayer                (categorical) — AztecAddress of fee payer
  */
-export const NUMERIC_DIM = 14;
-export const FEATURE_DIM = 15;
+export const NUMERIC_DIM = 15;
+export const FEATURE_DIM = 16;
 
 export type FeatureVector = (number | string)[];
 
@@ -41,6 +42,7 @@ export interface FeatureInput {
   maxFeePerL2Gas: number | null;
   numSetupCalls: number;
   numAppCalls: number;
+  hasTeardown: boolean;
   totalPublicCalldataSize: number;
   feePayer: string;
   expirationTimestamp: number | null;
@@ -66,6 +68,7 @@ export function computeFeatureVector(tx: FeatureInput): FeatureVector {
     tx.maxFeePerL2Gas ?? 0,
     tx.numSetupCalls,
     tx.numAppCalls,
+    tx.hasTeardown ? 1 : 0,
     tx.totalPublicCalldataSize,
     expirationDelta,
     tx.feePayer,

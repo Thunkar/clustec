@@ -24,6 +24,7 @@ const FEATURE_LABELS = [
   "Max Fee/L2 Mana",
   "Setup",
   "App",
+  "Teardown",
   "Calldata Size",
   "Expiry",
   "Fee Payer",
@@ -32,9 +33,9 @@ const FEATURE_LABELS = [
 const GROUPS = [
   { start: 0, end: 5, label: "Counts" },
   { start: 6, end: 9, label: "Mana" },
-  { start: 10, end: 12, label: "Pub Calls" },
-  { start: 13, end: 13, label: "Time" },
-  { start: 14, end: 14, label: "Identity" },
+  { start: 10, end: 13, label: "Pub Calls" },
+  { start: 14, end: 14, label: "Time" },
+  { start: 15, end: 15, label: "Identity" },
 ];
 
 const GROUP_GAP = 6;
@@ -160,15 +161,16 @@ function normalizeNumeric(
     2: 8, // numL2ToL1Msgs — MAX_L2_TO_L1_MSGS_PER_TX
     3: 64, // numPrivateLogs — MAX_PRIVATE_LOGS_PER_TX
     4: 1, // numContractClassLogs — MAX_CONTRACT_CLASS_LOGS_PER_TX
-    5: 64, // numPublicLogs — practical cap; DA-derived max ~85 @ 16 fields/log avg
+    5: 64, // numPublicLogs — practical cap
     6: 786_432, // gasLimitDa — MAX_PROCESSABLE_DA_GAS_PER_CHECKPOINT
     7: 6_540_000, // gasLimitL2 — MAX_PROCESSABLE_L2_GAS
     8: 1e16, // maxFeePerDaGas — FPA units per DA mana
     9: 1e16, // maxFeePerL2Gas — FPA units per L2 mana
     10: 32, // numSetupCalls — MAX_ENQUEUED_CALLS_PER_TX
     11: 32, // numAppCalls — MAX_ENQUEUED_CALLS_PER_TX
-    12: 1_000, // totalPublicCalldataSize (fields) — practical cap; AVM bench test max is 300/call
-    13: 86400, // expirationDelta (seconds) — MAX_TX_LIFETIME
+    12: 1, // hasTeardown — 0 or 1
+    13: 1_000, // totalPublicCalldataSize (fields)
+    14: 86400, // expirationDelta (seconds) — MAX_TX_LIFETIME
   };
   return Math.sqrt(Math.min(value / (caps[index] ?? 1), 1));
 }
@@ -227,13 +229,15 @@ function barPathDouble(
 }
 
 function formatValue(value: number | string, index: number): string {
-  if (index === 14) {
+  if (index === 15) {
     const s = String(value);
     return s.length > 14 ? `${s.slice(0, 6)}...${s.slice(-4)}` : s;
   }
-  // Per-mana fee dimensions: show as FJ tokens per mana
   if (index === 8 || index === 9) {
     return `${formatFJPerMana(value)} FJ/mana`;
+  }
+  if (index === 12) {
+    return value ? "Yes" : "No";
   }
   return typeof value === "number" ? value.toLocaleString() : String(value);
 }

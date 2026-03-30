@@ -13,7 +13,19 @@ import {
   buildSlotLookup,
 } from "@clustec/common";
 import type { FeePricingService } from "../services/fee-pricing.ts";
-import { gowerDistance, loadClusterCentroids } from "../lib/gower.ts";
+import { gowerDistance, loadClusterCentroids, FEATURE_DIM } from "../lib/gower.ts";
+
+/** Migrate old 15-dim feature vectors to 16-dim by inserting hasTeardown=0 at position 12 */
+function migrateVector(v: unknown): (number | string)[] | null {
+  if (!v || !Array.isArray(v)) return null;
+  if (v.length === FEATURE_DIM) return v;
+  // Old 15-dim: [0..11 numeric, totalPublicCalldataSize, expirationDelta, feePayer]
+  // New 16-dim: [0..11 numeric, hasTeardown, totalPublicCalldataSize, expirationDelta, feePayer]
+  if (v.length === FEATURE_DIM - 1 && typeof v[14] === "string") {
+    return [...v.slice(0, 12), 0, ...v.slice(12)];
+  }
+  return v;
+}
 
 // Allowed sort columns and directions
 const SORT_COLUMNS: Record<string, AnyColumn> = {
@@ -313,6 +325,7 @@ export function registerTxRoutes(app: FastifyInstance, db: Db, feePricing?: Map<
       maxFeePerL2Gas: transactions.maxFeePerL2Gas,
       numSetupCalls: transactions.numSetupCalls,
       numAppCalls: transactions.numAppCalls,
+      hasTeardown: transactions.hasTeardown,
       totalPublicCalldataSize: transactions.totalPublicCalldataSize,
       expirationTimestamp: transactions.expirationTimestamp,
       feePayer: transactions.feePayer,
@@ -450,8 +463,8 @@ export function registerTxRoutes(app: FastifyInstance, db: Db, feePricing?: Map<
     if (tx.feePayer) addAddr(tx.feePayer, "feePayer");
     for (let ci = 0; ci < rawCalls.length; ci++) {
       const c = rawCalls[ci];
-      addAddr(c.contractAddress, `publicCalls[${ci}].contractAddress`);
-      if (c.msgSender) addAddr(c.msgSender, `publicCalls[${ci}].msgSender`);
+      addAddr(c.contractAddress, `${c.phase}[${ci}].contractAddress`);
+      if (c.msgSender) addAddr(c.msgSender, `${c.phase}[${ci}].msgSender`);
     }
     for (let mi = 0; mi < l2ToL1Msgs.length; mi++) {
       const msg = l2ToL1Msgs[mi];
@@ -487,7 +500,7 @@ export function registerTxRoutes(app: FastifyInstance, db: Db, feePricing?: Map<
 
     return {
       tx,
-      featureVector: fv?.vector ?? null,
+      featureVector: migrateVector(fv?.vector ?? null),
       noteHashes: notes,
       nullifiers: nulls,
       publicDataWrites: resolvedPdws,

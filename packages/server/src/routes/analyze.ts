@@ -28,6 +28,7 @@ export const FEATURE_NAMES = [
   "maxFeePerL2Gas",
   "numSetupCalls",
   "numAppCalls",
+  "hasTeardown",
   "totalPublicCalldataSize",
   "expirationDelta",
   "feePayer",
