@@ -5,10 +5,10 @@
 UPDATE feature_vectors fv
 SET vector = (
   SELECT jsonb_build_array(
-    v->0, v->1, v->2, v->3, v->4, v->5,
-    v->6, v->7, v->8, v->9, v->10, v->11,
+    fv.vector->0, fv.vector->1, fv.vector->2, fv.vector->3, fv.vector->4, fv.vector->5,
+    fv.vector->6, fv.vector->7, fv.vector->8, fv.vector->9, fv.vector->10, fv.vector->11,
     CASE WHEN t.has_teardown THEN 1 ELSE 0 END,
-    v->12, v->13, v->14
+    fv.vector->12, fv.vector->13, fv.vector->14
   )
   FROM transactions t
   WHERE t.id = fv.tx_id
