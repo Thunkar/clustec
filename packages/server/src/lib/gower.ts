@@ -1,8 +1,8 @@
 import { eq, and, gte, desc } from "drizzle-orm";
 import { type Db, clusterMemberships, clusterRuns, featureVectors } from "@clustec/common";
 
-export const NUMERIC_DIM = 14;
-export const FEATURE_DIM = 15;
+export const NUMERIC_DIM = 15;
+export const FEATURE_DIM = 16;
 
 export const DIM_NAMES = [
   "numNoteHashes",
@@ -17,6 +17,7 @@ export const DIM_NAMES = [
   "maxFeePerL2Gas",
   "numSetupCalls",
   "numAppCalls",
+  "hasTeardown",
   "totalPublicCalldataSize",
   "expirationDelta",
   "feePayer",

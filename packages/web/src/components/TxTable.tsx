@@ -28,6 +28,7 @@ export interface TxRow {
   maxFeePerL2Gas: number | null;
   numSetupCalls: number;
   numAppCalls: number;
+  hasTeardown: boolean;
   totalPublicCalldataSize: number;
   expirationTimestamp: number | null;
   feePayer: string;
@@ -48,6 +49,7 @@ export type TxSortKey =
   | "maxFeePerL2Gas"
   | "numSetupCalls"
   | "numAppCalls"
+  | "hasTeardown"
   | "totalPublicCalldataSize"
   | "feePayer"
   | "status"
@@ -149,6 +151,7 @@ export function TxTable({
             {header("maxFeePerL2Gas", "Max Fee/L2 Mana")}
             {header("numSetupCalls", "Pub Setup")}
             {header("numAppCalls", "Pub App")}
+            {header("hasTeardown", "Teardown")}
             {header("totalPublicCalldataSize", "Pub Calldata Size")}
             {header("feePayer", "Fee Payer")}
             {showOutlierScore && header("outlierScore", "Outlier")}
@@ -185,6 +188,7 @@ export function TxTable({
               <td>{formatFJPerMana(tx.maxFeePerL2Gas)}</td>
               <td>{tx.numSetupCalls}</td>
               <td>{tx.numAppCalls}</td>
+              <td>{tx.hasTeardown ? "Y" : "N"}</td>
               <td>{tx.totalPublicCalldataSize}</td>
               <td style={{ textAlign: "left" }}>
                 <HexDisplay address={tx.feePayer} />

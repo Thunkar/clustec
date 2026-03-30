@@ -86,6 +86,7 @@ export function registerClusterRoutes(app: FastifyInstance, db: Db) {
           maxFeePerL2Gas: transactions.maxFeePerL2Gas,
           numSetupCalls: transactions.numSetupCalls,
           numAppCalls: transactions.numAppCalls,
+          hasTeardown: transactions.hasTeardown,
           totalPublicCalldataSize: transactions.totalPublicCalldataSize,
           expirationTimestamp: transactions.expirationTimestamp,
           feePayer: transactions.feePayer,

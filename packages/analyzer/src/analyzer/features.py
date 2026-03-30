@@ -13,9 +13,9 @@ import json
 import numpy as np
 import psycopg
 
-# Layout: 14 numeric + 1 categorical (fee payer)
-NUMERIC_DIM = 14
-CATEGORICAL_START = 14
+# Layout: 15 numeric + 1 categorical (fee payer)
+NUMERIC_DIM = 15
+CATEGORICAL_START = 15
 
 FEATURE_NAMES = [
     "numNoteHashes",
@@ -30,6 +30,7 @@ FEATURE_NAMES = [
     "maxFeePerL2Gas",
     "numSetupCalls",
     "numAppCalls",
+    "hasTeardown",
     "totalPublicCalldataSize",
     "expirationDelta",
     "feePayer",
@@ -66,6 +67,23 @@ def load_features(
     tx_ids = [r[0] for r in rows]
     tx_hashes = [r[1] for r in rows]
     raw_vectors = [json.loads(r[2]) if isinstance(r[2], str) else r[2] for r in rows]
+
+    # Handle old (15-dim) vectors during transition to 16-dim.
+    # Old: [14 numeric..., feePayer_string]  (len=15, feePayer at 14)
+    # New: [15 numeric..., feePayer_string]  (len=16, feePayer at 15)
+    OLD_NUMERIC_DIM = 14
+    OLD_CATEGORICAL_START = 14
+    migrated = []
+    for v in raw_vectors:
+        if len(v) == NUMERIC_DIM + 1:
+            # New format — use as-is
+            migrated.append(v)
+        elif len(v) == OLD_NUMERIC_DIM + 1 and isinstance(v[OLD_CATEGORICAL_START], str):
+            # Old format — insert hasTeardown=0 at position 12
+            migrated.append(v[:12] + [0] + v[12:])
+        else:
+            migrated.append(v)
+    raw_vectors = migrated
 
     numeric = np.array(
         [v[:NUMERIC_DIM] for v in raw_vectors], dtype=np.float64

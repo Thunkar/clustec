@@ -283,6 +283,7 @@ export function registerMurderBoardRoutes(app: FastifyInstance, db: Db) {
       numPublicLogs: number | null;
       numSetupCalls: number;
       numAppCalls: number;
+      hasTeardown: boolean;
       totalPublicCalldataSize: number;
       createdAt: Date;
     }[] = [];
@@ -306,6 +307,7 @@ export function registerMurderBoardRoutes(app: FastifyInstance, db: Db) {
           numPublicLogs: transactions.numPublicLogs,
           numSetupCalls: transactions.numSetupCalls,
           numAppCalls: transactions.numAppCalls,
+          hasTeardown: transactions.hasTeardown,
           totalPublicCalldataSize: transactions.totalPublicCalldataSize,
           createdAt: transactions.createdAt,
         })
@@ -337,6 +339,7 @@ export function registerMurderBoardRoutes(app: FastifyInstance, db: Db) {
           numPublicLogs: tx.numPublicLogs,
           numSetupCalls: tx.numSetupCalls,
           numAppCalls: tx.numAppCalls,
+          hasTeardown: tx.hasTeardown,
           totalPublicCalldataSize: tx.totalPublicCalldataSize,
           createdAt: tx.createdAt,
         };

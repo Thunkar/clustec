@@ -258,6 +258,7 @@ export interface SimilarTx {
   maxFeePerL2Gas: number | null;
   numSetupCalls: number;
   numAppCalls: number;
+  hasTeardown: boolean;
   totalPublicCalldataSize: number;
   expirationTimestamp: number | null;
   feePayer: string;
@@ -350,6 +351,7 @@ export interface ClusterMember {
   maxFeePerL2Gas: number | null;
   numSetupCalls: number;
   numAppCalls: number;
+  hasTeardown: boolean;
   totalPublicCalldataSize: number;
   expirationTimestamp: number | null;
   feePayer: string;
@@ -375,6 +377,7 @@ export interface MurderBoardTx {
   numPublicLogs: number | null;
   numSetupCalls: number;
   numAppCalls: number;
+  hasTeardown: boolean;
   totalPublicCalldataSize: number;
   createdAt: string;
 }
@@ -442,6 +445,7 @@ export const FEATURE_NAMES = [
   "maxFeePerL2Gas",
   "numSetupCalls",
   "numAppCalls",
+  "hasTeardown",
   "totalPublicCalldataSize",
   "expirationDelta",
   "feePayer",
@@ -450,7 +454,7 @@ export const FEATURE_NAMES = [
 export const DEFAULT_WEIGHTS: FeatureWeights = Object.fromEntries(
   FEATURE_NAMES.map((name) => [
     name,
-    name === "maxFeePerDaGas" || name === "maxFeePerL2Gas" ? 0.25 : 1.0,
+    (name === "maxFeePerDaGas" || name === "maxFeePerL2Gas") ? 0.25 : 1.0,
   ]),
 );
 
@@ -467,6 +471,7 @@ export const FEATURE_LABELS: Record<string, { label: string; group: string }> = 
   maxFeePerL2Gas: { label: "Max fee/L2 mana", group: "Fees" },
   numSetupCalls: { label: "Setup calls", group: "Calls" },
   numAppCalls: { label: "App calls", group: "Calls" },
+  hasTeardown: { label: "Has teardown", group: "Calls" },
   totalPublicCalldataSize: { label: "Calldata size", group: "Calls" },
   expirationDelta: { label: "Expiration delta", group: "Timing" },
   feePayer: { label: "Fee payer", group: "Identity" },

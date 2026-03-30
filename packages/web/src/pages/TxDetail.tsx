@@ -375,6 +375,7 @@ function similarTxToVector(tx: SimilarTx): (number | string)[] {
     tx.maxFeePerL2Gas ?? 0,
     tx.numSetupCalls,
     tx.numAppCalls,
+    tx.hasTeardown ? 1 : 0,
     tx.totalPublicCalldataSize,
     tx.expirationTimestamp ?? 0,
     tx.feePayer,
@@ -837,6 +838,7 @@ const FEATURE_LABELS = [
   "Max Fee Per L2 Mana",
   "Setup Calls",
   "App Calls",
+  "Has Teardown",
   "Total Public Calldata Size",
   "Expiration Delta",
   "Fee Payer",
@@ -920,7 +922,13 @@ function PublicAddressesSection({
                           fontSize: "10px",
                           color: isFeePayer
                             ? theme.colors.warning
-                            : theme.colors.textMuted,
+                            : a.source.startsWith("setup")
+                              ? theme.colors.accent
+                              : a.source.startsWith("teardown")
+                                ? theme.colors.warning
+                                : a.source.startsWith("app")
+                                  ? theme.colors.primary
+                                  : theme.colors.textMuted,
                         }}
                       >
                         {a.source}
@@ -1509,10 +1517,12 @@ export function TxDetail() {
                     <FeatureRow key={i}>
                       <FeatureName>{label}</FeatureName>
                       <FeatureValue>
-                        {i === 14 ? (
+                        {i === 15 ? (
                           <HexDisplay address={String(featureVector[i])} mode="label" />
                         ) : (i === 8 || i === 9) ? (
                           `${formatFJPerMana(featureVector[i])} FJ/mana`
+                        ) : i === 12 ? (
+                          featureVector[i] ? "Yes" : "No"
                         ) : typeof featureVector[i] === "number" ? (
                           (featureVector[i] as number).toLocaleString()
                         ) : (
@@ -1529,10 +1539,12 @@ export function TxDetail() {
                     <FeatureRow key={i}>
                       <FeatureName>{label}</FeatureName>
                       <FeatureValue>
-                        {i === 14 ? (
+                        {i === 15 ? (
                           <HexDisplay address={String(featureVector[i])} mode="label" />
                         ) : (i === 8 || i === 9) ? (
                           `${formatFJPerMana(featureVector[i])} FJ/mana`
+                        ) : i === 12 ? (
+                          featureVector[i] ? "Yes" : "No"
                         ) : typeof featureVector[i] === "number" ? (
                           (featureVector[i] as number).toLocaleString()
                         ) : (

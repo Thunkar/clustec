@@ -15,6 +15,7 @@ function makeTx(overrides: Partial<FeatureInput> = {}): FeatureInput {
     maxFeePerL2Gas: null,
     numSetupCalls: 0,
     numAppCalls: 0,
+    hasTeardown: false,
     totalPublicCalldataSize: 0,
     feePayer: "0x" + "ab".repeat(32),
     expirationTimestamp: null,
@@ -24,10 +25,10 @@ function makeTx(overrides: Partial<FeatureInput> = {}): FeatureInput {
 }
 
 describe("computeFeatureVector", () => {
-  it("produces a 15-dimensional vector (14 numeric + 1 categorical)", () => {
+  it("produces a 16-dimensional vector (15 numeric + 1 categorical)", () => {
     const vector = computeFeatureVector(makeTx());
     expect(vector).toHaveLength(FEATURE_DIM);
-    expect(FEATURE_DIM).toBe(15);
+    expect(FEATURE_DIM).toBe(16);
     expect(NUMERIC_DIM).toBe(14);
   });
 
