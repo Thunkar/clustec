@@ -507,7 +507,10 @@ export function registerTxRoutes(app: FastifyInstance, db: Db, feePricing?: Map<
       publicCalls: resolvedCalls,
       clusterMemberships: memberships,
       privacySet,
-      similarTxs,
+      similarTxs: similarTxs.map((stx) => ({
+        ...stx,
+        featureVector: migrateVector(stx.featureVector),
+      })),
       privateLogDetails,
       publicLogDetails,
       contractClassLogDetails,

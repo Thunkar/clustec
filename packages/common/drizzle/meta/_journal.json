@@ -57,6 +57,13 @@
       "when": 1774200000000,
       "tag": "0007_public_address_appearances",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1774300000000,
+      "tag": "0008_migrate_feature_vectors_16dim",
+      "breakpoints": true
     }
   ]
 }
