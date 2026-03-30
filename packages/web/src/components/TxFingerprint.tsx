@@ -364,7 +364,7 @@ function renderBars({
 
   for (let i = 0; i < vector.length; i++) {
     const x = barX(i);
-    const isCategorical = i === 14;
+    const isCategorical = i === 15;
     const tooltip = `${FEATURE_LABELS[i]}: ${formatValue(vector[i], i)}`;
     const barCenterX = x + barW / 2;
 
@@ -505,7 +505,7 @@ function renderComparisonBars({
 
   for (let i = 0; i < vectorA.length; i++) {
     const x = barX(i);
-    const isCategorical = i === 14;
+    const isCategorical = i === 15;
     const valA = formatValue(vectorA[i], i);
     const valB = formatValue(vectorB[i], i);
     const tooltip = `${FEATURE_LABELS[i]}\n${labelA}: ${valA}\n${labelB}: ${valB}`;
