@@ -17,9 +17,10 @@ export function registerRoutes(
   app: FastifyInstance,
   db: Db,
   feePricing?: Map<string, FeePricingService>,
+  enabledNetworks?: Set<string>,
 ) {
   registerAuthRoutes(app);
-  registerNetworkRoutes(app, db);
+  registerNetworkRoutes(app, db, enabledNetworks);
   registerBlockRoutes(app, db);
   registerTxRoutes(app, db, feePricing);
   registerClusterRoutes(app, db);

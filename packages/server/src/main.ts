@@ -25,6 +25,7 @@ interface NetworkConfig {
   id: string;
   nodeUrl?: string;
   chainId?: number;
+  enabled?: boolean;
   contracts?: ContractEntry[];
 }
 
@@ -56,7 +57,7 @@ function loadNetworkConfigs(): Map<string, NetworkConfig> {
     for (const file of files) {
       const raw = readFileSync(join(configDir, file), "utf-8");
       const config = JSON.parse(raw) as NetworkConfig;
-      if (config.id) {
+      if (config.id && config.enabled !== false) {
         // Allow env override: NODE_URL_<NETWORK_ID>
         const envUrl = process.env[`NODE_URL_${config.id.toUpperCase()}`];
         if (envUrl) config.nodeUrl = envUrl;
@@ -146,7 +147,7 @@ async function main() {
     }
   }
 
-  registerRoutes(app, db, feePricing);
+  registerRoutes(app, db, feePricing, new Set(networkConfigs.keys()));
   Sentry.setupFastifyErrorHandler(app);
 
   await app.listen({ port, host });

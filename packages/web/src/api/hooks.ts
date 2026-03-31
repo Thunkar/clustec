@@ -212,3 +212,34 @@ export function useCurrentFees(networkId: string) {
     enabled: !!networkId,
   });
 }
+
+export function useBlockHistory(
+  networkId: string,
+  opts?: { from?: number; to?: number; limit?: number },
+) {
+  return useQuery({
+    queryKey: ["networks", networkId, "blocks", "history", opts],
+    queryFn: () => api.getBlockHistory(networkId, opts),
+    enabled: !!networkId,
+  });
+}
+
+export function useBlockStats(
+  networkId: string,
+  opts?: { from?: number; to?: number },
+) {
+  return useQuery({
+    queryKey: ["networks", networkId, "blocks", "stats", opts],
+    queryFn: () => api.getBlockStats(networkId, opts),
+    enabled: !!networkId,
+  });
+}
+
+export function useBlockConfig(networkId: string) {
+  return useQuery({
+    queryKey: ["networks", networkId, "blocks", "config"],
+    queryFn: () => api.getBlockConfig(networkId),
+    enabled: !!networkId,
+    staleTime: 5 * 60 * 1000,
+  });
+}

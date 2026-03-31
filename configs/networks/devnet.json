@@ -5,7 +5,7 @@
   "chainId": 11155111,
   "pollIntervalMs": 500,
   "batchSize": 200,
-  "enabled": true,
+  "enabled": false,
   "contracts": [
     {
       "address": "0x0299fbace3b22cb92f77105cf0858fa28cb81fdde8224bd9f547103b62549015",

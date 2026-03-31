@@ -84,6 +84,8 @@ export const blocks = pgTable(
     totalManaUsed: text("total_mana_used"),
     feePerDaGas: text("fee_per_da_gas"),
     feePerL2Gas: text("fee_per_l2_gas"),
+    coinbase: text("coinbase"),
+    feeRecipient: text("fee_recipient"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (t) => [

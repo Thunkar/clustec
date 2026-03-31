@@ -144,6 +144,7 @@ const navItems = [
   { path: "/labels", label: "Labels" },
   { path: "/murder-board", label: "Murder Board" },
   { path: "/fees", label: "Fees" },
+  { path: "/blocks", label: "Blocks" },
   { path: "/admin", label: "Admin" },
 ];
 

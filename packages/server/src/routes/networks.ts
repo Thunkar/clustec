@@ -2,9 +2,10 @@ import type { FastifyInstance } from "fastify";
 import { eq, sql } from "drizzle-orm";
 import { type Db, networks, blocks, transactions, syncCursors } from "@clustec/common";
 
-export function registerNetworkRoutes(app: FastifyInstance, db: Db) {
+export function registerNetworkRoutes(app: FastifyInstance, db: Db, enabledNetworks?: Set<string>) {
   app.get("/api/networks", async () => {
-    return db.select().from(networks);
+    const rows = await db.select().from(networks);
+    return enabledNetworks ? rows.filter((r) => enabledNetworks.has(r.id)) : rows;
   });
 
   app.get<{ Params: { id: string } }>("/api/networks/:id/stats", async (request) => {
