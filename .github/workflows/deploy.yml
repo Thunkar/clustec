@@ -89,6 +89,8 @@ jobs:
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           NODE_URL_MAINNET: ${{ secrets.NODE_URL_MAINNET }}
+          L1_RPC_URL_MAINNET: ${{ secrets.L1_RPC_URL_MAINNET }}
+          L1_RPC_URL_SEPOLIA: ${{ secrets.L1_RPC_URL_SEPOLIA }}
         run: |
           bash deploy.sh \
             --host ${{ vars.DEPLOY_HOST }} \

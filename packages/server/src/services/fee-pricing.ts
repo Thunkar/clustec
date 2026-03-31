@@ -2,9 +2,9 @@ import { createPublicClient, http, type PublicClient, type HttpTransport, type C
 import { sepolia, mainnet } from "viem/chains";
 import { RollupAbi } from "@aztec/l1-artifacts/RollupAbi";
 
-const CHAIN_MAP: Record<number, { chain: Chain; defaultRpc: string }> = {
-  1: { chain: mainnet, defaultRpc: "https://eth.llamarpc.com" },
-  11155111: { chain: sepolia, defaultRpc: "https://ethereum-sepolia-rpc.publicnode.com" },
+const CHAIN_MAP: Record<number, { chain: Chain; defaultRpc: string; envKey: string }> = {
+  1: { chain: mainnet, defaultRpc: "https://ethereum-rpc.publicnode.com", envKey: "L1_RPC_URL_MAINNET" },
+  11155111: { chain: sepolia, defaultRpc: "https://ethereum-sepolia-rpc.publicnode.com", envKey: "L1_RPC_URL_SEPOLIA" },
 };
 
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
@@ -40,11 +40,11 @@ export class FeePricingService {
     const entry = CHAIN_MAP[this.l1ChainId];
     if (!entry) return;
 
-    const rpcUrl = this.l1RpcUrl ?? entry.defaultRpc;
+    const rpcUrl = process.env[entry.envKey] || this.l1RpcUrl || entry.defaultRpc;
     this.rollupAddress = rollupAddress as `0x${string}`;
     this.client = createPublicClient({
       chain: entry.chain,
-      transport: http(rpcUrl),
+      transport: http(rpcUrl, { timeout: 5_000 }),
     });
   }
 
@@ -88,6 +88,7 @@ export class FeePricingService {
     try {
       const res = await fetch(
         "https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd",
+        { signal: AbortSignal.timeout(5_000) },
       );
       if (!res.ok) return this.ethUsdCache?.value ?? null;
       const data = (await res.json()) as { ethereum?: { usd?: number } };
