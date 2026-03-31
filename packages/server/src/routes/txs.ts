@@ -177,12 +177,12 @@ export function registerTxRoutes(app: FastifyInstance, db: Db, feePricing?: Map<
       memberships,
       labels,
     ] = await Promise.all([
-      db.select().from(featureVectors).where(eq(featureVectors.txId, tx.id)).limit(1),
-      db.select().from(noteHashes).where(eq(noteHashes.txId, tx.id)),
-      db.select().from(nullifiers).where(eq(nullifiers.txId, tx.id)),
-      db.select().from(publicDataWrites).where(eq(publicDataWrites.txId, tx.id)),
-      db.select().from(clusterMemberships).where(eq(clusterMemberships.txId, tx.id)).orderBy(desc(clusterMemberships.runId)).limit(1),
-      db.select().from(contractLabels).where(eq(contractLabels.networkId, id)),
+      db.select().from(featureVectors).where(eq(featureVectors.txId, tx.id)).limit(1).then(r => { app.log.info("txDetail: fv done"); return r; }),
+      db.select().from(noteHashes).where(eq(noteHashes.txId, tx.id)).then(r => { app.log.info("txDetail: notes done"); return r; }),
+      db.select().from(nullifiers).where(eq(nullifiers.txId, tx.id)).then(r => { app.log.info("txDetail: nulls done"); return r; }),
+      db.select().from(publicDataWrites).where(eq(publicDataWrites.txId, tx.id)).then(r => { app.log.info("txDetail: pdws done"); return r; }),
+      db.select().from(clusterMemberships).where(eq(clusterMemberships.txId, tx.id)).orderBy(desc(clusterMemberships.runId)).limit(1).then(r => { app.log.info("txDetail: memberships done"); return r; }),
+      db.select().from(contractLabels).where(eq(contractLabels.networkId, id)).then(r => { app.log.info("txDetail: labels done"); return r; }),
     ]);
 
     app.log.info({ txId: tx.id, pdwCount: pdws.length, labelCount: labels.length, hasMembership: memberships.length > 0 }, "txDetail: queries done");
