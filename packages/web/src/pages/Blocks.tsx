@@ -89,6 +89,19 @@ const RangeSelector = styled.div`
   padding: 2px;
 `;
 
+const NavButton = styled.button<{ disabled?: boolean }>`
+  padding: 6px 10px;
+  background: ${theme.colors.bgCard};
+  color: ${(p) => (p.disabled ? theme.colors.border : theme.colors.textMuted)};
+  border: 1px solid ${theme.colors.border};
+  border-radius: ${theme.radius.sm};
+  cursor: ${(p) => (p.disabled ? "default" : "pointer")};
+  font-size: ${theme.fontSize.sm};
+  line-height: 1;
+  transition: color 0.15s, background 0.15s;
+  &:hover:not(:disabled) { color: ${theme.colors.text}; background: ${theme.colors.bgHover}; }
+`;
+
 const RangeButton = styled.button<{ active: boolean }>`
   padding: 6px 12px;
   background: ${(p) => (p.active ? theme.colors.primary : "transparent")};
@@ -253,6 +266,8 @@ export function Blocks() {
       fill={theme.colors.primary} fillOpacity={0.15} stroke={theme.colors.primary} strokeOpacity={0.4} ifOverflow="extendDomain" />
   ) : null;
 
+  const [offset, setOffset] = useState(0); // how many range-widths back from latest
+
   const { data: statsData, isLoading: statsLoading } = useBlockStats(selectedNetwork);
   const { data: configData } = useBlockConfig(selectedNetwork);
   const { data: currentFees } = useCurrentFees(selectedNetwork);
@@ -261,13 +276,19 @@ export function Blocks() {
   const ethPerFeeAssetE12 = currentFees?.pricing?.ethPerFeeAssetE12 ?? null;
 
   const latestBlock = statsData?.data?.blockRange.to ?? null;
+  const earliestBlock = statsData?.data?.blockRange.from ?? 0;
   const rangeBlocks = parseInt(range, 10);
-  const fromBlock = latestBlock != null ? Math.max(0, latestBlock - rangeBlocks) : undefined;
+  const windowEnd = latestBlock != null ? latestBlock - offset * rangeBlocks : null;
+  const fromBlock = windowEnd != null ? Math.max(0, windowEnd - rangeBlocks) : undefined;
+  const toBlock = windowEnd ?? undefined;
+  const canGoBack = fromBlock != null && fromBlock > earliestBlock;
+  const canGoForward = offset > 0;
 
   const historyOpts = useMemo(() => ({
     from: fromBlock,
+    to: toBlock,
     limit: rangeBlocks + 10,
-  }), [fromBlock, rangeBlocks]);
+  }), [fromBlock, toBlock, rangeBlocks]);
   const rangeReady = fromBlock != null;
   const { data: historyData, isLoading: historyLoading } = useBlockHistory(rangeReady ? selectedNetwork : "", historyOpts);
 
@@ -320,13 +341,15 @@ export function Blocks() {
         <HeaderControls>
           <RefreshButton title="Refresh">&#x21bb;</RefreshButton>
           {isZoomed && <ResetZoomButton onClick={resetZoom}>Reset Zoom</ResetZoomButton>}
+          <NavButton disabled={!canGoBack} onClick={() => canGoBack && setOffset((o) => o + 1)}>&#x25C0;</NavButton>
           <RangeSelector>
             {(Object.keys(RANGE_LABELS) as TimeRange[]).map((r) => (
-              <RangeButton key={r} active={range === r} onClick={() => { setRange(r); resetZoom(); }}>
+              <RangeButton key={r} active={range === r} onClick={() => { setRange(r); setOffset(0); resetZoom(); }}>
                 {RANGE_LABELS[r]}
               </RangeButton>
             ))}
           </RangeSelector>
+          <NavButton disabled={!canGoForward} onClick={() => canGoForward && setOffset((o) => o - 1)}>&#x25B6;</NavButton>
         </HeaderControls>
       </Header>
 
