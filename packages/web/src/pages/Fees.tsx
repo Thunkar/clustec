@@ -139,27 +139,32 @@ export function Fees() {
     queryClient.invalidateQueries({ queryKey: ["networks", selectedNetwork, "fees"] });
   }, [queryClient, selectedNetwork]);
 
+  const [offset, setOffset] = useState(0);
+
   const resolution = resolutionForRange(range);
   const { data: currentData } = useCurrentFees(selectedNetwork);
 
   // Compute from/to block range based on latest block
   const latestBlock = currentData?.block?.blockNumber ?? null;
   const rangeBlocks = range === "all" ? null : parseInt(range, 10);
-  const fromBlock = latestBlock != null && rangeBlocks != null
-    ? Math.max(0, latestBlock - rangeBlocks)
-    : undefined;
+  const windowEnd = latestBlock != null && rangeBlocks != null ? latestBlock - offset * rangeBlocks : null;
+  const fromBlock = windowEnd != null ? Math.max(0, windowEnd - rangeBlocks!) : (range === "all" ? undefined : undefined);
+  const toBlock = range !== "all" ? windowEnd ?? undefined : undefined;
+  const canGoBack = range !== "all" && fromBlock != null && fromBlock > 0;
+  const canGoForward = range !== "all" && offset > 0;
 
   const historyOpts = useMemo(
-    () => ({ from: fromBlock, resolution }),
-    [fromBlock, resolution],
+    () => ({ from: fromBlock, to: toBlock, resolution }),
+    [fromBlock, toBlock, resolution],
   );
 
   const spreadOpts = useMemo(
     () => ({
       from: fromBlock,
+      to: toBlock,
       bucketSize: spreadBucketForRange(range),
     }),
-    [fromBlock, range],
+    [fromBlock, toBlock, range],
   );
 
   const rangeReady = range === "all" || fromBlock != null;
@@ -320,17 +325,19 @@ export function Fees() {
         {isZoomed && (
           <ResetZoomButton onClick={resetZoom}>Reset Zoom</ResetZoomButton>
         )}
+        {range !== "all" && <NavButton disabled={!canGoBack} onClick={() => canGoBack && setOffset((o) => o + 1)}>&#x25C0;</NavButton>}
         <RangeSelector>
           {(Object.keys(RANGE_LABELS) as TimeRange[]).map((r) => (
             <RangeButton
               key={r}
               active={range === r}
-              onClick={() => { setRange(r); resetZoom(); }}
+              onClick={() => { setRange(r); setOffset(0); resetZoom(); }}
             >
               {RANGE_LABELS[r]}
             </RangeButton>
           ))}
         </RangeSelector>
+        {range !== "all" && <NavButton disabled={!canGoForward} onClick={() => canGoForward && setOffset((o) => o - 1)}>&#x25B6;</NavButton>}
         </HeaderControls>
       </Header>
 
@@ -545,6 +552,19 @@ const ResetZoomButton = styled.button`
   &:hover {
     background: ${theme.colors.warning}22;
   }
+`;
+
+const NavButton = styled.button<{ disabled?: boolean }>`
+  padding: 6px 10px;
+  background: ${theme.colors.bgCard};
+  color: ${(p) => (p.disabled ? theme.colors.border : theme.colors.textMuted)};
+  border: 1px solid ${theme.colors.border};
+  border-radius: ${theme.radius.sm};
+  cursor: ${(p) => (p.disabled ? "default" : "pointer")};
+  font-size: ${theme.fontSize.sm};
+  line-height: 1;
+  transition: color 0.15s, background 0.15s;
+  &:hover:not(:disabled) { color: ${theme.colors.text}; background: ${theme.colors.bgHover}; }
 `;
 
 const RangeSelector = styled.div`
