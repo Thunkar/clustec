@@ -364,10 +364,9 @@ export function registerTxRoutes(app: FastifyInstance, db: Db, feePricing?: Map<
           .sort((a, b) => a.dist - b.dist)
           .slice(0, 10);
 
-        // Collect member txIds from those clusters
-        const candidateTxIds = ranked.flatMap((c) => c.txIds).filter((id) => id !== tx.id);
+        const rankedClusterIds = ranked.map((c) => c.clusterId);
 
-        if (candidateTxIds.length > 0) {
+        if (rankedClusterIds.length > 0) {
           const candidates = await db
             .select({
               ...similarTxSelect,
@@ -379,7 +378,8 @@ export function registerTxRoutes(app: FastifyInstance, db: Db, feePricing?: Map<
             .where(
               and(
                 eq(clusterMemberships.runId, latestMembership.runId),
-                inArray(clusterMemberships.txId, candidateTxIds),
+                inArray(clusterMemberships.clusterId, rankedClusterIds),
+                sql`${clusterMemberships.txId} != ${tx.id}`,
               )
             );
 

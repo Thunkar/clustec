@@ -150,3 +150,128 @@ class TestHDBSCAN:
         )
         assert np.all(probs >= 0)
         assert np.all(probs <= 1)
+
+
+# ── Centroid computation ────────────────────────────────────
+
+from analyzer.features import NUMERIC_DIM
+from collections import Counter
+
+
+class TestCentroidComputation:
+    """Test the centroid computation logic used in the pipeline."""
+
+    def _compute_centroids(self, numeric, categoricals, labels, tx_ids):
+        """Mirror the centroid computation from pipeline.py."""
+        cluster_data: dict[int, dict] = {}
+        for i in range(len(tx_ids)):
+            cid = int(labels[i])
+            if cid == -1:
+                continue
+            if cid not in cluster_data:
+                cluster_data[cid] = {"numeric": [], "categoricals": []}
+            cluster_data[cid]["numeric"].append(numeric[i])
+            cluster_data[cid]["categoricals"].append(categoricals[i])
+
+        ranges = [float(np.ptp(numeric[:, d])) for d in range(numeric.shape[1])]
+
+        centroids = []
+        for cid, data in sorted(cluster_data.items()):
+            num_arr = np.array(data["numeric"])
+            centroid = []
+            for d in range(num_arr.shape[1]):
+                sorted_col = np.sort(num_arr[:, d])
+                mid = len(sorted_col) // 2
+                if len(sorted_col) % 2 == 0:
+                    centroid.append(float((sorted_col[mid - 1] + sorted_col[mid]) / 2))
+                else:
+                    centroid.append(float(sorted_col[mid]))
+            counts = Counter(data["categoricals"])
+            centroid.append(counts.most_common(1)[0][0])
+            centroids.append({"clusterId": cid, "centroid": centroid, "count": len(data["numeric"])})
+
+        return centroids, ranges
+
+    def test_median_numeric_centroid(self):
+        """Centroid should be the median of each numeric dimension."""
+        numeric = np.array([
+            [1.0, 10.0],
+            [3.0, 30.0],
+            [5.0, 50.0],
+        ])
+        cats = ["0xA", "0xA", "0xA"]
+        labels = np.array([0, 0, 0])
+        tx_ids = [1, 2, 3]
+
+        centroids, _ = self._compute_centroids(numeric, cats, labels, tx_ids)
+        assert len(centroids) == 1
+        c = centroids[0]
+        assert c["clusterId"] == 0
+        assert c["count"] == 3
+        # Median of [1,3,5] = 3, median of [10,30,50] = 30
+        assert c["centroid"][0] == 3.0
+        assert c["centroid"][1] == 30.0
+
+    def test_median_even_count(self):
+        """Median of even count should average the two middle values."""
+        numeric = np.array([
+            [1.0],
+            [2.0],
+            [3.0],
+            [4.0],
+        ])
+        cats = ["0xA"] * 4
+        labels = np.array([0, 0, 0, 0])
+        tx_ids = [1, 2, 3, 4]
+
+        centroids, _ = self._compute_centroids(numeric, cats, labels, tx_ids)
+        # Median of [1,2,3,4] = (2+3)/2 = 2.5
+        assert centroids[0]["centroid"][0] == 2.5
+
+    def test_categorical_mode(self):
+        """Categorical centroid should be the most common value."""
+        numeric = np.array([[0.0]] * 5)
+        cats = ["0xA", "0xA", "0xB", "0xA", "0xB"]
+        labels = np.array([0, 0, 0, 0, 0])
+        tx_ids = list(range(5))
+
+        centroids, _ = self._compute_centroids(numeric, cats, labels, tx_ids)
+        assert centroids[0]["centroid"][-1] == "0xA"  # 3 vs 2
+
+    def test_multiple_clusters(self):
+        """Should produce one centroid per cluster, excluding outliers."""
+        numeric = np.array([
+            [0.0], [1.0], [2.0],  # cluster 0
+            [10.0], [11.0],       # cluster 1
+            [99.0],               # outlier
+        ])
+        cats = ["0xA"] * 3 + ["0xB"] * 2 + ["0xC"]
+        labels = np.array([0, 0, 0, 1, 1, -1])
+        tx_ids = list(range(6))
+
+        centroids, ranges = self._compute_centroids(numeric, cats, labels, tx_ids)
+        assert len(centroids) == 2
+
+        c0 = next(c for c in centroids if c["clusterId"] == 0)
+        c1 = next(c for c in centroids if c["clusterId"] == 1)
+        assert c0["count"] == 3
+        assert c0["centroid"][0] == 1.0  # median of [0,1,2]
+        assert c0["centroid"][-1] == "0xA"
+        assert c1["count"] == 2
+        assert c1["centroid"][0] == 10.5  # median of [10,11]
+        assert c1["centroid"][-1] == "0xB"
+
+    def test_ranges(self):
+        """Ranges should be max - min per dimension across ALL points (including outliers)."""
+        numeric = np.array([
+            [0.0, 5.0],
+            [10.0, 5.0],
+            [100.0, 15.0],  # outlier, but contributes to range
+        ])
+        cats = ["0xA"] * 3
+        labels = np.array([0, 0, -1])
+        tx_ids = [1, 2, 3]
+
+        _, ranges = self._compute_centroids(numeric, cats, labels, tx_ids)
+        assert ranges[0] == 100.0  # 100 - 0
+        assert ranges[1] == 10.0   # 15 - 5

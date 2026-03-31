@@ -6,9 +6,10 @@ from datetime import datetime, timezone
 import numpy as np
 import psycopg
 
-from .features import load_features, prepare_feature_matrix
+from .features import load_features, prepare_feature_matrix, NUMERIC_DIM
 from .umap_proj import compute_umap
 from .clustering import run_hdbscan
+from collections import Counter
 
 
 def run_pipeline(
@@ -54,7 +55,50 @@ def run_pipeline(
         metric="euclidean",
     )
 
-    # 5. Store results
+    # 5. Compute cluster centroids (median numeric, mode categorical)
+    # These are stored with the run so the server doesn't need to reload all vectors.
+    cluster_data: dict[int, dict] = {}
+    for i in range(len(tx_ids)):
+        cid = int(labels[i])
+        if cid == -1:
+            continue
+        if cid not in cluster_data:
+            cluster_data[cid] = {"numeric": [], "categoricals": [], "tx_ids": []}
+        cluster_data[cid]["numeric"].append(numeric[i])
+        cluster_data[cid]["categoricals"].append(categoricals[i])
+        cluster_data[cid]["tx_ids"].append(tx_ids[i])
+
+    # Global ranges for Gower normalization
+    ranges = []
+    for d in range(NUMERIC_DIM):
+        col = numeric[:, d]
+        ranges.append(float(np.ptp(col)))
+
+    centroids_json = []
+    for cid, data in sorted(cluster_data.items()):
+        num_arr = np.array(data["numeric"])
+        centroid = []
+        for d in range(NUMERIC_DIM):
+            sorted_col = np.sort(num_arr[:, d])
+            mid = len(sorted_col) // 2
+            if len(sorted_col) % 2 == 0:
+                centroid.append(float((sorted_col[mid - 1] + sorted_col[mid]) / 2))
+            else:
+                centroid.append(float(sorted_col[mid]))
+        # Categorical: mode
+        counts = Counter(data["categoricals"])
+        mode_cat = counts.most_common(1)[0][0]
+        centroid.append(mode_cat)
+
+        centroids_json.append({
+            "clusterId": cid,
+            "centroid": centroid,
+            "count": len(data["numeric"]),
+        })
+
+    stored_centroids = {"centroids": centroids_json, "ranges": ranges}
+
+    # 6. Store results
     num_clusters = len(set(labels)) - (1 if -1 in labels else 0)
     num_outliers = int(np.sum(labels == -1))
 
@@ -70,8 +114,8 @@ def run_pipeline(
         # Create cluster run
         cur.execute(
             """
-            INSERT INTO cluster_runs (network_id, algorithm, params, num_clusters, num_outliers, computed_at)
-            VALUES (%s, %s, %s, %s, %s, %s)
+            INSERT INTO cluster_runs (network_id, algorithm, params, num_clusters, num_outliers, centroids, computed_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
             RETURNING id
             """,
             (
@@ -80,6 +124,7 @@ def run_pipeline(
                 json.dumps(params),
                 num_clusters,
                 num_outliers,
+                json.dumps(stored_centroids),
                 datetime.now(timezone.utc),
             ),
         )

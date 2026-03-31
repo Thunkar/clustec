@@ -41,7 +41,7 @@ const GROUPS = [
 const GROUP_GAP = 6;
 const PAD_X = 6;
 const PAD_TOP = 14;
-const PAD_BOT = 50;
+const PAD_BOT = 55;
 const ZERO_COLOR = "#555570";
 const EQUAL_COLOR = "#9999ff";
 
