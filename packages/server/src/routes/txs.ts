@@ -183,20 +183,23 @@ export function registerTxRoutes(app: FastifyInstance, db: Db, feePricing?: Map<
       db.select().from(contractLabels).where(eq(contractLabels.networkId, id)),
     ]);
 
-    // Collect all known addresses for map-key resolution
-    const rawCalls_ = (tx.publicCalls ?? []) as { contractAddress: string; msgSender: string }[];
-    const knownAddresses = [
-      ...(tx.feePayer ? [tx.feePayer] : []),
-      ...rawCalls_.flatMap((c) => [c.contractAddress, c.msgSender]),
-    ];
-
     // Resolve public data write leaf slots to contract + slot index
     const labelMap = new Map(labels.map((l) => [l.address, l.label]));
-    const slotLookup = await buildSlotLookup(
-      labels.map((l) => l.address),
-      labelMap,
-      knownAddresses
-    );
+    let slotLookup = new Map<string, { contractAddress: string; contractLabel?: string; storageSlotIndex: number | string }>();
+
+    // Only compute the expensive slot lookup if there are public data writes to resolve
+    if (pdws.length > 0) {
+      const rawCalls_ = (tx.publicCalls ?? []) as { contractAddress: string; msgSender: string }[];
+      const knownAddresses = [
+        ...(tx.feePayer ? [tx.feePayer] : []),
+        ...rawCalls_.flatMap((c) => [c.contractAddress, c.msgSender]),
+      ];
+      slotLookup = await buildSlotLookup(
+        labels.map((l) => l.address),
+        labelMap,
+        knownAddresses
+      );
+    }
 
     const resolvedPdws = pdws.map((w) => {
       const preimage = slotLookup.get(w.leafSlot);

@@ -102,6 +102,8 @@ export class BlockProcessor extends L2TipsMemoryStore {
           totalManaUsed: block.header.totalManaUsed.toString(),
           feePerDaGas: block.header.globalVariables.gasFees.feePerDaGas.toString(),
           feePerL2Gas: block.header.globalVariables.gasFees.feePerL2Gas.toString(),
+          coinbase: block.header.globalVariables.coinbase.toString(),
+          feeRecipient: block.header.globalVariables.feeRecipient.toString(),
         })
         .onConflictDoNothing();
 

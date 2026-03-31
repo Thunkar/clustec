@@ -305,10 +305,22 @@ export function startAnalysisScheduler(
         app.log.info({ networkId }, `${label} skipped — already running`);
         continue;
       }
+      // Skip analysis if not enough txs with feature vectors
+      const config = await getConfig(db, networkId);
+      const [{ count: fvCount }] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(featureVectors)
+        .innerJoin(transactions, eq(transactions.id, featureVectors.txId))
+        .where(eq(transactions.networkId, networkId));
+
+      if (Number(fvCount) < config.minClusterSize) {
+        app.log.info({ networkId, fvCount, minClusterSize: config.minClusterSize }, `${label} skipped — not enough txs`);
+        continue;
+      }
+
       runningNetworks.add(networkId);
       const start = Date.now();
       try {
-        const config = await getConfig(db, networkId);
         app.log.info({ networkId, config }, `${label} starting`);
         await runAnalysis(networkId, config, app.log);
         const durationMs = Date.now() - start;

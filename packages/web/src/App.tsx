@@ -9,6 +9,7 @@ import { Labels } from "./pages/Labels";
 import { MurderBoard } from "./pages/MurderBoard";
 import { Admin } from "./pages/Admin";
 import { Fees } from "./pages/Fees";
+import { Blocks } from "./pages/Blocks";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -32,6 +33,7 @@ export function App() {
             <Route path="/labels" element={<Labels />} />
             <Route path="/murder-board" element={<MurderBoard />} />
             <Route path="/fees" element={<Fees />} />
+            <Route path="/blocks" element={<Blocks />} />
             <Route path="/admin" element={<Admin />} />
           </Route>
         </Routes>

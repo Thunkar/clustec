@@ -533,6 +533,48 @@ export interface CurrentFees {
 
 // ── API functions ──
 
+export interface BlockHistoryPoint {
+  blockNumber: number;
+  timestamp: number | null;
+  slotNumber: number | null;
+  numTxs: number;
+  totalFees: string | null;
+  totalManaUsed: string | null;
+  feePerDaGas: string | null;
+  feePerL2Gas: string | null;
+  coinbase: string | null;
+}
+
+export interface BlockStatsData {
+  blockCount: number;
+  blockRange: { from: number; to: number };
+  timespan: number;
+  avgBlockTime: number;
+  avgTxsPerBlock: number;
+  maxTxsPerBlock: number;
+  totalTxs: number;
+  avgManaPerBlock: string;
+  maxManaPerBlock: string;
+  avgFeesPerBlock: string;
+  totalFees: string;
+  emptyBlocks: number;
+  emptyBlockPct: number;
+  proposerCount: number;
+  missedSlots: number;
+  proposers: { coinbase: string | null; blockCount: number; share: number }[];
+}
+
+export interface BlockConfigData {
+  maxL2BlockGas: number | null;
+  maxDABlockGas: number | null;
+  maxTxsPerBlock: number | null;
+  maxTxsPerCheckpoint: number | null;
+  minTxsPerBlock: number | null;
+  aztecSlotDuration: number | null;
+  ethereumSlotDuration: number | null;
+  aztecEpochDuration: number | null;
+}
+
 export const api = {
   getNetworks: () => fetchJson<Network[]>("/networks"),
   getNetworkStats: (id: string) => fetchJson<NetworkStats>(`/networks/${id}/stats`),
@@ -616,4 +658,18 @@ export const api = {
     );
   },
   getCurrentFees: (id: string) => fetchJson<CurrentFees>(`/networks/${id}/fees/current`),
+  getBlockHistory: (id: string, opts?: { from?: number; to?: number; limit?: number }) => {
+    const params = new URLSearchParams();
+    if (opts?.from != null) params.set("from", String(opts.from));
+    if (opts?.to != null) params.set("to", String(opts.to));
+    if (opts?.limit != null) params.set("limit", String(opts.limit));
+    return fetchJson<{ data: BlockHistoryPoint[] }>(`/networks/${id}/blocks/history?${params.toString()}`);
+  },
+  getBlockStats: (id: string, opts?: { from?: number; to?: number }) => {
+    const params = new URLSearchParams();
+    if (opts?.from != null) params.set("from", String(opts.from));
+    if (opts?.to != null) params.set("to", String(opts.to));
+    return fetchJson<{ data: BlockStatsData | null }>(`/networks/${id}/blocks/stats?${params.toString()}`);
+  },
+  getBlockConfig: (id: string) => fetchJson<{ data: BlockConfigData | null }>(`/networks/${id}/blocks/config`),
 };
