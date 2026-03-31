@@ -179,7 +179,7 @@ export function registerTxRoutes(app: FastifyInstance, db: Db, feePricing?: Map<
       db.select().from(noteHashes).where(eq(noteHashes.txId, tx.id)),
       db.select().from(nullifiers).where(eq(nullifiers.txId, tx.id)),
       db.select().from(publicDataWrites).where(eq(publicDataWrites.txId, tx.id)),
-      db.select().from(clusterMemberships).where(eq(clusterMemberships.txId, tx.id)),
+      db.select().from(clusterMemberships).where(eq(clusterMemberships.txId, tx.id)).orderBy(desc(clusterMemberships.runId)).limit(1),
       db.select().from(contractLabels).where(eq(contractLabels.networkId, id)),
     ]);
 
@@ -245,10 +245,7 @@ export function registerTxRoutes(app: FastifyInstance, db: Db, feePricing?: Map<
       };
     });
 
-    // Get the latest cluster run membership for this tx
-    const latestMembership = memberships.length > 0
-      ? memberships.reduce((a, b) => (a.runId > b.runId ? a : b))
-      : null;
+    const latestMembership = memberships[0] ?? null;
 
     // Compute privacy set info
     let privacySet: {
@@ -501,14 +498,17 @@ export function registerTxRoutes(app: FastifyInstance, db: Db, feePricing?: Map<
       ? await feeService?.estimateTxCostUsd(tx.actualFee) ?? null
       : null;
 
+    // Strip large JSONB blobs from the response — they're only used server-side
+    const { rawTx, rawTxEffect, ...txFields } = tx;
+
     return {
-      tx,
+      tx: txFields,
       featureVector: migrateVector(fv?.vector ?? null),
       noteHashes: notes,
       nullifiers: nulls,
       publicDataWrites: resolvedPdws,
       publicCalls: resolvedCalls,
-      clusterMemberships: memberships,
+      clusterMemberships: latestMembership ? [latestMembership] : [],
       privacySet,
       similarTxs: similarTxs.map((stx) => ({
         ...stx,
