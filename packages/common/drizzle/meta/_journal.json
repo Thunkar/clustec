@@ -64,6 +64,13 @@
       "when": 1774300000000,
       "tag": "0008_migrate_feature_vectors_16dim",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1774400000000,
+      "tag": "0009_add_cluster_centroids",
+      "breakpoints": true
     }
   ]
 }

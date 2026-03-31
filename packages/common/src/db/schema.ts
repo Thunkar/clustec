@@ -323,6 +323,7 @@ export const clusterRuns = pgTable("cluster_runs", {
   params: jsonb("params"),
   numClusters: integer("num_clusters"),
   numOutliers: integer("num_outliers"),
+  centroids: jsonb("centroids"),
   computedAt: timestamp("computed_at").defaultNow().notNull(),
 });
 
