@@ -29,14 +29,13 @@ import {
   Loading,
 } from "../components/ui";
 
-type TimeRange = "100" | "500" | "1000" | "5000" | "all";
+type TimeRange = "100" | "500" | "1000" | "5000";
 
 const RANGE_LABELS: Record<TimeRange, string> = {
   "100": "100 blocks",
   "500": "500 blocks",
   "1000": "1K blocks",
   "5000": "5K blocks",
-  all: "All",
 };
 
 // ── Styled components (matching Fees page) ──
@@ -262,11 +261,14 @@ export function Blocks() {
   const ethPerFeeAssetE12 = currentFees?.pricing?.ethPerFeeAssetE12 ?? null;
 
   const latestBlock = statsData?.data?.blockRange.to ?? null;
-  const rangeBlocks = range === "all" ? null : parseInt(range, 10);
-  const fromBlock = latestBlock != null && rangeBlocks != null ? Math.max(0, latestBlock - rangeBlocks) : undefined;
+  const rangeBlocks = parseInt(range, 10);
+  const fromBlock = latestBlock != null ? Math.max(0, latestBlock - rangeBlocks) : undefined;
 
-  const historyOpts = useMemo(() => ({ from: fromBlock, limit: 1000 }), [fromBlock]);
-  const rangeReady = range === "all" || fromBlock != null;
+  const historyOpts = useMemo(() => ({
+    from: fromBlock,
+    limit: rangeBlocks + 10,
+  }), [fromBlock, rangeBlocks]);
+  const rangeReady = fromBlock != null;
   const { data: historyData, isLoading: historyLoading } = useBlockHistory(rangeReady ? selectedNetwork : "", historyOpts);
 
   const config = configData?.data;

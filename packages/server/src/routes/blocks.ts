@@ -53,11 +53,15 @@ export function registerBlockRoutes(app: FastifyInstance, db: Db) {
     Querystring: { from?: string; to?: string; limit?: string };
   }>("/api/networks/:id/blocks/history", async (request) => {
     const { id } = request.params;
-    const limit = Math.min(parseInt(request.query.limit ?? "500", 10), 2000);
+    const limitParam = request.query.limit ? parseInt(request.query.limit, 10) : null;
+    const limit = limitParam ? Math.min(limitParam, 10000) : 10000;
 
     const conditions = [eq(blocks.networkId, id)];
     if (request.query.from) conditions.push(gte(blocks.blockNumber, parseInt(request.query.from, 10)));
     if (request.query.to) conditions.push(lte(blocks.blockNumber, parseInt(request.query.to, 10)));
+
+    // When no 'from' is specified, fetch the latest N blocks (DESC then reverse)
+    const needsReverse = !request.query.from && !request.query.to;
 
     const rows = await db
       .select({
@@ -73,8 +77,10 @@ export function registerBlockRoutes(app: FastifyInstance, db: Db) {
       })
       .from(blocks)
       .where(and(...conditions))
-      .orderBy(blocks.blockNumber)
+      .orderBy(needsReverse ? desc(blocks.blockNumber) : blocks.blockNumber)
       .limit(limit);
+
+    if (needsReverse) rows.reverse();
 
     return { data: rows };
   });
