@@ -156,6 +156,7 @@ export function registerTxRoutes(app: FastifyInstance, db: Db, feePricing?: Map<
   }>("/api/networks/:id/txs/:hash", async (request, reply) => {
     const { id, hash } = request.params;
 
+    app.log.info({ id, hash }, "txDetail: fetching tx");
     const [tx] = await db
       .select()
       .from(transactions)
@@ -166,6 +167,7 @@ export function registerTxRoutes(app: FastifyInstance, db: Db, feePricing?: Map<
       return reply.status(404).send({ error: "Transaction not found" });
     }
 
+    app.log.info({ txId: tx.id }, "txDetail: parallel queries");
     // Parallel queries for all tx data
     const [
       [fv],
@@ -183,12 +185,15 @@ export function registerTxRoutes(app: FastifyInstance, db: Db, feePricing?: Map<
       db.select().from(contractLabels).where(eq(contractLabels.networkId, id)),
     ]);
 
+    app.log.info({ txId: tx.id, pdwCount: pdws.length, labelCount: labels.length, hasMembership: memberships.length > 0 }, "txDetail: queries done");
+
     // Resolve public data write leaf slots to contract + slot index
     const labelMap = new Map(labels.map((l) => [l.address, l.label]));
     let slotLookup = new Map<string, { contractAddress: string; contractLabel?: string; storageSlotIndex: number | string }>();
 
     // Only compute the expensive slot lookup if there are public data writes to resolve
     if (pdws.length > 0) {
+      app.log.info({ txId: tx.id, pdwCount: pdws.length }, "txDetail: buildSlotLookup starting");
       const rawCalls_ = (tx.publicCalls ?? []) as { contractAddress: string; msgSender: string }[];
       const knownAddresses = [
         ...(tx.feePayer ? [tx.feePayer] : []),
@@ -199,6 +204,7 @@ export function registerTxRoutes(app: FastifyInstance, db: Db, feePricing?: Map<
         labelMap,
         knownAddresses
       );
+      app.log.info({ txId: tx.id }, "txDetail: buildSlotLookup done");
     }
 
     const resolvedPdws = pdws.map((w) => {
@@ -258,6 +264,7 @@ export function registerTxRoutes(app: FastifyInstance, db: Db, feePricing?: Map<
       outlierScore: number | null;
     } | null = null;
 
+    app.log.info({ txId: tx.id, clusterId: latestMembership?.clusterId ?? null }, "txDetail: privacy set");
     if (latestMembership) {
       const [clusterSizeRow, totalRow] = await Promise.all([
         db
@@ -333,6 +340,7 @@ export function registerTxRoutes(app: FastifyInstance, db: Db, feePricing?: Map<
       featureVector: featureVectors.vector,
     };
 
+    app.log.info({ txId: tx.id }, "txDetail: similar txs");
     let similarTxs: SimilarTxRow[] = [];
 
     if (latestMembership && latestMembership.clusterId !== -1) {
@@ -496,11 +504,13 @@ export function registerTxRoutes(app: FastifyInstance, db: Db, feePricing?: Map<
       : 0;
 
     // Estimate tx cost in USD via L1 rollup contract + ETH price
+    app.log.info({ txId: tx.id }, "txDetail: fee pricing");
     const feeService = feePricing?.get(id);
     const feePricingData = tx.actualFee
       ? await feeService?.estimateTxCostUsd(tx.actualFee) ?? null
       : null;
 
+    app.log.info({ txId: tx.id }, "txDetail: building response");
     // Strip large JSONB blobs from the response — they're only used server-side
     const { rawTx, rawTxEffect, ...txFields } = tx;
 

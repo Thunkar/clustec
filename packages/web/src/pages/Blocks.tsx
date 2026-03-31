@@ -29,12 +29,13 @@ import {
   Loading,
 } from "../components/ui";
 
-type TimeRange = "100" | "500" | "1000" | "all";
+type TimeRange = "100" | "500" | "1000" | "5000" | "all";
 
 const RANGE_LABELS: Record<TimeRange, string> = {
   "100": "100 blocks",
   "500": "500 blocks",
   "1000": "1K blocks",
+  "5000": "5K blocks",
   all: "All",
 };
 
@@ -278,7 +279,11 @@ export function Blocks() {
       numTxs: b.numTxs,
       manaUsed: b.totalManaUsed ? Number(b.totalManaUsed) : 0,
       totalFees: b.totalFees ? Number(b.totalFees) : 0,
-      blockTime: i > 0 && b.timestamp && arr[i - 1].timestamp ? b.timestamp - arr[i - 1].timestamp! : null,
+      blockTime: (() => {
+        if (i === 0 || !b.timestamp || !arr[i - 1].timestamp) return null;
+        const dt = b.timestamp - arr[i - 1].timestamp!;
+        return dt > 0 ? dt : null; // filter out 0s from reconciliation/backfill
+      })(),
     }));
     if (zoomFrom != null && zoomTo != null) return all.filter((d) => d.block >= zoomFrom && d.block <= zoomTo);
     return all;

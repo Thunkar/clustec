@@ -129,7 +129,15 @@ export function registerBlockRoutes(app: FastifyInstance, db: Db) {
 
     const blockCount = row.block_count;
     const timespan = blockCount > 1 ? Number(row.max_timestamp) - Number(row.min_timestamp) : 0;
-    const avgBlockTime = blockCount > 1 ? timespan / (blockCount - 1) : 0;
+
+    // Compute avg block time excluding zero/negative gaps (from reconciliation)
+    const [avgBt] = await db.execute<{ avg_bt: string }>(sql`
+      SELECT avg(dt)::text AS avg_bt FROM (
+        SELECT "timestamp" - lag("timestamp") OVER (ORDER BY block_number) AS dt
+        FROM blocks WHERE ${and(...conditions)}
+      ) sub WHERE dt > 0
+    `);
+    const avgBlockTime = avgBt?.avg_bt ? +Number(avgBt.avg_bt).toFixed(1) : 0;
 
     // Missed slots
     const [slotGap] = await db.execute<{ missed: number }>(sql`
