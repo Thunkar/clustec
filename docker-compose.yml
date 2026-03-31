@@ -50,21 +50,6 @@ services:
       migrate:
         condition: service_completed_successfully
 
-  indexer-devnet:
-    image: thunkar/clustec-indexer:${IMAGE_TAG:-latest}
-    build:
-      context: .
-      dockerfile: packages/indexer/Dockerfile
-    restart: unless-stopped
-    environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-clustec}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-clustec}
-      SENTRY_DSN: ${SENTRY_DSN:-}
-    volumes:
-      - ./configs/networks/devnet.json:/app/config.json:ro
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
-
   indexer-testnet:
     image: thunkar/clustec-indexer:${IMAGE_TAG:-latest}
     build:
