@@ -346,6 +346,7 @@ export const clusterMemberships = pgTable(
   (t) => [
     index("cm_run_idx").on(t.runId),
     index("cm_cluster_idx").on(t.runId, t.clusterId),
+    index("cm_tx_idx").on(t.txId),
   ]
 );
 
@@ -363,5 +364,8 @@ export const umapProjections = pgTable(
     y: real("y").notNull(),
     z: real("z"),
   },
-  (t) => [index("umap_run_idx").on(t.runId)]
+  (t) => [
+    index("umap_run_idx").on(t.runId),
+    index("umap_tx_idx").on(t.txId),
+  ]
 );

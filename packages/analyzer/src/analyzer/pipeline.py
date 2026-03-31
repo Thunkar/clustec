@@ -163,6 +163,39 @@ def run_pipeline(
             proj_data,
         )
 
+        # Clean up old runs for this network (keep latest 5)
+        cur.execute(
+            """
+            DELETE FROM umap_projections WHERE run_id IN (
+                SELECT id FROM cluster_runs
+                WHERE network_id = %s AND id NOT IN (
+                    SELECT id FROM cluster_runs WHERE network_id = %s ORDER BY computed_at DESC LIMIT 5
+                )
+            )
+            """,
+            (network_id, network_id),
+        )
+        cur.execute(
+            """
+            DELETE FROM cluster_memberships WHERE run_id IN (
+                SELECT id FROM cluster_runs
+                WHERE network_id = %s AND id NOT IN (
+                    SELECT id FROM cluster_runs WHERE network_id = %s ORDER BY computed_at DESC LIMIT 5
+                )
+            )
+            """,
+            (network_id, network_id),
+        )
+        cur.execute(
+            """
+            DELETE FROM cluster_runs
+            WHERE network_id = %s AND id NOT IN (
+                SELECT id FROM cluster_runs WHERE network_id = %s ORDER BY computed_at DESC LIMIT 5
+            )
+            """,
+            (network_id, network_id),
+        )
+
     conn.commit()
 
     return {
