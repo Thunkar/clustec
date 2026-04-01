@@ -243,3 +243,22 @@ export function useBlockConfig(networkId: string) {
     staleTime: 5 * 60 * 1000,
   });
 }
+
+export function useCheckpointHistory(
+  networkId: string,
+  opts?: { from?: number; to?: number; limit?: number },
+) {
+  return useQuery({
+    queryKey: ["networks", networkId, "checkpoints", "history", opts],
+    queryFn: () => api.getCheckpointHistory(networkId, opts),
+    enabled: !!networkId,
+  });
+}
+
+export function useCheckpointStats(networkId: string) {
+  return useQuery({
+    queryKey: ["networks", networkId, "checkpoints", "stats"],
+    queryFn: () => api.getCheckpointStats(networkId),
+    enabled: !!networkId,
+  });
+}

@@ -18,7 +18,7 @@ import {
 } from "recharts";
 import { theme } from "../lib/theme";
 import { useNetworkStore } from "../stores/network";
-import { useBlockHistory, useBlockStats, useBlockConfig, useCurrentFees } from "../api/hooks";
+import { useBlockHistory, useBlockStats, useBlockConfig, useCurrentFees, useCheckpointHistory, useCheckpointStats } from "../api/hooks";
 import { formatFJ } from "../lib/format";
 import {
   PageContainer,
@@ -198,6 +198,60 @@ const ChartTitle = styled.h3`
   color: ${theme.colors.text};
 `;
 
+const SectionTitle = styled.h2`
+  font-size: ${theme.fontSize.lg};
+  font-weight: 700;
+  color: ${theme.colors.text};
+  margin: ${theme.spacing.lg} 0 ${theme.spacing.sm};
+`;
+
+const CpBar = styled.div`
+  display: flex;
+  height: 36px;
+  border-radius: ${theme.radius.sm};
+  overflow: hidden;
+  gap: 1px;
+  background: ${theme.colors.border};
+`;
+
+const CpSegment = styled.div<{ pct: number; color: string; status: string }>`
+  width: ${(p) => Math.max(p.pct, 0.5)}%;
+  background: ${(p) => p.color};
+  opacity: ${(p) => (p.status === "finalized" ? 1 : p.status === "proven" ? 0.8 : p.status === "checkpointed" ? 0.6 : 0.35)};
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8px;
+  color: #fff;
+  font-weight: 600;
+  cursor: default;
+  transition: opacity 0.15s;
+  &:hover { opacity: 1; }
+`;
+
+const CpLegend = styled.div`
+  display: flex;
+  gap: ${theme.spacing.md};
+  margin-top: ${theme.spacing.xs};
+  font-size: 10px;
+  color: ${theme.colors.textMuted};
+  flex-wrap: wrap;
+`;
+
+const CpLegendItem = styled.span`
+  display: flex;
+  align-items: center;
+  gap: 4px;
+`;
+
+const CpLegendDot = styled.span<{ opacity: number }>`
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: ${theme.colors.primary};
+  opacity: ${(p) => p.opacity};
+`;
+
 const PROPOSER_COLORS = [
   "#8b7dff", "#ff7ea0", "#5aeaa0", "#ffd080", "#80d4ff",
   "#ffb080", "#d580ff", "#80ffd8",
@@ -271,6 +325,8 @@ export function Blocks() {
   const { data: statsData, isLoading: statsLoading } = useBlockStats(selectedNetwork);
   const { data: configData } = useBlockConfig(selectedNetwork);
   const { data: currentFees } = useCurrentFees(selectedNetwork);
+  const { data: cpHistoryData } = useCheckpointHistory(selectedNetwork);
+  const { data: cpStatsData } = useCheckpointStats(selectedNetwork);
 
   const ethPrice = currentFees?.pricing?.ethUsdPrice ?? null;
   const ethPerFeeAssetE12 = currentFees?.pricing?.ethPerFeeAssetE12 ?? null;
@@ -304,8 +360,9 @@ export function Blocks() {
       totalFees: b.totalFees ? Number(b.totalFees) : 0,
       blockTime: (() => {
         if (i === 0 || !b.timestamp || !arr[i - 1].timestamp) return null;
-        const dt = b.timestamp - arr[i - 1].timestamp!;
-        return dt > 0 ? dt : null; // filter out 0s from reconciliation/backfill
+        // Only compute block time for sequential blocks (no gap in block numbers)
+        if (b.blockNumber - arr[i - 1].blockNumber !== 1) return null;
+        return b.timestamp - arr[i - 1].timestamp!;
       })(),
     }));
     if (zoomFrom != null && zoomTo != null) return all.filter((d) => d.block >= zoomFrom && d.block <= zoomTo);
@@ -497,6 +554,99 @@ export function Blocks() {
               </ResponsiveContainer>
             )}
           </ChartCard>
+
+          {/* ── Checkpoint Section ── */}
+          {cpStatsData?.data && (
+            <>
+              <SectionTitle>Checkpoints</SectionTitle>
+
+              <StatsColumn style={{ marginBottom: theme.spacing.md }}>
+                <CompactStatCard>
+                  <StatLabel>Checkpoints</StatLabel>
+                  <StatValue>{cpStatsData.data.checkpointCount}</StatValue>
+                </CompactStatCard>
+                <CompactStatCard>
+                  <StatLabel>Avg Blocks/CP</StatLabel>
+                  <StatValue>{cpStatsData.data.avgBlocksPerCheckpoint}</StatValue>
+                </CompactStatCard>
+                <CompactStatCard>
+                  <StatLabel>Avg Attestations</StatLabel>
+                  <StatValue>{cpStatsData.data.avgAttestations}</StatValue>
+                </CompactStatCard>
+                <CompactStatCard>
+                  <StatLabel>Proven</StatLabel>
+                  <StatValue>{cpStatsData.data.provenPct}%</StatValue>
+                </CompactStatCard>
+                <CompactStatCard>
+                  <StatLabel>Finalized</StatLabel>
+                  <StatValue>{cpStatsData.data.finalizedPct}%</StatValue>
+                </CompactStatCard>
+                <CompactStatCard>
+                  <StatLabel>Max Blocks/CP</StatLabel>
+                  <StatValue>{cpStatsData.data.maxBlocksPerCheckpoint}</StatValue>
+                </CompactStatCard>
+              </StatsColumn>
+
+              {/* Checkpoint timeline bar */}
+              {cpHistoryData?.data && cpHistoryData.data.length > 0 && (
+                <ChartCard>
+                  <ChartTitle>Checkpoint Timeline</ChartTitle>
+                  <CpBar>
+                    {cpHistoryData.data.slice(-100).map((cp) => {
+                      const status = cp.finalizedAt ? "finalized" : cp.provenAt ? "proven" : "checkpointed";
+                      const totalBlocks = cpHistoryData.data.reduce((s, c) => s + c.blockCount, 0);
+                      const pct = totalBlocks > 0 ? (cp.blockCount / totalBlocks) * 100 : 1;
+                      return (
+                        <CpSegment
+                          key={cp.checkpointNumber}
+                          pct={pct}
+                          color={theme.colors.primary}
+                          status={status}
+                          title={`CP #${cp.checkpointNumber}: ${cp.blockCount} blocks, ${status}${cp.attestationCount != null ? `, ${cp.attestationCount} attestations` : ""}`}
+                        >
+                          {cp.blockCount > 1 ? cp.blockCount : ""}
+                        </CpSegment>
+                      );
+                    })}
+                  </CpBar>
+                  <CpLegend>
+                    <CpLegendItem><CpLegendDot opacity={0.35} /> Checkpointed</CpLegendItem>
+                    <CpLegendItem><CpLegendDot opacity={0.6} /> Proven</CpLegendItem>
+                    <CpLegendItem><CpLegendDot opacity={1} /> Finalized</CpLegendItem>
+                  </CpLegend>
+                </ChartCard>
+              )}
+
+              {/* Checkpoint mana chart */}
+              {cpHistoryData?.data && cpHistoryData.data.length > 0 && (
+                <ChartCard>
+                  <ChartTitle>Mana Per Checkpoint</ChartTitle>
+                  <ResponsiveContainer width="100%" height={200}>
+                    <ComposedChart
+                      data={cpHistoryData.data.map((cp) => ({
+                        cp: cp.checkpointNumber,
+                        mana: cp.totalManaUsed ? Number(cp.totalManaUsed) : 0,
+                        blocks: cp.blockCount,
+                        attestations: cp.attestationCount ?? 0,
+                      }))}
+                      margin={{ top: 5, right: 10, bottom: 5, left: 10 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke={theme.colors.border} opacity={0.3} />
+                      <XAxis dataKey="cp" type="number" domain={["dataMin", "dataMax"]} stroke={theme.colors.textMuted} fontSize={10} tickFormatter={(v) => `#${v}`} />
+                      <YAxis stroke={theme.colors.textMuted} fontSize={10} tickFormatter={(v) => `${(v / 1e6).toFixed(1)}M`} />
+                      <Tooltip contentStyle={tooltipStyle}
+                        formatter={(value: number, name: string) => {
+                          if (name === "blocks") return [`${value}`, "Blocks"];
+                          return [`${(value / 1e6).toFixed(2)}M`, "Mana"];
+                        }}
+                        labelFormatter={(v) => `Checkpoint #${v}`} />
+                      <Bar dataKey="mana" fill={theme.colors.primary} fillOpacity={0.3} stroke={theme.colors.primary} strokeWidth={0.5} />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </ChartCard>
+              )}
+            </>
+          )}
         </>
       )}
     </PageContainer>
