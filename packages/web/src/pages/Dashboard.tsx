@@ -295,7 +295,7 @@ export function Dashboard() {
               onClusterClick={(clusterId) =>
                 navigate(`/privacy-sets?cluster=${clusterId}`)
               }
-              onOutlierClick={(p) => navigate(`/tx/${p.txHash}`)}
+              onOutlierClick={(p) => p.txHash && navigate(`/tx/${p.txHash}`)}
             />
           </Card>
         </PlotSection>

@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, and, desc, sql, inArray } from "drizzle-orm";
 import {
   type Db,
   clusterRuns,
@@ -119,10 +119,10 @@ export function registerClusterRoutes(app: FastifyInstance, db: Db) {
         .limit(1);
       if (!run) return { runId, points: [] };
 
-      const points = await db
+      // Fetch coordinates + cluster info (no txHash — saves ~3MB on 40K rows)
+      const rows = await db
         .select({
           txId: umapProjections.txId,
-          txHash: transactions.txHash,
           x: umapProjections.x,
           y: umapProjections.y,
           z: umapProjections.z,
@@ -130,7 +130,6 @@ export function registerClusterRoutes(app: FastifyInstance, db: Db) {
           outlierScore: clusterMemberships.outlierScore,
         })
         .from(umapProjections)
-        .innerJoin(transactions, eq(transactions.id, umapProjections.txId))
         .leftJoin(
           clusterMemberships,
           and(
@@ -139,6 +138,29 @@ export function registerClusterRoutes(app: FastifyInstance, db: Db) {
           )
         )
         .where(eq(umapProjections.runId, runId));
+
+      // Only fetch txHash for outliers (clusterId === -1)
+      const outlierTxIds = rows
+        .filter((r) => r.clusterId === -1 || r.clusterId === null)
+        .map((r) => r.txId);
+
+      const txHashMap = new Map<number, string>();
+      if (outlierTxIds.length > 0) {
+        const hashes = await db
+          .select({ id: transactions.id, txHash: transactions.txHash })
+          .from(transactions)
+          .where(inArray(transactions.id, outlierTxIds));
+        for (const h of hashes) txHashMap.set(h.id, h.txHash);
+      }
+
+      const points = rows.map((r) => ({
+        x: r.x,
+        y: r.y,
+        z: r.z,
+        clusterId: r.clusterId,
+        outlierScore: r.outlierScore,
+        txHash: txHashMap.get(r.txId) ?? null,
+      }));
 
       return { runId, points };
     }
