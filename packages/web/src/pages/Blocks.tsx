@@ -1,4 +1,5 @@
-import { useState, useMemo, useCallback, useRef } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import styled from "@emotion/styled";
 import {
   ComposedChart,
@@ -281,13 +282,27 @@ function formatUsd(v: number): string {
 
 export function Blocks() {
   const { selectedNetwork } = useNetworkStore();
-  const [range, setRange] = useState<TimeRange>(() =>
-    window.innerWidth <= 768 ? "20" : "100",
-  );
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Initialize from URL or defaults
+  const urlFrom = searchParams.get("from") ? parseInt(searchParams.get("from")!, 10) : null;
+  const urlTo = searchParams.get("to") ? parseInt(searchParams.get("to")!, 10) : null;
+
+  const [range, setRange] = useState<TimeRange>(() => {
+    if (urlFrom != null && urlTo != null) {
+      const diff = urlTo - urlFrom;
+      if (diff <= 20) return "20";
+      if (diff <= 100) return "100";
+      if (diff <= 500) return "500";
+      if (diff <= 1000) return "1000";
+      return "5000";
+    }
+    return window.innerWidth <= 768 ? "20" : "100";
+  });
 
   // Zoom state
-  const [zoomFrom, setZoomFrom] = useState<number | null>(null);
-  const [zoomTo, setZoomTo] = useState<number | null>(null);
+  const [zoomFrom, setZoomFrom] = useState<number | null>(urlFrom);
+  const [zoomTo, setZoomTo] = useState<number | null>(urlTo);
   const [selecting, setSelecting] = useState<number | null>(null);
   const [selectEnd, setSelectEnd] = useState<number | null>(null);
   const selectingRef = useRef<number | null>(null);
@@ -372,12 +387,44 @@ export function Blocks() {
   const fromBlock =
     windowEnd != null ? Math.max(0, windowEnd - rangeBlocks) : undefined;
   const toBlock = windowEnd ?? undefined;
-  const canGoBack = fromBlock != null && fromBlock > earliestBlock;
-  const canGoForward = offset > 0;
+  const canGoBack = isZoomed
+    ? (zoomFrom ?? 0) > earliestBlock
+    : fromBlock != null && fromBlock > earliestBlock;
+  const canGoForward = isZoomed
+    ? (zoomTo ?? 0) < (latestBlock ?? 0)
+    : offset > 0;
+
+  const goBack = () => {
+    if (!canGoBack) return;
+    if (isZoomed && zoomFrom != null && zoomTo != null) {
+      const span = zoomTo - zoomFrom;
+      setZoomFrom(Math.max(earliestBlock, zoomFrom - span));
+      setZoomTo(Math.max(earliestBlock + span, zoomTo - span));
+    } else {
+      setOffset((o) => o + 1);
+    }
+  };
+  const goForward = () => {
+    if (!canGoForward) return;
+    if (isZoomed && zoomFrom != null && zoomTo != null) {
+      const span = zoomTo - zoomFrom;
+      setZoomFrom(zoomFrom + span);
+      setZoomTo(zoomTo + span);
+    } else {
+      setOffset((o) => o - 1);
+    }
+  };
 
   // Scoped to the visible range (zoom overrides range selector)
   const effectiveFrom = zoomFrom ?? fromBlock;
   const effectiveTo = zoomTo ?? toBlock;
+
+  // Sync URL with visible range
+  useEffect(() => {
+    if (effectiveFrom != null && effectiveTo != null) {
+      setSearchParams({ from: String(effectiveFrom), to: String(effectiveTo) }, { replace: true });
+    }
+  }, [effectiveFrom, effectiveTo, setSearchParams]);
   const rangeOpts = useMemo(
     () => ({ from: effectiveFrom, to: effectiveTo }),
     [effectiveFrom, effectiveTo],
@@ -395,13 +442,16 @@ export function Blocks() {
     cpRangeOpts,
   );
 
+  // Fetch data covering the wider of range selector or zoom
+  const fetchFrom = zoomFrom != null && fromBlock != null ? Math.min(zoomFrom, fromBlock) : fromBlock ?? zoomFrom;
+  const fetchTo = zoomTo != null && toBlock != null ? Math.max(zoomTo, toBlock) : toBlock ?? zoomTo;
   const historyOpts = useMemo(
     () => ({
-      from: fromBlock,
-      to: toBlock,
-      limit: rangeBlocks + 10,
+      from: fetchFrom ?? undefined,
+      to: fetchTo ?? undefined,
+      limit: Math.max(rangeBlocks, (fetchTo ?? 0) - (fetchFrom ?? 0)) + 10,
     }),
-    [fromBlock, toBlock, rangeBlocks],
+    [fetchFrom, fetchTo, rangeBlocks],
   );
   const rangeReady = fromBlock != null;
   const { data: historyData, isLoading: historyLoading } = useBlockHistory(
@@ -613,10 +663,7 @@ export function Blocks() {
           {isZoomed && (
             <ResetZoomButton onClick={resetZoom}>Reset Zoom</ResetZoomButton>
           )}
-          <NavButton
-            disabled={!canGoBack}
-            onClick={() => canGoBack && setOffset((o) => o + 1)}
-          >
+          <NavButton disabled={!canGoBack} onClick={goBack}>
             &#x25C0;
           </NavButton>
           <RangeSelector>
@@ -634,10 +681,7 @@ export function Blocks() {
               </RangeButton>
             ))}
           </RangeSelector>
-          <NavButton
-            disabled={!canGoForward}
-            onClick={() => canGoForward && setOffset((o) => o - 1)}
-          >
+          <NavButton disabled={!canGoForward} onClick={goForward}>
             &#x25B6;
           </NavButton>
         </HeaderControls>

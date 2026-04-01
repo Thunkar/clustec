@@ -59,7 +59,7 @@ const LogoText = styled.span`
   letter-spacing: -0.5px;
 `;
 
-const NavItem = styled(Link)<{ active?: boolean }>`
+const NavItem = styled(Link, { shouldForwardProp: (prop) => prop !== "active" })<{ active?: boolean }>`
   display: block;
   padding: ${theme.spacing.sm} ${theme.spacing.lg};
   color: ${(p) => (p.active ? theme.colors.text : theme.colors.textMuted)};

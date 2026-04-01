@@ -1,4 +1,5 @@
-import { useState, useMemo, useCallback, useRef } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import styled from "@emotion/styled";
 import {
@@ -81,11 +82,26 @@ function formatUsd(v: number): string {
 export function Fees() {
   const { selectedNetwork } = useNetworkStore();
   const queryClient = useQueryClient();
-  const [range, setRange] = useState<TimeRange>("100");
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const urlFrom = searchParams.get("from") ? parseInt(searchParams.get("from")!, 10) : null;
+  const urlTo = searchParams.get("to") ? parseInt(searchParams.get("to")!, 10) : null;
+
+  const [range, setRange] = useState<TimeRange>(() => {
+    if (urlFrom != null && urlTo != null) {
+      const diff = urlTo - urlFrom;
+      if (diff <= 100) return "100";
+      if (diff <= 500) return "500";
+      if (diff <= 1000) return "1000";
+      if (diff <= 5000) return "5000";
+      return "all";
+    }
+    return "100";
+  });
 
   // Zoom state: drag-select on any chart to zoom all three
-  const [zoomFrom, setZoomFrom] = useState<number | null>(null);
-  const [zoomTo, setZoomTo] = useState<number | null>(null);
+  const [zoomFrom, setZoomFrom] = useState<number | null>(urlFrom);
+  const [zoomTo, setZoomTo] = useState<number | null>(urlTo);
   const [selecting, setSelecting] = useState<number | null>(null);
   const [selectEnd, setSelectEnd] = useState<number | null>(null);
 
@@ -150,8 +166,41 @@ export function Fees() {
   const windowEnd = latestBlock != null && rangeBlocks != null ? latestBlock - offset * rangeBlocks : null;
   const fromBlock = windowEnd != null ? Math.max(0, windowEnd - rangeBlocks!) : (range === "all" ? undefined : undefined);
   const toBlock = range !== "all" ? windowEnd ?? undefined : undefined;
-  const canGoBack = range !== "all" && fromBlock != null && fromBlock > 0;
-  const canGoForward = range !== "all" && offset > 0;
+  const isZoomed = zoomFrom != null || zoomTo != null;
+  const canGoBack = range !== "all" && (isZoomed ? (zoomFrom ?? 0) > 0 : fromBlock != null && fromBlock > 0);
+  const canGoForward = range !== "all" && (isZoomed ? (zoomTo ?? 0) < (latestBlock ?? 0) : offset > 0);
+
+  const goBack = () => {
+    if (!canGoBack) return;
+    if (isZoomed && zoomFrom != null && zoomTo != null) {
+      const span = zoomTo - zoomFrom;
+      setZoomFrom(Math.max(0, zoomFrom - span));
+      setZoomTo(Math.max(span, zoomTo - span));
+    } else {
+      setOffset((o) => o + 1);
+    }
+  };
+  const goForward = () => {
+    if (!canGoForward) return;
+    if (isZoomed && zoomFrom != null && zoomTo != null) {
+      const span = zoomTo - zoomFrom;
+      setZoomFrom(zoomFrom + span);
+      setZoomTo(zoomTo + span);
+    } else {
+      setOffset((o) => o - 1);
+    }
+  };
+
+  // Sync URL with visible range
+  const effectiveFrom = zoomFrom ?? fromBlock;
+  const effectiveTo = zoomTo ?? toBlock;
+  useEffect(() => {
+    if (effectiveFrom != null && effectiveTo != null) {
+      setSearchParams({ from: String(effectiveFrom), to: String(effectiveTo) }, { replace: true });
+    } else if (range === "all") {
+      setSearchParams({}, { replace: true });
+    }
+  }, [effectiveFrom, effectiveTo, range, setSearchParams]);
 
   const historyOpts = useMemo(
     () => ({ from: fromBlock, to: toBlock, resolution }),
@@ -308,8 +357,6 @@ export function Fees() {
     />
   ) : null;
 
-  const isZoomed = zoomFrom != null || zoomTo != null;
-
   // Current stats
   const currentDaFee = toNum(currentData?.block?.feePerDaGas);
   const currentL2Fee = toNum(currentData?.block?.feePerL2Gas);
@@ -325,7 +372,7 @@ export function Fees() {
         {isZoomed && (
           <ResetZoomButton onClick={resetZoom}>Reset Zoom</ResetZoomButton>
         )}
-        {range !== "all" && <NavButton disabled={!canGoBack} onClick={() => canGoBack && setOffset((o) => o + 1)}>&#x25C0;</NavButton>}
+        {range !== "all" && <NavButton disabled={!canGoBack} onClick={goBack}>&#x25C0;</NavButton>}
         <RangeSelector>
           {(Object.keys(RANGE_LABELS) as TimeRange[]).map((r) => (
             <RangeButton
@@ -337,7 +384,7 @@ export function Fees() {
             </RangeButton>
           ))}
         </RangeSelector>
-        {range !== "all" && <NavButton disabled={!canGoForward} onClick={() => canGoForward && setOffset((o) => o - 1)}>&#x25B6;</NavButton>}
+        {range !== "all" && <NavButton disabled={!canGoForward} onClick={goForward}>&#x25B6;</NavButton>}
         </HeaderControls>
       </Header>
 
