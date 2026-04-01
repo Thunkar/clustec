@@ -255,10 +255,10 @@ export function useCheckpointHistory(
   });
 }
 
-export function useCheckpointStats(networkId: string) {
+export function useCheckpointStats(networkId: string, opts?: { fromBlock?: number; toBlock?: number }) {
   return useQuery({
-    queryKey: ["networks", networkId, "checkpoints", "stats"],
-    queryFn: () => api.getCheckpointStats(networkId),
+    queryKey: ["networks", networkId, "checkpoints", "stats", opts],
+    queryFn: () => api.getCheckpointStats(networkId, opts),
     enabled: !!networkId,
   });
 }

@@ -291,22 +291,34 @@ export function Blocks() {
 
   const [offset, setOffset] = useState(0); // how many range-widths back from latest
 
-  const { data: statsData, isLoading: statsLoading } = useBlockStats(selectedNetwork);
+  // Unscoped: just to get latest/earliest block for range computation
+  const { data: globalStats } = useBlockStats(selectedNetwork);
   const { data: configData } = useBlockConfig(selectedNetwork);
   const { data: currentFees } = useCurrentFees(selectedNetwork);
-  const { data: cpStatsData } = useCheckpointStats(selectedNetwork);
 
   const ethPrice = currentFees?.pricing?.ethUsdPrice ?? null;
   const ethPerFeeAssetE12 = currentFees?.pricing?.ethPerFeeAssetE12 ?? null;
 
-  const latestBlock = statsData?.data?.blockRange.to ?? null;
-  const earliestBlock = statsData?.data?.blockRange.from ?? 0;
+  const latestBlock = globalStats?.data?.blockRange.to ?? null;
+  const earliestBlock = globalStats?.data?.blockRange.from ?? 0;
   const rangeBlocks = parseInt(range, 10);
   const windowEnd = latestBlock != null ? latestBlock - offset * rangeBlocks : null;
   const fromBlock = windowEnd != null ? Math.max(0, windowEnd - rangeBlocks) : undefined;
   const toBlock = windowEnd ?? undefined;
   const canGoBack = fromBlock != null && fromBlock > earliestBlock;
   const canGoForward = offset > 0;
+
+  // Scoped to the visible range (zoom overrides range selector)
+  const effectiveFrom = zoomFrom ?? fromBlock;
+  const effectiveTo = zoomTo ?? toBlock;
+  const rangeOpts = useMemo(() => ({ from: effectiveFrom, to: effectiveTo }), [effectiveFrom, effectiveTo]);
+  const cpRangeOpts = useMemo(() => ({ fromBlock: effectiveFrom, toBlock: effectiveTo }), [effectiveFrom, effectiveTo]);
+  const { data: statsData, isLoading: statsLoading } = useBlockStats(
+    effectiveFrom != null ? selectedNetwork : "", rangeOpts,
+  );
+  const { data: cpStatsData } = useCheckpointStats(
+    effectiveFrom != null ? selectedNetwork : "", cpRangeOpts,
+  );
 
   const historyOpts = useMemo(() => ({
     from: fromBlock,
@@ -384,15 +396,33 @@ export function Blocks() {
   const maxMana = config?.maxL2BlockGas ? Number(config.maxL2BlockGas) : null;
   const cpStats = cpStatsData?.data;
 
-  // Checkpoint band overlays for recharts
-  const cpBandElements = checkpointBands.map((band, i) => {
+  // Checkpoint band overlays — generate per chart with context-specific labels
+  type CpChartType = "mana" | "txs" | "blockTime" | "fees";
+  const makeCpBands = (chartType: CpChartType) => checkpointBands.map((band, i) => {
     const fillOpacity = band.status === "finalized" ? 0.18 : band.status === "proven" ? 0.12 : 0.07;
-    // Alternate warm/cool for adjacent checkpoints
     const fill = i % 2 === 0 ? "#6366f1" : "#a78bfa";
-    const manaLabel = band.totalMana > 0 ? `${(band.totalMana / 1e6).toFixed(1)}M` : "";
-    const label = band.blockCount > 1
-      ? `${band.blockCount} blks${manaLabel ? ` · ${manaLabel}` : ""}`
-      : undefined;
+    let label: string | undefined;
+    if (band.blockCount > 1) {
+      switch (chartType) {
+        case "mana":
+          label = band.totalMana > 0 ? `${(band.totalMana / 1e6).toFixed(1)}M mana` : undefined;
+          break;
+        case "txs": {
+          // Sum txs from chartData for blocks in this checkpoint
+          const txs = chartData.filter((d) => d.block >= band.x1 && d.block <= band.x2).reduce((s, d) => s + d.numTxs, 0);
+          label = `${txs} txs`;
+          break;
+        }
+        case "blockTime":
+          label = `${band.blockCount} blocks`;
+          break;
+        case "fees": {
+          const fees = chartData.filter((d) => d.block >= band.x1 && d.block <= band.x2).reduce((s, d) => s + d.totalFees, 0);
+          label = fees > 0 ? formatFJ(fees) : undefined;
+          break;
+        }
+      }
+    }
     return (
       <ReferenceArea
         key={`cp-${band.cpNumber}`}
@@ -449,10 +479,6 @@ export function Blocks() {
           <TopBar>
             <StatsColumn>
               <CompactStatCard>
-                <StatLabel>Blocks</StatLabel>
-                <StatValue>{stats.blockCount.toLocaleString()}</StatValue>
-              </CompactStatCard>
-              <CompactStatCard>
                 <StatLabel>Avg Block Time</StatLabel>
                 <StatValue>{stats.avgBlockTime}s</StatValue>
               </CompactStatCard>
@@ -469,6 +495,17 @@ export function Blocks() {
                 <StatValue>
                   {stats.avgManaPerBlock ? `${(Number(stats.avgManaPerBlock) / 1e6).toFixed(2)}M` : "-"}
                 </StatValue>
+              </CompactStatCard>
+              <CompactStatCard style={{ position: "relative" }}>
+                <StatLabel>Avg Fees/Block</StatLabel>
+                <StatValue>
+                  {stats.avgFeesPerBlock ? formatFJ(stats.avgFeesPerBlock) : "-"}
+                </StatValue>
+                {stats.avgFeesPerBlock && ethPrice != null && ethPerFeeAssetE12 != null && (
+                  <span style={{ position: "absolute", right: 6, bottom: 6, fontSize: 9, color: theme.colors.textMuted }}>
+                    {formatUsd(feeToUsd(Number(stats.avgFeesPerBlock), ethPerFeeAssetE12, ethPrice))}
+                  </span>
+                )}
               </CompactStatCard>
               <CompactStatCard>
                 <StatLabel>Proposers</StatLabel>
@@ -504,8 +541,8 @@ export function Blocks() {
               <ProposerCard style={{ flexDirection: "column", alignItems: "stretch" }}>
                 <StatLabel style={{ textAlign: "center", marginBottom: 4 }}>Sequencers</StatLabel>
                 <div style={{ display: "flex", alignItems: "center", gap: theme.spacing.md }}>
-                <PieChart width={100} height={100}>
-                  <Pie data={pieData} dataKey="blockCount" cx="50%" cy="50%" outerRadius={45} innerRadius={25} paddingAngle={1} strokeWidth={0}>
+                <PieChart width={140} height={140}>
+                  <Pie data={pieData} dataKey="blockCount" cx="50%" cy="50%" outerRadius={62} innerRadius={35} paddingAngle={1} strokeWidth={0}>
                     {pieData.map((_, i) => (
                       <Cell key={i} fill={i < PROPOSER_COLORS.length ? PROPOSER_COLORS[i] : OTHER_COLOR} />
                     ))}
@@ -541,7 +578,7 @@ export function Blocks() {
                     labelFormatter={(v) => `Block #${v}`} />
                   <Area type="monotone" dataKey="manaUsed" stroke={theme.colors.primary} fill={theme.colors.primary} fillOpacity={0.15} />
                   {maxMana && <ReferenceLine y={maxMana} stroke={theme.colors.danger} strokeDasharray="3 3" label={{ value: "Max", position: "right", fontSize: 10, fill: theme.colors.danger }} />}
-                  {cpBandElements}
+                  {makeCpBands("mana")}
                   {selectionOverlay}
                 </ComposedChart>
               </ResponsiveContainer>
@@ -560,7 +597,7 @@ export function Blocks() {
                   <Tooltip contentStyle={tooltipStyle} formatter={(value: number) => [`${value}`, "Txs"]} labelFormatter={(v) => `Block #${v}`} />
                   <Bar dataKey="numTxs" fill={theme.colors.accent} fillOpacity={0.4} stroke={theme.colors.accent} strokeOpacity={0.6} strokeWidth={0.5} />
                   {config?.maxTxsPerBlock && <ReferenceLine y={config.maxTxsPerBlock} stroke={theme.colors.danger} strokeDasharray="3 3" label={{ value: "Max", position: "right", fontSize: 10, fill: theme.colors.danger }} />}
-                  {cpBandElements}
+                  {makeCpBands("txs")}
                   {selectionOverlay}
                 </ComposedChart>
               </ResponsiveContainer>
@@ -579,7 +616,7 @@ export function Blocks() {
                   <Tooltip contentStyle={tooltipStyle} formatter={(value: number) => [`${value}s`, "Block Time"]} labelFormatter={(v) => `Block #${v}`} />
                   <Line type="monotone" dataKey="blockTime" stroke={theme.colors.warning} strokeWidth={1.5} dot={false} connectNulls />
                   {config?.aztecSlotDuration && <ReferenceLine y={config.aztecSlotDuration} stroke={theme.colors.success} strokeDasharray="3 3" label={{ value: "Target", position: "right", fontSize: 10, fill: theme.colors.success }} />}
-                  {cpBandElements}
+                  {makeCpBands("blockTime")}
                   {selectionOverlay}
                 </ComposedChart>
               </ResponsiveContainer>
@@ -603,7 +640,7 @@ export function Blocks() {
                     }}
                     labelFormatter={(v) => `Block #${v}`} />
                   <Area type="monotone" dataKey="totalFees" stroke={theme.colors.success} fill={theme.colors.success} fillOpacity={0.1} />
-                  {cpBandElements}
+                  {makeCpBands("fees")}
                   {selectionOverlay}
                 </ComposedChart>
               </ResponsiveContainer>
