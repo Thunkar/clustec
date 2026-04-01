@@ -104,65 +104,82 @@ export function registerClusterRoutes(app: FastifyInstance, db: Db) {
     }
   );
 
-  // UMAP projections for scatter plot
+  // UMAP data for scatter plot — pre-aggregated on server
+  // Returns cluster centroids (avg x/y/z + count) and individual outlier points
   app.get<{ Params: { id: string; runId: string } }>(
     "/api/networks/:id/clusters/:runId/umap",
     async (request) => {
       const { id } = request.params;
       const runId = parseInt(request.params.runId, 10);
 
-      // Validate the run belongs to this network
       const [run] = await db
         .select({ id: clusterRuns.id })
         .from(clusterRuns)
         .where(and(eq(clusterRuns.id, runId), eq(clusterRuns.networkId, id)))
         .limit(1);
-      if (!run) return { runId, points: [] };
+      if (!run) return { runId, clusters: [], outliers: [] };
 
-      // Fetch coordinates + cluster info (no txHash — saves ~3MB on 40K rows)
-      const rows = await db
+      // Aggregate cluster centroids in SQL
+      const clusterRows = await db.execute<{
+        cluster_id: number;
+        cx: number;
+        cy: number;
+        cz: number;
+        count: number;
+      }>(sql`
+        SELECT
+          cm.cluster_id,
+          avg(u.x)::real AS cx,
+          avg(u.y)::real AS cy,
+          avg(coalesce(u.z, 0))::real AS cz,
+          count(*)::int AS count
+        FROM umap_projections u
+        INNER JOIN cluster_memberships cm
+          ON cm.run_id = u.run_id AND cm.tx_id = u.tx_id
+        WHERE u.run_id = ${runId} AND cm.cluster_id >= 0
+        GROUP BY cm.cluster_id
+      `);
+
+      // Fetch individual outlier points with txHash
+      const outlierRows = await db
         .select({
-          txId: umapProjections.txId,
           x: umapProjections.x,
           y: umapProjections.y,
           z: umapProjections.z,
-          clusterId: clusterMemberships.clusterId,
+          txHash: transactions.txHash,
           outlierScore: clusterMemberships.outlierScore,
         })
         .from(umapProjections)
-        .leftJoin(
+        .innerJoin(
           clusterMemberships,
           and(
             eq(clusterMemberships.runId, umapProjections.runId),
             eq(clusterMemberships.txId, umapProjections.txId)
           )
         )
-        .where(eq(umapProjections.runId, runId));
+        .innerJoin(transactions, eq(transactions.id, umapProjections.txId))
+        .where(and(
+          eq(umapProjections.runId, runId),
+          eq(clusterMemberships.clusterId, -1),
+        ));
 
-      // Only fetch txHash for outliers (clusterId === -1)
-      const outlierTxIds = rows
-        .filter((r) => r.clusterId === -1 || r.clusterId === null)
-        .map((r) => r.txId);
-
-      const txHashMap = new Map<number, string>();
-      if (outlierTxIds.length > 0) {
-        const hashes = await db
-          .select({ id: transactions.id, txHash: transactions.txHash })
-          .from(transactions)
-          .where(inArray(transactions.id, outlierTxIds));
-        for (const h of hashes) txHashMap.set(h.id, h.txHash);
-      }
-
-      const points = rows.map((r) => ({
-        x: r.x,
-        y: r.y,
-        z: r.z,
-        clusterId: r.clusterId,
-        outlierScore: r.outlierScore,
-        txHash: txHashMap.get(r.txId) ?? null,
-      }));
-
-      return { runId, points };
+      return {
+        runId,
+        clusters: clusterRows.map((c) => ({
+          clusterId: c.cluster_id,
+          cx: c.cx,
+          cy: c.cy,
+          cz: c.cz,
+          count: c.count,
+        })),
+        outliers: outlierRows.map((o) => ({
+          x: o.x,
+          y: o.y,
+          z: o.z ?? 0,
+          txHash: o.txHash,
+          outlierScore: o.outlierScore,
+        })),
+      };
     }
   );
 

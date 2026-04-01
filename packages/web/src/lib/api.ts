@@ -139,13 +139,26 @@ export interface ClusterRun {
   computedAt: string;
 }
 
-export interface UmapPoint {
-  txHash: string | null;
+export interface UmapCluster {
+  clusterId: number;
+  cx: number;
+  cy: number;
+  cz: number;
+  count: number;
+}
+
+export interface UmapOutlier {
   x: number;
   y: number;
-  z: number | null;
-  clusterId: number | null;
+  z: number;
+  txHash: string;
   outlierScore: number | null;
+}
+
+export interface UmapData {
+  runId: number;
+  clusters: UmapCluster[];
+  outliers: UmapOutlier[];
 }
 
 export interface OutlierEntry {
@@ -637,8 +650,8 @@ export const api = {
   getClusterRuns: (id: string) => fetchJson<ClusterRun[]>(`/networks/${id}/clusters`),
   getClusterDetail: (id: string, runId: number) =>
     fetchJson<{ run: ClusterRun; clusterSizes: ClusterSize[] }>(`/networks/${id}/clusters/${runId}`),
-  getUmapPoints: (id: string, runId: number) =>
-    fetchJson<{ runId: number; points: UmapPoint[] }>(`/networks/${id}/clusters/${runId}/umap`),
+  getUmapData: (id: string, runId: number) =>
+    fetchJson<UmapData>(`/networks/${id}/clusters/${runId}/umap`),
   getOutliers: (id: string, runId: number, limit = 50) =>
     fetchJson<{ runId: number; totalTxsAnalyzed: number; outliers: OutlierEntry[] }>(`/networks/${id}/clusters/${runId}/outliers?limit=${limit}`),
   getLabels: (id: string) => fetchJson<ContractLabel[]>(`/networks/${id}/labels`),

@@ -59,10 +59,10 @@ export function useClusterDetail(networkId: string, runId: number) {
   });
 }
 
-export function useUmapPoints(networkId: string, runId: number) {
+export function useUmapData(networkId: string, runId: number) {
   return useQuery({
     queryKey: ["networks", networkId, "clusters", runId, "umap"],
-    queryFn: () => api.getUmapPoints(networkId, runId),
+    queryFn: () => api.getUmapData(networkId, runId),
     enabled: !!networkId && runId > 0,
   });
 }
