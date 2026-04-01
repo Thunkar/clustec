@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { eq, desc, and, gte, lte, sql } from "drizzle-orm";
-import { type Db, blocks, transactions, networks } from "@clustec/common";
+import { type Db, blocks, transactions, networks, checkpoints } from "@clustec/common";
 
 export function registerBlockRoutes(app: FastifyInstance, db: Db) {
   app.get<{
@@ -74,6 +74,8 @@ export function registerBlockRoutes(app: FastifyInstance, db: Db) {
         feePerDaGas: blocks.feePerDaGas,
         feePerL2Gas: blocks.feePerL2Gas,
         coinbase: blocks.coinbase,
+        checkpointNumber: blocks.checkpointNumber,
+        indexWithinCheckpoint: blocks.indexWithinCheckpoint,
       })
       .from(blocks)
       .where(and(...conditions))
@@ -82,7 +84,39 @@ export function registerBlockRoutes(app: FastifyInstance, db: Db) {
 
     if (needsReverse) rows.reverse();
 
-    return { data: rows };
+    // Attach checkpoint lifecycle status for each block's checkpoint
+    const cpNumbers = [...new Set(rows.map((r) => r.checkpointNumber).filter((n): n is number => n != null))];
+    let cpStatusMap = new Map<number, { provenAt: Date | null; finalizedAt: Date | null; blockCount: number; attestationCount: number | null }>();
+    if (cpNumbers.length > 0) {
+      const cpRows = await db
+        .select({
+          checkpointNumber: checkpoints.checkpointNumber,
+          provenAt: checkpoints.provenAt,
+          finalizedAt: checkpoints.finalizedAt,
+          blockCount: checkpoints.blockCount,
+          attestationCount: checkpoints.attestationCount,
+        })
+        .from(checkpoints)
+        .where(and(
+          eq(checkpoints.networkId, id),
+          sql`${checkpoints.checkpointNumber} = ANY(${sql`ARRAY[${sql.join(cpNumbers.map((n) => sql`${n}`), sql`, `)}]::bigint[]`})`,
+        ));
+      for (const cp of cpRows) {
+        cpStatusMap.set(cp.checkpointNumber, cp);
+      }
+    }
+
+    const data = rows.map((r) => {
+      const cpInfo = r.checkpointNumber != null ? cpStatusMap.get(r.checkpointNumber) : null;
+      return {
+        ...r,
+        cpStatus: cpInfo?.finalizedAt ? "finalized" as const : cpInfo?.provenAt ? "proven" as const : r.checkpointNumber != null ? "checkpointed" as const : null,
+        cpBlockCount: cpInfo?.blockCount ?? null,
+        cpAttestations: cpInfo?.attestationCount ?? null,
+      };
+    });
+
+    return { data };
   });
 
   // ── Block stats: aggregated analytics ─────────────────────
@@ -136,12 +170,13 @@ export function registerBlockRoutes(app: FastifyInstance, db: Db) {
     const blockCount = row.block_count;
     const timespan = blockCount > 1 ? Number(row.max_timestamp) - Number(row.min_timestamp) : 0;
 
-    // Compute avg block time excluding zero/negative gaps (from reconciliation)
+    // Compute avg block time only for sequential block numbers (skip gaps from missing blocks)
     const [avgBt] = await db.execute<{ avg_bt: string }>(sql`
       SELECT avg(dt)::text AS avg_bt FROM (
-        SELECT "timestamp" - lag("timestamp") OVER (ORDER BY block_number) AS dt
+        SELECT "timestamp" - lag("timestamp") OVER (ORDER BY block_number) AS dt,
+               block_number - lag(block_number) OVER (ORDER BY block_number) AS bn_gap
         FROM blocks WHERE ${and(...conditions)}
-      ) sub WHERE dt > 0
+      ) sub WHERE bn_gap = 1 AND dt IS NOT NULL
     `);
     const avgBlockTime = avgBt?.avg_bt ? +Number(avgBt.avg_bt).toFixed(1) : 0;
 
@@ -236,5 +271,103 @@ export function registerBlockRoutes(app: FastifyInstance, db: Db) {
     } catch {
       return { data: null };
     }
+  });
+
+  // ── Checkpoint history ────────────────────────────────────
+  app.get<{
+    Params: { id: string };
+    Querystring: { from?: string; to?: string; limit?: string };
+  }>("/api/networks/:id/checkpoints/history", async (request) => {
+    const { id } = request.params;
+    const limitParam = request.query.limit ? parseInt(request.query.limit, 10) : 500;
+    const limit = Math.min(limitParam, 2000);
+
+    const conditions = [eq(checkpoints.networkId, id)];
+    if (request.query.from) conditions.push(gte(checkpoints.checkpointNumber, parseInt(request.query.from, 10)));
+    if (request.query.to) conditions.push(lte(checkpoints.checkpointNumber, parseInt(request.query.to, 10)));
+
+    const needsReverse = !request.query.from && !request.query.to;
+
+    const rows = await db
+      .select({
+        checkpointNumber: checkpoints.checkpointNumber,
+        slotNumber: checkpoints.slotNumber,
+        startBlock: checkpoints.startBlock,
+        endBlock: checkpoints.endBlock,
+        blockCount: checkpoints.blockCount,
+        totalManaUsed: checkpoints.totalManaUsed,
+        totalFees: checkpoints.totalFees,
+        coinbase: checkpoints.coinbase,
+        attestationCount: checkpoints.attestationCount,
+        l1BlockNumber: checkpoints.l1BlockNumber,
+        l1Timestamp: checkpoints.l1Timestamp,
+        provenAt: checkpoints.provenAt,
+        finalizedAt: checkpoints.finalizedAt,
+      })
+      .from(checkpoints)
+      .where(and(...conditions))
+      .orderBy(needsReverse ? desc(checkpoints.checkpointNumber) : checkpoints.checkpointNumber)
+      .limit(limit);
+
+    if (needsReverse) rows.reverse();
+
+    return { data: rows };
+  });
+
+  // ── Checkpoint stats ──────────────────────────────────────
+  app.get<{
+    Params: { id: string };
+    Querystring: { from?: string; to?: string };
+  }>("/api/networks/:id/checkpoints/stats", async (request) => {
+    const { id } = request.params;
+
+    const conditions = [eq(checkpoints.networkId, id)];
+    if (request.query.from) conditions.push(gte(checkpoints.checkpointNumber, parseInt(request.query.from, 10)));
+    if (request.query.to) conditions.push(lte(checkpoints.checkpointNumber, parseInt(request.query.to, 10)));
+
+    const [row] = await db.execute<{
+      count: number;
+      avg_blocks: string;
+      max_blocks: number;
+      avg_mana: string;
+      avg_fees: string;
+      avg_attestations: string;
+      proven_count: number;
+      finalized_count: number;
+      min_cp: number;
+      max_cp: number;
+    }>(sql`
+      SELECT
+        count(*)::int AS count,
+        avg(block_count)::text AS avg_blocks,
+        max(block_count)::int AS max_blocks,
+        avg(total_mana_used::numeric)::text AS avg_mana,
+        avg(total_fees::numeric)::text AS avg_fees,
+        avg(attestation_count)::text AS avg_attestations,
+        count(*) FILTER (WHERE proven_at IS NOT NULL)::int AS proven_count,
+        count(*) FILTER (WHERE finalized_at IS NOT NULL)::int AS finalized_count,
+        min(checkpoint_number)::int AS min_cp,
+        max(checkpoint_number)::int AS max_cp
+      FROM checkpoints
+      WHERE ${and(...conditions)}
+    `);
+
+    if (!row || row.count === 0) return { data: null };
+
+    return {
+      data: {
+        checkpointCount: row.count,
+        range: { from: row.min_cp, to: row.max_cp },
+        avgBlocksPerCheckpoint: +Number(row.avg_blocks).toFixed(2),
+        maxBlocksPerCheckpoint: row.max_blocks,
+        avgManaPerCheckpoint: row.avg_mana,
+        avgFeesPerCheckpoint: row.avg_fees,
+        avgAttestations: +Number(row.avg_attestations).toFixed(1),
+        provenCount: row.proven_count,
+        finalizedCount: row.finalized_count,
+        provenPct: +(row.proven_count / row.count * 100).toFixed(1),
+        finalizedPct: +(row.finalized_count / row.count * 100).toFixed(1),
+      },
+    };
   });
 }

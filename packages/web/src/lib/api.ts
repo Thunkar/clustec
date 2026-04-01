@@ -543,6 +543,11 @@ export interface BlockHistoryPoint {
   feePerDaGas: string | null;
   feePerL2Gas: string | null;
   coinbase: string | null;
+  checkpointNumber: number | null;
+  indexWithinCheckpoint: number | null;
+  cpStatus: "checkpointed" | "proven" | "finalized" | null;
+  cpBlockCount: number | null;
+  cpAttestations: number | null;
 }
 
 export interface BlockStatsData {
@@ -573,6 +578,36 @@ export interface BlockConfigData {
   aztecSlotDuration: number | null;
   ethereumSlotDuration: number | null;
   aztecEpochDuration: number | null;
+}
+
+export interface CheckpointHistoryPoint {
+  checkpointNumber: number;
+  slotNumber: number | null;
+  startBlock: number | null;
+  endBlock: number | null;
+  blockCount: number;
+  totalManaUsed: string | null;
+  totalFees: string | null;
+  coinbase: string | null;
+  attestationCount: number | null;
+  l1BlockNumber: number | null;
+  l1Timestamp: number | null;
+  provenAt: string | null;
+  finalizedAt: string | null;
+}
+
+export interface CheckpointStatsData {
+  checkpointCount: number;
+  range: { from: number; to: number };
+  avgBlocksPerCheckpoint: number;
+  maxBlocksPerCheckpoint: number;
+  avgManaPerCheckpoint: string;
+  avgFeesPerCheckpoint: string;
+  avgAttestations: number;
+  provenCount: number;
+  finalizedCount: number;
+  provenPct: number;
+  finalizedPct: number;
 }
 
 export const api = {
@@ -672,4 +707,12 @@ export const api = {
     return fetchJson<{ data: BlockStatsData | null }>(`/networks/${id}/blocks/stats?${params.toString()}`);
   },
   getBlockConfig: (id: string) => fetchJson<{ data: BlockConfigData | null }>(`/networks/${id}/blocks/config`),
+  getCheckpointHistory: (id: string, opts?: { from?: number; to?: number; limit?: number }) => {
+    const params = new URLSearchParams();
+    if (opts?.from != null) params.set("from", String(opts.from));
+    if (opts?.to != null) params.set("to", String(opts.to));
+    if (opts?.limit != null) params.set("limit", String(opts.limit));
+    return fetchJson<{ data: CheckpointHistoryPoint[] }>(`/networks/${id}/checkpoints/history?${params.toString()}`);
+  },
+  getCheckpointStats: (id: string) => fetchJson<{ data: CheckpointStatsData | null }>(`/networks/${id}/checkpoints/stats`),
 };

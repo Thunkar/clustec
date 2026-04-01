@@ -86,11 +86,43 @@ export const blocks = pgTable(
     feePerL2Gas: text("fee_per_l2_gas"),
     coinbase: text("coinbase"),
     feeRecipient: text("fee_recipient"),
+    checkpointNumber: bigint("checkpoint_number", { mode: "number" }),
+    indexWithinCheckpoint: integer("index_within_checkpoint"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (t) => [
     unique("blocks_network_block").on(t.networkId, t.blockNumber),
     index("blocks_network_idx").on(t.networkId),
+    index("blocks_checkpoint_idx").on(t.networkId, t.checkpointNumber),
+  ]
+);
+
+export const checkpoints = pgTable(
+  "checkpoints",
+  {
+    id: serial("id").primaryKey(),
+    networkId: text("network_id")
+      .references(() => networks.id)
+      .notNull(),
+    checkpointNumber: bigint("checkpoint_number", { mode: "number" }).notNull(),
+    slotNumber: bigint("slot_number", { mode: "number" }),
+    startBlock: bigint("start_block", { mode: "number" }),
+    endBlock: bigint("end_block", { mode: "number" }),
+    blockCount: integer("block_count").notNull().default(0),
+    totalManaUsed: text("total_mana_used"),
+    totalFees: text("total_fees"),
+    coinbase: text("coinbase"),
+    feeRecipient: text("fee_recipient"),
+    attestationCount: integer("attestation_count"),
+    l1BlockNumber: bigint("l1_block_number", { mode: "number" }),
+    l1Timestamp: bigint("l1_timestamp", { mode: "number" }),
+    provenAt: timestamp("proven_at"),
+    finalizedAt: timestamp("finalized_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [
+    unique("checkpoints_network_num").on(t.networkId, t.checkpointNumber),
+    index("checkpoints_network_idx").on(t.networkId),
   ]
 );
 

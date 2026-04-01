@@ -4,12 +4,13 @@ import { L2TipsMemoryStore } from "@aztec/stdlib/block";
 import { TxHash } from "@aztec/stdlib/tx";
 import type { BlockNumber } from "@aztec/foundation/branded-types";
 import type { Logger } from "@aztec/foundation/log";
-import { eq, and, gt, lte, inArray } from "drizzle-orm";
+import { eq, and, gt, lte, inArray, sql } from "drizzle-orm";
 import {
   type Db,
   blocks,
   transactions,
   syncCursors,
+  checkpoints,
   contractInteractions,
   featureVectors,
   noteHashes,
@@ -104,6 +105,8 @@ export class BlockProcessor extends L2TipsMemoryStore {
           feePerL2Gas: block.header.globalVariables.gasFees.feePerL2Gas.toString(),
           coinbase: block.header.globalVariables.coinbase.toString(),
           feeRecipient: block.header.globalVariables.feeRecipient.toString(),
+          checkpointNumber: block.checkpointNumber,
+          indexWithinCheckpoint: block.indexWithinCheckpoint,
         })
         .onConflictDoNothing();
 
@@ -350,8 +353,41 @@ export class BlockProcessor extends L2TipsMemoryStore {
       })
       .where(eq(syncCursors.networkId, this.networkId));
 
+    // Store checkpoint details
+    const cp = event.checkpoint;
+    const cpBlocks = cp.checkpoint.blocks;
+    const header = cp.checkpoint.header;
+    const blockNumbers = cpBlocks.map((b) => b.number);
+    const startBlock = blockNumbers.length > 0 ? Math.min(...blockNumbers) : null;
+    const endBlock = blockNumbers.length > 0 ? Math.max(...blockNumbers) : null;
+
+    // Sum fees across all blocks in checkpoint
+    const totalFees = cpBlocks.reduce(
+      (sum, b) => sum + b.header.totalFees.toBigInt(),
+      0n,
+    );
+
+    await this.db
+      .insert(checkpoints)
+      .values({
+        networkId: this.networkId,
+        checkpointNumber: cp.checkpoint.number,
+        slotNumber: Number(cp.checkpoint.slot),
+        startBlock,
+        endBlock,
+        blockCount: cpBlocks.length,
+        totalManaUsed: header.totalManaUsed.toBigInt().toString(),
+        totalFees: totalFees.toString(),
+        coinbase: header.coinbase.toString(),
+        feeRecipient: header.feeRecipient.toString(),
+        attestationCount: cp.attestations.length,
+        l1BlockNumber: Number(cp.l1.blockNumber),
+        l1Timestamp: Number(cp.l1.timestamp),
+      })
+      .onConflictDoNothing();
+
     this.log?.info(
-      ` Chain checkpointed at block ${event.block.number}`,
+      `Chain checkpointed at block ${event.block.number} (checkpoint #${cp.checkpoint.number}, ${cpBlocks.length} blocks)`,
     );
   }
 
@@ -379,8 +415,20 @@ export class BlockProcessor extends L2TipsMemoryStore {
       })
       .where(eq(syncCursors.networkId, this.networkId));
 
+    // Mark checkpoints containing proven blocks
+    await this.db
+      .update(checkpoints)
+      .set({ provenAt: new Date() })
+      .where(
+        and(
+          eq(checkpoints.networkId, this.networkId),
+          lte(checkpoints.endBlock, event.block.number),
+          sql`${checkpoints.provenAt} IS NULL`,
+        ),
+      );
+
     this.log?.info(
-      ` Chain proven at block ${event.block.number}`,
+      `Chain proven at block ${event.block.number}`,
     );
   }
 
@@ -408,8 +456,20 @@ export class BlockProcessor extends L2TipsMemoryStore {
       })
       .where(eq(syncCursors.networkId, this.networkId));
 
+    // Mark checkpoints containing finalized blocks
+    await this.db
+      .update(checkpoints)
+      .set({ finalizedAt: new Date() })
+      .where(
+        and(
+          eq(checkpoints.networkId, this.networkId),
+          lte(checkpoints.endBlock, event.block.number),
+          sql`${checkpoints.finalizedAt} IS NULL`,
+        ),
+      );
+
     this.log?.info(
-      ` Chain finalized at block ${event.block.number}`,
+      `Chain finalized at block ${event.block.number}`,
     );
   }
 
