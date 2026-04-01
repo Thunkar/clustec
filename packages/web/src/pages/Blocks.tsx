@@ -571,19 +571,22 @@ export function Blocks() {
           fill={fill}
           fillOpacity={fillOpacity}
           stroke={fill}
-          strokeOpacity={0.15}
+          strokeOpacity={0.2}
           ifOverflow="extendDomain"
-          label={label ? (props: { viewBox?: { x?: number; y?: number } }) => {
+          label={label ? (props: { viewBox?: { x?: number; y?: number; width?: number } }) => {
             const vx = props.viewBox?.x ?? 0;
+            const vw = props.viewBox?.width ?? 0;
             const vy = props.viewBox?.y ?? 0;
+            const cx = vx + vw / 2;
             return (
               <text
                 x={0} y={0}
-                transform={`translate(${vx + 4}, ${vy + 2}) rotate(35)`}
-                fontSize={7}
-                fill={theme.colors.textMuted}
-                opacity={0.8}
+                transform={`translate(${cx}, ${vy - 26}) rotate(-55)`}
+                fontSize={9}
+                fill={theme.colors.text}
+                opacity={0.6}
                 fontFamily="monospace"
+                textAnchor="middle"
               >
                 {label}
               </text>
@@ -812,7 +815,7 @@ export function Blocks() {
               <ResponsiveContainer width="100%" height={250}>
                 <ComposedChart
                   data={chartData}
-                  margin={{ top: 20, right: 10, bottom: 5, left: 10 }}
+                  margin={{ top: 55, right: 10, bottom: 0, left: 10 }}
                   {...zoomProps}
                 >
                   <CartesianGrid
@@ -820,6 +823,7 @@ export function Blocks() {
                     stroke={theme.colors.border}
                     opacity={0.3}
                   />
+                  {makeCpBands("mana")}
                   <XAxis
                     dataKey="block"
                     type="number"
@@ -861,7 +865,6 @@ export function Blocks() {
                       }}
                     />
                   )}
-                  {makeCpBands("mana")}
                   {selectionOverlay}
                 </ComposedChart>
               </ResponsiveContainer>
@@ -877,7 +880,7 @@ export function Blocks() {
               <ResponsiveContainer width="100%" height={200}>
                 <ComposedChart
                   data={chartData}
-                  margin={{ top: 20, right: 10, bottom: 5, left: 10 }}
+                  margin={{ top: 55, right: 10, bottom: 0, left: 10 }}
                   {...zoomProps}
                 >
                   <CartesianGrid
@@ -885,6 +888,7 @@ export function Blocks() {
                     stroke={theme.colors.border}
                     opacity={0.3}
                   />
+                  {makeCpBands("txs")}
                   <XAxis
                     dataKey="block"
                     type="number"
@@ -921,7 +925,6 @@ export function Blocks() {
                       }}
                     />
                   )}
-                  {makeCpBands("txs")}
                   {selectionOverlay}
                 </ComposedChart>
               </ResponsiveContainer>
@@ -937,7 +940,7 @@ export function Blocks() {
               <ResponsiveContainer width="100%" height={200}>
                 <ComposedChart
                   data={chartData.filter((d) => d.blockTime != null)}
-                  margin={{ top: 20, right: 10, bottom: 5, left: 10 }}
+                  margin={{ top: 55, right: 10, bottom: 0, left: 10 }}
                   {...zoomProps}
                 >
                   <CartesianGrid
@@ -945,6 +948,7 @@ export function Blocks() {
                     stroke={theme.colors.border}
                     opacity={0.3}
                   />
+                  {makeCpBands("blockTime")}
                   <XAxis
                     dataKey="block"
                     type="number"
@@ -984,7 +988,6 @@ export function Blocks() {
                       }}
                     />
                   )}
-                  {makeCpBands("blockTime")}
                   {selectionOverlay}
                 </ComposedChart>
               </ResponsiveContainer>
@@ -1000,7 +1003,7 @@ export function Blocks() {
               <ResponsiveContainer width="100%" height={200}>
                 <ComposedChart
                   data={chartData}
-                  margin={{ top: 20, right: 10, bottom: 5, left: 10 }}
+                  margin={{ top: 55, right: 10, bottom: 0, left: 10 }}
                   {...zoomProps}
                 >
                   <CartesianGrid
@@ -1008,6 +1011,7 @@ export function Blocks() {
                     stroke={theme.colors.border}
                     opacity={0.3}
                   />
+                  {makeCpBands("fees")}
                   <XAxis
                     dataKey="block"
                     type="number"
@@ -1040,7 +1044,6 @@ export function Blocks() {
                     fill={theme.colors.success}
                     fillOpacity={0.1}
                   />
-                  {makeCpBands("fees")}
                   {selectionOverlay}
                 </ComposedChart>
               </ResponsiveContainer>
