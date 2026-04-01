@@ -4,7 +4,7 @@ import { OrbitControls, Html, Line } from "@react-three/drei";
 import * as THREE from "three";
 import styled from "@emotion/styled";
 import { theme } from "../lib/theme";
-import type { UmapPoint } from "../lib/api";
+import type { UmapCluster, UmapOutlier } from "../lib/api";
 import { useMyTxs } from "../stores/my-txs";
 
 const Container = styled.div`
@@ -108,81 +108,61 @@ function Axes({ size = 6 }: { size?: number }) {
 }
 
 interface PointCloudProps {
-  points: UmapPoint[];
+  clusters: UmapCluster[];
+  outliers: UmapOutlier[];
   trackedHashes: Set<string>;
   onClusterClick?: (clusterId: number) => void;
-  onOutlierClick?: (point: UmapPoint) => void;
+  onOutlierClick?: (outlier: UmapOutlier) => void;
 }
 
-function PointCloud({ points, trackedHashes, onClusterClick, onOutlierClick }: PointCloudProps) {
+function PointCloud({ clusters, outliers, trackedHashes, onClusterClick, onOutlierClick }: PointCloudProps) {
   const outlierMeshRef = useRef<THREE.InstancedMesh>(null);
   const blobMeshRef = useRef<THREE.InstancedMesh>(null);
   const { camera, pointer, size: canvasSize, gl } = useThree();
-  const raycaster = useMemo(() => new THREE.Raycaster(), []);
   const [hoveredOutlierIdx, setHoveredOutlierIdx] = useState<number | null>(null);
   const [hoveredBlobIdx, setHoveredBlobIdx] = useState<number | null>(null);
 
-  const { blobs, outlierPoints, allPositions } = useMemo(() => {
-    const xs = points.map((p) => p.x);
-    const ys = points.map((p) => p.y);
-    const zs = points.map((p) => p.z ?? 0);
-    const xMin = Math.min(...xs), xMax = Math.max(...xs);
-    const yMin = Math.min(...ys), yMax = Math.max(...ys);
-    const zMin = Math.min(...zs), zMax = Math.max(...zs);
+  const { blobs, outlierPositions } = useMemo(() => {
+    // Collect all coordinates for normalization range
+    const allX = [...clusters.map((c) => c.cx), ...outliers.map((o) => o.x)];
+    const allY = [...clusters.map((c) => c.cy), ...outliers.map((o) => o.y)];
+    const allZ = [...clusters.map((c) => c.cz), ...outliers.map((o) => o.z)];
+    const xMin = Math.min(...allX), xMax = Math.max(...allX);
+    const yMin = Math.min(...allY), yMax = Math.max(...allY);
+    const zMin = Math.min(...allZ), zMax = Math.max(...allZ);
     const xRange = xMax - xMin || 1;
     const yRange = yMax - yMin || 1;
     const zRange = zMax - zMin || 1;
-
-    // Normalize each axis independently to [-8, 8] so UMAP's
-    // spread/separation is preserved across all three dimensions
     const SCALE = 16;
 
-    const posArr = new Float32Array(points.length * 3);
-    const oPoints: number[] = [];
-    const clusterSums = new Map<number, { sx: number; sy: number; sz: number; count: number }>();
+    const norm = (x: number, min: number, range: number) => ((x - min) / range - 0.5) * SCALE;
 
-    for (let i = 0; i < points.length; i++) {
-      const p = points[i];
-      const nx = ((p.x - xMin) / xRange - 0.5) * SCALE;
-      const ny = ((p.y - yMin) / yRange - 0.5) * SCALE;
-      const nz = (((p.z ?? 0) - zMin) / zRange - 0.5) * SCALE;
-      posArr[i * 3] = nx;
-      posArr[i * 3 + 1] = ny;
-      posArr[i * 3 + 2] = nz;
-
-      const isOutlier = p.clusterId === null || p.clusterId === -1;
-      if (isOutlier) {
-        oPoints.push(i);
-      } else {
-        const entry = clusterSums.get(p.clusterId!);
-        if (entry) { entry.sx += nx; entry.sy += ny; entry.sz += nz; entry.count++; }
-        else { clusterSums.set(p.clusterId!, { sx: nx, sy: ny, sz: nz, count: 1 }); }
-      }
-    }
-
-    // Find max count for normalization
-    let maxCount = 0;
-    for (const { count } of clusterSums.values()) {
-      if (count > maxCount) maxCount = count;
-    }
-
-    const blobArr: ClusterBlob[] = [];
-    for (const [clusterId, { sx, sy, sz, count }] of clusterSums) {
-      // Radius: normalized cbrt so blobs scale visually from ~0.08 to ~0.5
-      // cbrt gives perceptual volume scaling (radius^3 ~ count)
-      const normalizedSize = Math.cbrt(count) / Math.cbrt(maxCount);
-      const radius = 0.08 + normalizedSize * 0.42;
-      blobArr.push({
-        clusterId,
-        cx: sx / count, cy: sy / count, cz: sz / count,
-        radius, count,
-        color: CLUSTER_COLORS[clusterId % CLUSTER_COLORS.length],
-      });
-    }
+    // Build blobs from pre-computed centroids
+    const maxCount = clusters.length > 0 ? Math.max(...clusters.map((c) => c.count)) : 1;
+    const blobArr: ClusterBlob[] = clusters.map((c) => {
+      const normalizedSize = Math.cbrt(c.count) / Math.cbrt(maxCount);
+      return {
+        clusterId: c.clusterId,
+        cx: norm(c.cx, xMin, xRange),
+        cy: norm(c.cy, yMin, yRange),
+        cz: norm(c.cz, zMin, zRange),
+        radius: 0.08 + normalizedSize * 0.42,
+        count: c.count,
+        color: CLUSTER_COLORS[c.clusterId % CLUSTER_COLORS.length],
+      };
+    });
     blobArr.sort((a, b) => a.clusterId - b.clusterId);
 
-    return { blobs: blobArr, outlierPoints: oPoints, allPositions: posArr };
-  }, [points]);
+    // Build outlier positions
+    const oPos = new Float32Array(outliers.length * 3);
+    for (let i = 0; i < outliers.length; i++) {
+      oPos[i * 3] = norm(outliers[i].x, xMin, xRange);
+      oPos[i * 3 + 1] = norm(outliers[i].y, yMin, yRange);
+      oPos[i * 3 + 2] = norm(outliers[i].z, zMin, zRange);
+    }
+
+    return { blobs: blobArr, outlierPositions: oPos };
+  }, [clusters, outliers]);
 
   // Set up blob instanced mesh
   useEffect(() => {
@@ -206,12 +186,11 @@ function PointCloud({ points, trackedHashes, onClusterClick, onOutlierClick }: P
   // Set up outlier mesh instances
   useEffect(() => {
     const mesh = outlierMeshRef.current;
-    if (!mesh || outlierPoints.length === 0) return;
+    if (!mesh || outliers.length === 0) return;
     const dummy = new THREE.Object3D();
-    for (let j = 0; j < outlierPoints.length; j++) {
-      const i = outlierPoints[j];
-      const isTracked = points[i].txHash ? trackedHashes.has(points[i].txHash) : false;
-      dummy.position.set(allPositions[i * 3], allPositions[i * 3 + 1], allPositions[i * 3 + 2]);
+    for (let j = 0; j < outliers.length; j++) {
+      const isTracked = trackedHashes.has(outliers[j].txHash);
+      dummy.position.set(outlierPositions[j * 3], outlierPositions[j * 3 + 1], outlierPositions[j * 3 + 2]);
       dummy.scale.setScalar(isTracked ? 0.12 : 0.08);
       dummy.updateMatrix();
       mesh.setMatrixAt(j, dummy.matrix);
@@ -222,19 +201,18 @@ function PointCloud({ points, trackedHashes, onClusterClick, onOutlierClick }: P
     }
     mesh.instanceMatrix.needsUpdate = true;
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-  }, [outlierPoints, allPositions, points, trackedHashes]);
+  }, [outliers, outlierPositions, trackedHashes]);
 
   // Screen-space proximity for outlier detection
   const findNearestOutlier = useCallback((ndc: THREE.Vector2): number | null => {
-    if (outlierPoints.length === 0) return null;
+    if (outliers.length === 0) return null;
     const SCREEN_THRESHOLD = 14;
     let bestIdx: number | null = null;
     let bestDist = Infinity;
     const pos = new THREE.Vector3();
 
-    for (let j = 0; j < outlierPoints.length; j++) {
-      const i = outlierPoints[j];
-      pos.set(allPositions[i * 3], allPositions[i * 3 + 1], allPositions[i * 3 + 2]);
+    for (let j = 0; j < outliers.length; j++) {
+      pos.set(outlierPositions[j * 3], outlierPositions[j * 3 + 1], outlierPositions[j * 3 + 2]);
       pos.project(camera);
       if (pos.z >= 1) continue;
       const sx = (pos.x * 0.5 + 0.5) * canvasSize.width;
@@ -246,11 +224,11 @@ function PointCloud({ points, trackedHashes, onClusterClick, onOutlierClick }: P
       const dist = Math.sqrt(dx * dx + dy * dy);
       if (dist < SCREEN_THRESHOLD && dist < bestDist) {
         bestDist = dist;
-        bestIdx = i;
+        bestIdx = j;
       }
     }
     return bestIdx;
-  }, [outlierPoints, allPositions, camera, canvasSize]);
+  }, [outliers, outlierPositions, camera, canvasSize]);
 
   // Screen-space proximity for blob detection
   const findNearestBlob = useCallback((ndc: THREE.Vector2): number | null => {
@@ -326,7 +304,7 @@ function PointCloud({ points, trackedHashes, onClusterClick, onOutlierClick }: P
         if (dx * dx + dy * dy > DRAG_THRESHOLD * DRAG_THRESHOLD) return;
       }
       if (hoveredOutlierIdx !== null && onOutlierClick) {
-        onOutlierClick(points[hoveredOutlierIdx]);
+        onOutlierClick(outliers[hoveredOutlierIdx]);
       } else if (hoveredBlobIdx !== null && onClusterClick) {
         onClusterClick(blobs[hoveredBlobIdx].clusterId);
       }
@@ -337,9 +315,9 @@ function PointCloud({ points, trackedHashes, onClusterClick, onOutlierClick }: P
       canvas.removeEventListener("pointerdown", handlePointerDown);
       canvas.removeEventListener("click", handleClick);
     };
-  }, [hoveredOutlierIdx, hoveredBlobIdx, onOutlierClick, onClusterClick, points, blobs, gl]);
+  }, [hoveredOutlierIdx, hoveredBlobIdx, onOutlierClick, onClusterClick, outliers, blobs, gl]);
 
-  const hoveredOutlier = hoveredOutlierIdx !== null ? points[hoveredOutlierIdx] : null;
+  const hoveredOutlier = hoveredOutlierIdx !== null ? outliers[hoveredOutlierIdx] : null;
   const hoveredBlob = hoveredBlobIdx !== null ? blobs[hoveredBlobIdx] : null;
 
   // Update blob colors to highlight hovered
@@ -380,10 +358,10 @@ function PointCloud({ points, trackedHashes, onClusterClick, onOutlierClick }: P
       )}
 
       {/* Outliers — octahedra with emissive glow */}
-      {outlierPoints.length > 0 && (
+      {outliers.length > 0 && (
         <instancedMesh
           ref={outlierMeshRef}
-          args={[undefined, undefined, outlierPoints.length]}
+          args={[undefined, undefined, outliers.length]}
           frustumCulled={false}
           renderOrder={1}
         >
@@ -401,15 +379,15 @@ function PointCloud({ points, trackedHashes, onClusterClick, onOutlierClick }: P
       {hoveredOutlier && hoveredOutlierIdx !== null && (
         <Html
           position={[
-            allPositions[hoveredOutlierIdx * 3],
-            allPositions[hoveredOutlierIdx * 3 + 1] + 0.3,
-            allPositions[hoveredOutlierIdx * 3 + 2],
+            outlierPositions[hoveredOutlierIdx * 3],
+            outlierPositions[hoveredOutlierIdx * 3 + 1] + 0.3,
+            outlierPositions[hoveredOutlierIdx * 3 + 2],
           ]}
           style={{ pointerEvents: "none" }}
           zIndexRange={[100, 0]}
         >
           <TooltipContent>
-            <div>{hoveredOutlier.txHash ? `${hoveredOutlier.txHash.slice(0, 18)}...` : "Outlier"}</div>
+            <div>{hoveredOutlier.txHash.slice(0, 18)}...</div>
             <div style={{ color: OUTLIER_COLOR }}>
               ⚠ OUTLIER
               {hoveredOutlier.outlierScore != null &&
@@ -454,21 +432,22 @@ function PointCloud({ points, trackedHashes, onClusterClick, onOutlierClick }: P
 }
 
 interface ScatterPlot3DProps {
-  points: UmapPoint[];
+  clusters: UmapCluster[];
+  outliers: UmapOutlier[];
   height?: number | string;
   onClusterClick?: (clusterId: number) => void;
-  onOutlierClick?: (point: UmapPoint) => void;
+  onOutlierClick?: (outlier: UmapOutlier) => void;
 }
 
-export function ScatterPlot3D({ points, height = 500, onClusterClick, onOutlierClick }: ScatterPlot3DProps) {
+export function ScatterPlot3D({ clusters, outliers, height = 500, onClusterClick, onOutlierClick }: ScatterPlot3DProps) {
   const { isTracked } = useMyTxs();
   const trackedHashes = useMemo(() => {
     const set = new Set<string>();
-    for (const p of points) {
-      if (p.txHash && isTracked(p.txHash)) set.add(p.txHash);
+    for (const o of outliers) {
+      if (isTracked(o.txHash)) set.add(o.txHash);
     }
     return set;
-  }, [points, isTracked]);
+  }, [outliers, isTracked]);
 
   return (
     <Container style={{ height }}>
@@ -478,7 +457,8 @@ export function ScatterPlot3D({ points, height = 500, onClusterClick, onOutlierC
         <directionalLight position={[-5, -5, -5]} intensity={0.3} />
         <Axes />
         <PointCloud
-          points={points}
+          clusters={clusters}
+          outliers={outliers}
           trackedHashes={trackedHashes}
           onClusterClick={onClusterClick}
           onOutlierClick={onOutlierClick}

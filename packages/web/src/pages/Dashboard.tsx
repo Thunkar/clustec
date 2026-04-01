@@ -6,7 +6,7 @@ import {
   useNetworkStats,
   useClusterRuns,
   useClusterDetail,
-  useUmapPoints,
+  useUmapData,
   useFeePayerStats,
 } from "../api/hooks";
 import { ScatterPlot3D } from "../components/ScatterPlot3D";
@@ -119,7 +119,7 @@ export function Dashboard() {
   const latestRun = runs?.[0];
   const runId = latestRun?.id ?? 0;
   const { data: detail } = useClusterDetail(selectedNetwork, runId);
-  const { data: umapData } = useUmapPoints(selectedNetwork, runId);
+  const { data: umapData } = useUmapData(selectedNetwork, runId);
   const { data: feePayerData } = useFeePayerStats(selectedNetwork);
 
   const pieData = useMemo(() => {
@@ -275,7 +275,7 @@ export function Dashboard() {
       </TopRow>
 
       {/* 3D UMAP Projection */}
-      {umapData?.points && umapData.points.length > 0 && (
+      {umapData && (umapData.clusters.length > 0 || umapData.outliers.length > 0) && (
         <PlotSection>
           <PlotCaption>
             3D cluster visualization. Drag to rotate, scroll to zoom, click a
@@ -290,12 +290,13 @@ export function Dashboard() {
             }}
           >
             <ScatterPlot3D
-              points={umapData.points}
+              clusters={umapData.clusters}
+              outliers={umapData.outliers}
               height="100%"
               onClusterClick={(clusterId) =>
                 navigate(`/privacy-sets?cluster=${clusterId}`)
               }
-              onOutlierClick={(p) => p.txHash && navigate(`/tx/${p.txHash}`)}
+              onOutlierClick={(o) => navigate(`/tx/${o.txHash}`)}
             />
           </Card>
         </PlotSection>
