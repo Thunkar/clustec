@@ -317,13 +317,16 @@ export function registerBlockRoutes(app: FastifyInstance, db: Db) {
   // ── Checkpoint stats ──────────────────────────────────────
   app.get<{
     Params: { id: string };
-    Querystring: { from?: string; to?: string };
+    Querystring: { from?: string; to?: string; fromBlock?: string; toBlock?: string };
   }>("/api/networks/:id/checkpoints/stats", async (request) => {
     const { id } = request.params;
 
     const conditions = [eq(checkpoints.networkId, id)];
     if (request.query.from) conditions.push(gte(checkpoints.checkpointNumber, parseInt(request.query.from, 10)));
     if (request.query.to) conditions.push(lte(checkpoints.checkpointNumber, parseInt(request.query.to, 10)));
+    // Filter by block range (checkpoints overlapping the range)
+    if (request.query.fromBlock) conditions.push(gte(checkpoints.endBlock, parseInt(request.query.fromBlock, 10)));
+    if (request.query.toBlock) conditions.push(lte(checkpoints.startBlock, parseInt(request.query.toBlock, 10)));
 
     const [row] = await db.execute<{
       count: number;

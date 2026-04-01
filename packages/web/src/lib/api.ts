@@ -726,5 +726,11 @@ export const api = {
     if (opts?.limit != null) params.set("limit", String(opts.limit));
     return fetchJson<{ data: CheckpointHistoryPoint[] }>(`/networks/${id}/checkpoints/history?${params.toString()}`);
   },
-  getCheckpointStats: (id: string) => fetchJson<{ data: CheckpointStatsData | null }>(`/networks/${id}/checkpoints/stats`),
+  getCheckpointStats: (id: string, opts?: { fromBlock?: number; toBlock?: number }) => {
+    const params = new URLSearchParams();
+    if (opts?.fromBlock != null) params.set("fromBlock", String(opts.fromBlock));
+    if (opts?.toBlock != null) params.set("toBlock", String(opts.toBlock));
+    const qs = params.toString();
+    return fetchJson<{ data: CheckpointStatsData | null }>(`/networks/${id}/checkpoints/stats${qs ? `?${qs}` : ""}`);
+  },
 };
