@@ -140,8 +140,7 @@ export interface ClusterRun {
 }
 
 export interface UmapPoint {
-  txId: number;
-  txHash: string;
+  txHash: string | null;
   x: number;
   y: number;
   z: number | null;

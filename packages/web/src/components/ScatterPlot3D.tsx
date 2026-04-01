@@ -210,7 +210,7 @@ function PointCloud({ points, trackedHashes, onClusterClick, onOutlierClick }: P
     const dummy = new THREE.Object3D();
     for (let j = 0; j < outlierPoints.length; j++) {
       const i = outlierPoints[j];
-      const isTracked = trackedHashes.has(points[i].txHash);
+      const isTracked = points[i].txHash ? trackedHashes.has(points[i].txHash) : false;
       dummy.position.set(allPositions[i * 3], allPositions[i * 3 + 1], allPositions[i * 3 + 2]);
       dummy.scale.setScalar(isTracked ? 0.12 : 0.08);
       dummy.updateMatrix();
@@ -409,7 +409,7 @@ function PointCloud({ points, trackedHashes, onClusterClick, onOutlierClick }: P
           zIndexRange={[100, 0]}
         >
           <TooltipContent>
-            <div>{hoveredOutlier.txHash.slice(0, 18)}...</div>
+            <div>{hoveredOutlier.txHash ? `${hoveredOutlier.txHash.slice(0, 18)}...` : "Outlier"}</div>
             <div style={{ color: OUTLIER_COLOR }}>
               ⚠ OUTLIER
               {hoveredOutlier.outlierScore != null &&
@@ -465,7 +465,7 @@ export function ScatterPlot3D({ points, height = 500, onClusterClick, onOutlierC
   const trackedHashes = useMemo(() => {
     const set = new Set<string>();
     for (const p of points) {
-      if (isTracked(p.txHash)) set.add(p.txHash);
+      if (p.txHash && isTracked(p.txHash)) set.add(p.txHash);
     }
     return set;
   }, [points, isTracked]);
