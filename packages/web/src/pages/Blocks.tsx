@@ -812,7 +812,7 @@ export function Blocks() {
               <ResponsiveContainer width="100%" height={250}>
                 <ComposedChart
                   data={chartData}
-                  margin={{ top: 5, right: 10, bottom: 5, left: 10 }}
+                  margin={{ top: 20, right: 10, bottom: 5, left: 10 }}
                   {...zoomProps}
                 >
                   <CartesianGrid
@@ -877,7 +877,7 @@ export function Blocks() {
               <ResponsiveContainer width="100%" height={200}>
                 <ComposedChart
                   data={chartData}
-                  margin={{ top: 5, right: 10, bottom: 5, left: 10 }}
+                  margin={{ top: 20, right: 10, bottom: 5, left: 10 }}
                   {...zoomProps}
                 >
                   <CartesianGrid
@@ -937,7 +937,7 @@ export function Blocks() {
               <ResponsiveContainer width="100%" height={200}>
                 <ComposedChart
                   data={chartData.filter((d) => d.blockTime != null)}
-                  margin={{ top: 5, right: 10, bottom: 5, left: 10 }}
+                  margin={{ top: 20, right: 10, bottom: 5, left: 10 }}
                   {...zoomProps}
                 >
                   <CartesianGrid
@@ -1000,7 +1000,7 @@ export function Blocks() {
               <ResponsiveContainer width="100%" height={200}>
                 <ComposedChart
                   data={chartData}
-                  margin={{ top: 5, right: 10, bottom: 5, left: 10 }}
+                  margin={{ top: 20, right: 10, bottom: 5, left: 10 }}
                   {...zoomProps}
                 >
                   <CartesianGrid
