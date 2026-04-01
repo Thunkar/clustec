@@ -18,7 +18,13 @@ import {
 } from "recharts";
 import { theme } from "../lib/theme";
 import { useNetworkStore } from "../stores/network";
-import { useBlockHistory, useBlockStats, useBlockConfig, useCurrentFees, useCheckpointStats } from "../api/hooks";
+import {
+  useBlockHistory,
+  useBlockStats,
+  useBlockConfig,
+  useCurrentFees,
+  useCheckpointStats,
+} from "../api/hooks";
 import { formatFJ } from "../lib/format";
 import {
   PageContainer,
@@ -29,9 +35,10 @@ import {
   Loading,
 } from "../components/ui";
 
-type TimeRange = "100" | "500" | "1000" | "5000";
+type TimeRange = "20" | "100" | "500" | "1000" | "5000";
 
 const RANGE_LABELS: Record<TimeRange, string> = {
+  "20": "20 blocks",
   "100": "100 blocks",
   "500": "500 blocks",
   "1000": "1K blocks",
@@ -63,8 +70,13 @@ const RefreshButton = styled.button`
   cursor: pointer;
   font-size: ${theme.fontSize.md};
   line-height: 1;
-  transition: color 0.15s, background 0.15s;
-  &:hover { color: ${theme.colors.text}; background: ${theme.colors.bgHover}; }
+  transition:
+    color 0.15s,
+    background 0.15s;
+  &:hover {
+    color: ${theme.colors.text};
+    background: ${theme.colors.bgHover};
+  }
 `;
 
 const ResetZoomButton = styled.button`
@@ -77,7 +89,9 @@ const ResetZoomButton = styled.button`
   font-size: ${theme.fontSize.xs};
   font-family: monospace;
   transition: background 0.15s;
-  &:hover { background: ${theme.colors.warning}22; }
+  &:hover {
+    background: ${theme.colors.warning}22;
+  }
 `;
 
 const RangeSelector = styled.div`
@@ -98,8 +112,13 @@ const NavButton = styled.button<{ disabled?: boolean }>`
   cursor: ${(p) => (p.disabled ? "default" : "pointer")};
   font-size: ${theme.fontSize.sm};
   line-height: 1;
-  transition: color 0.15s, background 0.15s;
-  &:hover:not(:disabled) { color: ${theme.colors.text}; background: ${theme.colors.bgHover}; }
+  transition:
+    color 0.15s,
+    background 0.15s;
+  &:hover:not(:disabled) {
+    color: ${theme.colors.text};
+    background: ${theme.colors.bgHover};
+  }
 `;
 
 const RangeButton = styled.button<{ active: boolean }>`
@@ -111,9 +130,12 @@ const RangeButton = styled.button<{ active: boolean }>`
   cursor: pointer;
   font-size: ${theme.fontSize.xs};
   font-family: monospace;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
   &:hover {
-    background: ${(p) => (p.active ? theme.colors.primary : theme.colors.bgHover)};
+    background: ${(p) =>
+      p.active ? theme.colors.primary : theme.colors.bgHover};
     color: ${theme.colors.text};
   }
 `;
@@ -145,8 +167,12 @@ const CompactStatCard = styled(Card)`
   text-align: center;
 
   @media (max-width: 768px) {
-    ${StatValue} { font-size: ${theme.fontSize.sm}; }
-    ${StatLabel} { font-size: 10px; }
+    ${StatValue} {
+      font-size: ${theme.fontSize.sm};
+    }
+    ${StatLabel} {
+      font-size: 10px;
+    }
   }
 `;
 
@@ -222,8 +248,14 @@ const CpLegendDot = styled.span<{ opacity: number }>`
 `;
 
 const PROPOSER_COLORS = [
-  "#8b7dff", "#ff7ea0", "#5aeaa0", "#ffd080", "#80d4ff",
-  "#ffb080", "#d580ff", "#80ffd8",
+  "#8b7dff",
+  "#ff7ea0",
+  "#5aeaa0",
+  "#ffd080",
+  "#80d4ff",
+  "#ffb080",
+  "#d580ff",
+  "#80ffd8",
 ];
 const OTHER_COLOR = "#555570";
 const OTHER_THRESHOLD = 3; // bundle proposers with < 3% share
@@ -233,7 +265,11 @@ function abbreviateEthAddress(addr: string): string {
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 }
 
-function feeToUsd(raw: number, ethPerFeeAssetE12: string, ethUsdPrice: number): number {
+function feeToUsd(
+  raw: number,
+  ethPerFeeAssetE12: string,
+  ethUsdPrice: number,
+): number {
   return (raw / 1e18) * (Number(ethPerFeeAssetE12) / 1e12) * ethUsdPrice;
 }
 
@@ -245,7 +281,9 @@ function formatUsd(v: number): string {
 
 export function Blocks() {
   const { selectedNetwork } = useNetworkStore();
-  const [range, setRange] = useState<TimeRange>("100");
+  const [range, setRange] = useState<TimeRange>(() =>
+    window.innerWidth <= 768 ? "20" : "100",
+  );
 
   // Zoom state
   const [zoomFrom, setZoomFrom] = useState<number | null>(null);
@@ -259,35 +297,62 @@ export function Blocks() {
   type ChartMouseEvent = any;
   const getBlock = (e: ChartMouseEvent): number | null => {
     if (!e) return null;
-    if (e.activeLabel !== undefined && e.activeLabel !== null) return Number(e.activeLabel);
+    if (e.activeLabel !== undefined && e.activeLabel !== null)
+      return Number(e.activeLabel);
     return e.activePayload?.[0]?.payload?.block ?? null;
   };
   const handleMouseDown = useCallback((e: ChartMouseEvent) => {
     const block = getBlock(e);
     if (block != null && !isNaN(block)) {
-      selectingRef.current = block; selectEndRef.current = null;
-      setSelecting(block); setSelectEnd(null);
+      selectingRef.current = block;
+      selectEndRef.current = null;
+      setSelecting(block);
+      setSelectEnd(null);
     }
   }, []);
   const handleMouseMove = useCallback((e: ChartMouseEvent) => {
     if (selectingRef.current == null) return;
     const block = getBlock(e);
-    if (block != null && !isNaN(block)) { selectEndRef.current = block; setSelectEnd(block); }
+    if (block != null && !isNaN(block)) {
+      selectEndRef.current = block;
+      setSelectEnd(block);
+    }
   }, []);
   const handleMouseUp = useCallback(() => {
-    const s = selectingRef.current, end = selectEndRef.current;
-    if (s != null && end != null && s !== end) { setZoomFrom(Math.min(s, end)); setZoomTo(Math.max(s, end)); }
-    selectingRef.current = null; selectEndRef.current = null;
-    setSelecting(null); setSelectEnd(null);
+    const s = selectingRef.current,
+      end = selectEndRef.current;
+    if (s != null && end != null && s !== end) {
+      setZoomFrom(Math.min(s, end));
+      setZoomTo(Math.max(s, end));
+    }
+    selectingRef.current = null;
+    selectEndRef.current = null;
+    setSelecting(null);
+    setSelectEnd(null);
   }, []);
-  const resetZoom = useCallback(() => { setZoomFrom(null); setZoomTo(null); }, []);
+  const resetZoom = useCallback(() => {
+    setZoomFrom(null);
+    setZoomTo(null);
+  }, []);
   const isZoomed = zoomFrom != null || zoomTo != null;
 
-  const zoomProps = { onMouseDown: handleMouseDown, onMouseMove: handleMouseMove, onMouseUp: handleMouseUp };
-  const selectionOverlay = selecting != null && selectEnd != null ? (
-    <ReferenceArea x1={Math.min(selecting, selectEnd)} x2={Math.max(selecting, selectEnd)}
-      fill={theme.colors.primary} fillOpacity={0.15} stroke={theme.colors.primary} strokeOpacity={0.4} ifOverflow="extendDomain" />
-  ) : null;
+  const zoomProps = {
+    onMouseDown: handleMouseDown,
+    onMouseMove: handleMouseMove,
+    onMouseUp: handleMouseUp,
+  };
+  const selectionOverlay =
+    selecting != null && selectEnd != null ? (
+      <ReferenceArea
+        x1={Math.min(selecting, selectEnd)}
+        x2={Math.max(selecting, selectEnd)}
+        fill={theme.colors.primary}
+        fillOpacity={0.15}
+        stroke={theme.colors.primary}
+        strokeOpacity={0.4}
+        ifOverflow="extendDomain"
+      />
+    ) : null;
 
   const [offset, setOffset] = useState(0); // how many range-widths back from latest
 
@@ -302,8 +367,10 @@ export function Blocks() {
   const latestBlock = globalStats?.data?.blockRange.to ?? null;
   const earliestBlock = globalStats?.data?.blockRange.from ?? 0;
   const rangeBlocks = parseInt(range, 10);
-  const windowEnd = latestBlock != null ? latestBlock - offset * rangeBlocks : null;
-  const fromBlock = windowEnd != null ? Math.max(0, windowEnd - rangeBlocks) : undefined;
+  const windowEnd =
+    latestBlock != null ? latestBlock - offset * rangeBlocks : null;
+  const fromBlock =
+    windowEnd != null ? Math.max(0, windowEnd - rangeBlocks) : undefined;
   const toBlock = windowEnd ?? undefined;
   const canGoBack = fromBlock != null && fromBlock > earliestBlock;
   const canGoForward = offset > 0;
@@ -311,22 +378,36 @@ export function Blocks() {
   // Scoped to the visible range (zoom overrides range selector)
   const effectiveFrom = zoomFrom ?? fromBlock;
   const effectiveTo = zoomTo ?? toBlock;
-  const rangeOpts = useMemo(() => ({ from: effectiveFrom, to: effectiveTo }), [effectiveFrom, effectiveTo]);
-  const cpRangeOpts = useMemo(() => ({ fromBlock: effectiveFrom, toBlock: effectiveTo }), [effectiveFrom, effectiveTo]);
+  const rangeOpts = useMemo(
+    () => ({ from: effectiveFrom, to: effectiveTo }),
+    [effectiveFrom, effectiveTo],
+  );
+  const cpRangeOpts = useMemo(
+    () => ({ fromBlock: effectiveFrom, toBlock: effectiveTo }),
+    [effectiveFrom, effectiveTo],
+  );
   const { data: statsData, isLoading: statsLoading } = useBlockStats(
-    effectiveFrom != null ? selectedNetwork : "", rangeOpts,
+    effectiveFrom != null ? selectedNetwork : "",
+    rangeOpts,
   );
   const { data: cpStatsData } = useCheckpointStats(
-    effectiveFrom != null ? selectedNetwork : "", cpRangeOpts,
+    effectiveFrom != null ? selectedNetwork : "",
+    cpRangeOpts,
   );
 
-  const historyOpts = useMemo(() => ({
-    from: fromBlock,
-    to: toBlock,
-    limit: rangeBlocks + 10,
-  }), [fromBlock, toBlock, rangeBlocks]);
+  const historyOpts = useMemo(
+    () => ({
+      from: fromBlock,
+      to: toBlock,
+      limit: rangeBlocks + 10,
+    }),
+    [fromBlock, toBlock, rangeBlocks],
+  );
   const rangeReady = fromBlock != null;
-  const { data: historyData, isLoading: historyLoading } = useBlockHistory(rangeReady ? selectedNetwork : "", historyOpts);
+  const { data: historyData, isLoading: historyLoading } = useBlockHistory(
+    rangeReady ? selectedNetwork : "",
+    historyOpts,
+  );
 
   const config = configData?.data;
   const stats = statsData?.data;
@@ -345,13 +426,32 @@ export function Blocks() {
       })(),
       checkpointNumber: b.checkpointNumber,
     }));
-    const filtered = (zoomFrom != null && zoomTo != null)
-      ? all.filter((d) => d.block >= zoomFrom && d.block <= zoomTo)
-      : all;
+    const filtered =
+      zoomFrom != null && zoomTo != null
+        ? all.filter((d) => d.block >= zoomFrom && d.block <= zoomTo)
+        : all;
 
     // Compute checkpoint bands from block data
-    const bands: { cpNumber: number; x1: number; x2: number; status: string; blockCount: number; attestations: number | null; totalMana: number }[] = [];
-    const cpMap = new Map<number, { minBlock: number; maxBlock: number; status: string; blockCount: number; attestations: number | null; totalMana: number }>();
+    const bands: {
+      cpNumber: number;
+      x1: number;
+      x2: number;
+      status: string;
+      blockCount: number;
+      attestations: number | null;
+      totalMana: number;
+    }[] = [];
+    const cpMap = new Map<
+      number,
+      {
+        minBlock: number;
+        maxBlock: number;
+        status: string;
+        blockCount: number;
+        attestations: number | null;
+        totalMana: number;
+      }
+    >();
     for (const b of historyData.data) {
       if (b.checkpointNumber == null) continue;
       const mana = b.totalManaUsed ? Number(b.totalManaUsed) : 0;
@@ -360,21 +460,37 @@ export function Blocks() {
         existing.minBlock = Math.min(existing.minBlock, b.blockNumber);
         existing.maxBlock = Math.max(existing.maxBlock, b.blockNumber);
         existing.totalMana += mana;
+        existing.blockCount++;
       } else {
         cpMap.set(b.checkpointNumber, {
           minBlock: b.blockNumber,
           maxBlock: b.blockNumber,
           status: b.cpStatus ?? "checkpointed",
-          blockCount: b.cpBlockCount ?? 1,
+          blockCount: 1,
           attestations: b.cpAttestations,
           totalMana: mana,
         });
       }
     }
     let idx = 0;
-    for (const [cpNum, cp] of [...cpMap.entries()].sort((a, b) => a[0] - b[0])) {
-      if (zoomFrom != null && zoomTo != null && (cp.maxBlock < zoomFrom || cp.minBlock > zoomTo)) continue;
-      bands.push({ cpNumber: cpNum, x1: cp.minBlock - 0.5, x2: cp.maxBlock + 0.5, status: cp.status, blockCount: cp.blockCount, attestations: cp.attestations, totalMana: cp.totalMana });
+    for (const [cpNum, cp] of [...cpMap.entries()].sort(
+      (a, b) => a[0] - b[0],
+    )) {
+      if (
+        zoomFrom != null &&
+        zoomTo != null &&
+        (cp.maxBlock < zoomFrom || cp.minBlock > zoomTo)
+      )
+        continue;
+      bands.push({
+        cpNumber: cpNum,
+        x1: cp.minBlock - 0.5,
+        x2: cp.maxBlock + 0.5,
+        status: cp.status,
+        blockCount: cp.blockCount,
+        attestations: cp.attestations,
+        totalMana: cp.totalMana,
+      });
       idx++;
     }
 
@@ -388,8 +504,17 @@ export function Blocks() {
     const others = stats.proposers.filter((p) => p.share < OTHER_THRESHOLD);
     const otherCount = others.reduce((sum, p) => sum + p.blockCount, 0);
     const otherShare = others.reduce((sum, p) => sum + p.share, 0);
-    const result = main.map((p) => ({ ...p, label: p.coinbase ? abbreviateEthAddress(p.coinbase) : "Unknown" }));
-    if (otherCount > 0) result.push({ coinbase: null, blockCount: otherCount, share: +otherShare.toFixed(1), label: `Other (${others.length})` });
+    const result = main.map((p) => ({
+      ...p,
+      label: p.coinbase ? abbreviateEthAddress(p.coinbase) : "Unknown",
+    }));
+    if (otherCount > 0)
+      result.push({
+        coinbase: null,
+        blockCount: otherCount,
+        share: +otherShare.toFixed(1),
+        label: `Other (${others.length})`,
+      });
     return result;
   }, [stats]);
 
@@ -397,52 +522,76 @@ export function Blocks() {
   const cpStats = cpStatsData?.data;
 
   // Checkpoint band overlays — generate per chart with context-specific labels
+  // Only show labels when zoomed in enough to read them
+  const showCpLabels = chartData.length <= 150;
   type CpChartType = "mana" | "txs" | "blockTime" | "fees";
-  const makeCpBands = (chartType: CpChartType) => checkpointBands.map((band, i) => {
-    const fillOpacity = band.status === "finalized" ? 0.18 : band.status === "proven" ? 0.12 : 0.07;
-    const fill = i % 2 === 0 ? "#6366f1" : "#a78bfa";
-    let label: string | undefined;
-    if (band.blockCount > 1) {
-      switch (chartType) {
-        case "mana":
-          label = band.totalMana > 0 ? `${(band.totalMana / 1e6).toFixed(1)}M mana` : undefined;
-          break;
-        case "txs": {
-          // Sum txs from chartData for blocks in this checkpoint
-          const txs = chartData.filter((d) => d.block >= band.x1 && d.block <= band.x2).reduce((s, d) => s + d.numTxs, 0);
-          label = `${txs} txs`;
-          break;
-        }
-        case "blockTime":
-          label = `${band.blockCount} blocks`;
-          break;
-        case "fees": {
-          const fees = chartData.filter((d) => d.block >= band.x1 && d.block <= band.x2).reduce((s, d) => s + d.totalFees, 0);
-          label = fees > 0 ? formatFJ(fees) : undefined;
-          break;
+  const makeCpBands = (chartType: CpChartType) =>
+    checkpointBands.map((band, i) => {
+      const fillOpacity =
+        band.status === "finalized"
+          ? 0.18
+          : band.status === "proven"
+            ? 0.12
+            : 0.07;
+      const fill = i % 2 === 0 ? "#6366f1" : "#a78bfa";
+      let label: string | undefined;
+      if (showCpLabels && band.blockCount > 1) {
+        switch (chartType) {
+          case "mana":
+            label =
+              band.totalMana > 0
+                ? `${(band.totalMana / 1e6).toFixed(1)}M mana`
+                : undefined;
+            break;
+          case "txs": {
+            // Sum txs from chartData for blocks in this checkpoint
+            const txs = chartData
+              .filter((d) => d.block >= band.x1 && d.block <= band.x2)
+              .reduce((s, d) => s + d.numTxs, 0);
+            label = `${txs} txs`;
+            break;
+          }
+          case "blockTime":
+            label = `${band.blockCount} blocks`;
+            break;
+          case "fees": {
+            const fees = chartData
+              .filter((d) => d.block >= band.x1 && d.block <= band.x2)
+              .reduce((s, d) => s + d.totalFees, 0);
+            label = fees > 0 ? formatFJ(fees) : undefined;
+            break;
+          }
         }
       }
-    }
-    return (
-      <ReferenceArea
-        key={`cp-${band.cpNumber}`}
-        x1={band.x1}
-        x2={band.x2}
-        fill={fill}
-        fillOpacity={fillOpacity}
-        stroke={fill}
-        strokeOpacity={0.15}
-        ifOverflow="extendDomain"
-        label={label ? {
-          value: label,
-          position: "insideTop",
-          fontSize: 8,
-          fill: theme.colors.textMuted,
-          opacity: 0.7,
-        } : undefined}
-      />
-    );
-  });
+      return (
+        <ReferenceArea
+          key={`cp-${band.cpNumber}`}
+          x1={band.x1}
+          x2={band.x2}
+          fill={fill}
+          fillOpacity={fillOpacity}
+          stroke={fill}
+          strokeOpacity={0.15}
+          ifOverflow="extendDomain"
+          label={label ? (props: { viewBox?: { x?: number; y?: number } }) => {
+            const vx = props.viewBox?.x ?? 0;
+            const vy = props.viewBox?.y ?? 0;
+            return (
+              <text
+                x={0} y={0}
+                transform={`translate(${vx + 4}, ${vy + 2}) rotate(35)`}
+                fontSize={7}
+                fill={theme.colors.textMuted}
+                opacity={0.8}
+                fontFamily="monospace"
+              >
+                {label}
+              </text>
+            );
+          } : undefined}
+        />
+      );
+    });
 
   const tooltipStyle = {
     background: theme.colors.bgCard,
@@ -458,16 +607,36 @@ export function Blocks() {
         <PageTitle>Block Analytics</PageTitle>
         <HeaderControls>
           <RefreshButton title="Refresh">&#x21bb;</RefreshButton>
-          {isZoomed && <ResetZoomButton onClick={resetZoom}>Reset Zoom</ResetZoomButton>}
-          <NavButton disabled={!canGoBack} onClick={() => canGoBack && setOffset((o) => o + 1)}>&#x25C0;</NavButton>
+          {isZoomed && (
+            <ResetZoomButton onClick={resetZoom}>Reset Zoom</ResetZoomButton>
+          )}
+          <NavButton
+            disabled={!canGoBack}
+            onClick={() => canGoBack && setOffset((o) => o + 1)}
+          >
+            &#x25C0;
+          </NavButton>
           <RangeSelector>
             {(Object.keys(RANGE_LABELS) as TimeRange[]).map((r) => (
-              <RangeButton key={r} active={range === r} onClick={() => { setRange(r); setOffset(0); resetZoom(); }}>
+              <RangeButton
+                key={r}
+                active={range === r}
+                onClick={() => {
+                  setRange(r);
+                  setOffset(0);
+                  resetZoom();
+                }}
+              >
                 {RANGE_LABELS[r]}
               </RangeButton>
             ))}
           </RangeSelector>
-          <NavButton disabled={!canGoForward} onClick={() => canGoForward && setOffset((o) => o - 1)}>&#x25B6;</NavButton>
+          <NavButton
+            disabled={!canGoForward}
+            onClick={() => canGoForward && setOffset((o) => o - 1)}
+          >
+            &#x25B6;
+          </NavButton>
         </HeaderControls>
       </Header>
 
@@ -493,19 +662,39 @@ export function Blocks() {
               <CompactStatCard>
                 <StatLabel>Avg Mana/Block</StatLabel>
                 <StatValue>
-                  {stats.avgManaPerBlock ? `${(Number(stats.avgManaPerBlock) / 1e6).toFixed(2)}M` : "-"}
+                  {stats.avgManaPerBlock
+                    ? `${(Number(stats.avgManaPerBlock) / 1e6).toFixed(2)}M`
+                    : "-"}
                 </StatValue>
               </CompactStatCard>
               <CompactStatCard style={{ position: "relative" }}>
                 <StatLabel>Avg Fees/Block</StatLabel>
                 <StatValue>
-                  {stats.avgFeesPerBlock ? formatFJ(stats.avgFeesPerBlock) : "-"}
+                  {stats.avgFeesPerBlock
+                    ? formatFJ(stats.avgFeesPerBlock)
+                    : "-"}
                 </StatValue>
-                {stats.avgFeesPerBlock && ethPrice != null && ethPerFeeAssetE12 != null && (
-                  <span style={{ position: "absolute", right: 6, bottom: 6, fontSize: 9, color: theme.colors.textMuted }}>
-                    {formatUsd(feeToUsd(Number(stats.avgFeesPerBlock), ethPerFeeAssetE12, ethPrice))}
-                  </span>
-                )}
+                {stats.avgFeesPerBlock &&
+                  ethPrice != null &&
+                  ethPerFeeAssetE12 != null && (
+                    <span
+                      style={{
+                        position: "absolute",
+                        right: 6,
+                        bottom: 6,
+                        fontSize: 9,
+                        color: theme.colors.textMuted,
+                      }}
+                    >
+                      {formatUsd(
+                        feeToUsd(
+                          Number(stats.avgFeesPerBlock),
+                          ethPerFeeAssetE12,
+                          ethPrice,
+                        ),
+                      )}
+                    </span>
+                  )}
               </CompactStatCard>
               <CompactStatCard>
                 <StatLabel>Proposers</StatLabel>
@@ -514,7 +703,9 @@ export function Blocks() {
               {maxMana && (
                 <CompactStatCard>
                   <StatLabel>Max Mana/Block</StatLabel>
-                  <StatValue style={{ fontSize: theme.fontSize.sm }}>{(maxMana / 1e6).toFixed(1)}M</StatValue>
+                  <StatValue style={{ fontSize: theme.fontSize.sm }}>
+                    {(maxMana / 1e6).toFixed(1)}M
+                  </StatValue>
                 </CompactStatCard>
               )}
               {cpStats && (
@@ -530,7 +721,9 @@ export function Blocks() {
                   <CompactStatCard>
                     <StatLabel>Avg Mana/Checkpoint</StatLabel>
                     <StatValue>
-                      {cpStats.avgManaPerCheckpoint ? `${(Number(cpStats.avgManaPerCheckpoint) / 1e6).toFixed(2)}M` : "-"}
+                      {cpStats.avgManaPerCheckpoint
+                        ? `${(Number(cpStats.avgManaPerCheckpoint) / 1e6).toFixed(2)}M`
+                        : "-"}
                     </StatValue>
                   </CompactStatCard>
                 </>
@@ -538,27 +731,73 @@ export function Blocks() {
             </StatsColumn>
 
             {pieData.length > 0 && (
-              <ProposerCard style={{ flexDirection: "column", alignItems: "stretch" }}>
-                <StatLabel style={{ textAlign: "center", marginBottom: 4 }}>Sequencers</StatLabel>
-                <div style={{ display: "flex", alignItems: "center", gap: theme.spacing.md }}>
-                <PieChart width={140} height={140}>
-                  <Pie data={pieData} dataKey="blockCount" cx="50%" cy="50%" outerRadius={62} innerRadius={35} paddingAngle={1} strokeWidth={0}>
-                    {pieData.map((_, i) => (
-                      <Cell key={i} fill={i < PROPOSER_COLORS.length ? PROPOSER_COLORS[i] : OTHER_COLOR} />
+              <ProposerCard
+                style={{ flexDirection: "column", alignItems: "stretch" }}
+              >
+                <StatLabel style={{ textAlign: "center", marginBottom: 4 }}>
+                  Sequencers
+                </StatLabel>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: theme.spacing.md,
+                  }}
+                >
+                  <PieChart width={140} height={140}>
+                    <Pie
+                      data={pieData}
+                      dataKey="blockCount"
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={62}
+                      innerRadius={35}
+                      paddingAngle={1}
+                      strokeWidth={0}
+                    >
+                      {pieData.map((_, i) => (
+                        <Cell
+                          key={i}
+                          fill={
+                            i < PROPOSER_COLORS.length
+                              ? PROPOSER_COLORS[i]
+                              : OTHER_COLOR
+                          }
+                        />
+                      ))}
+                    </Pie>
+                  </PieChart>
+                  <ProposerLegend>
+                    {pieData.map((p, i) => (
+                      <ProposerRow key={p.label}>
+                        <PieDot
+                          color={
+                            i < PROPOSER_COLORS.length
+                              ? PROPOSER_COLORS[i]
+                              : OTHER_COLOR
+                          }
+                        />
+                        <span
+                          style={{
+                            minWidth: 28,
+                            color: theme.colors.textMuted,
+                          }}
+                        >
+                          {p.share}%
+                        </span>
+                        <span
+                          style={{
+                            fontFamily: "monospace",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {p.label}
+                        </span>
+                      </ProposerRow>
                     ))}
-                  </Pie>
-                </PieChart>
-                <ProposerLegend>
-                  {pieData.map((p, i) => (
-                    <ProposerRow key={p.label}>
-                      <PieDot color={i < PROPOSER_COLORS.length ? PROPOSER_COLORS[i] : OTHER_COLOR} />
-                      <span style={{ minWidth: 28, color: theme.colors.textMuted }}>{p.share}%</span>
-                      <span style={{ fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {p.label}
-                      </span>
-                    </ProposerRow>
-                  ))}
-                </ProposerLegend>
+                  </ProposerLegend>
                 </div>
               </ProposerCard>
             )}
@@ -567,17 +806,61 @@ export function Blocks() {
           {/* Block Utilization */}
           <ChartCard>
             <ChartTitle>Block Utilization (L2 Mana)</ChartTitle>
-            {historyLoading ? <Loading /> : (
+            {historyLoading ? (
+              <Loading />
+            ) : (
               <ResponsiveContainer width="100%" height={250}>
-                <ComposedChart data={chartData} margin={{ top: 5, right: 10, bottom: 5, left: 10 }} {...zoomProps}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={theme.colors.border} opacity={0.3} />
-                  <XAxis dataKey="block" type="number" domain={["dataMin", "dataMax"]} stroke={theme.colors.textMuted} fontSize={10} tickFormatter={(v) => `#${v}`} />
-                  <YAxis stroke={theme.colors.textMuted} fontSize={10} tickFormatter={(v) => `${(v / 1e6).toFixed(1)}M`} />
-                  <Tooltip contentStyle={tooltipStyle}
-                    formatter={(value: number) => [`${(value / 1e6).toFixed(2)}M mana${maxMana ? ` (${(value / maxMana * 100).toFixed(1)}%)` : ""}`, "Mana Used"]}
-                    labelFormatter={(v) => `Block #${v}`} />
-                  <Area type="monotone" dataKey="manaUsed" stroke={theme.colors.primary} fill={theme.colors.primary} fillOpacity={0.15} />
-                  {maxMana && <ReferenceLine y={maxMana} stroke={theme.colors.danger} strokeDasharray="3 3" label={{ value: "Max", position: "right", fontSize: 10, fill: theme.colors.danger }} />}
+                <ComposedChart
+                  data={chartData}
+                  margin={{ top: 5, right: 10, bottom: 5, left: 10 }}
+                  {...zoomProps}
+                >
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke={theme.colors.border}
+                    opacity={0.3}
+                  />
+                  <XAxis
+                    dataKey="block"
+                    type="number"
+                    domain={["dataMin", "dataMax"]}
+                    stroke={theme.colors.textMuted}
+                    fontSize={10}
+                    tickFormatter={(v) => `#${v}`}
+                  />
+                  <YAxis
+                    stroke={theme.colors.textMuted}
+                    fontSize={10}
+                    tickFormatter={(v) => `${(v / 1e6).toFixed(1)}M`}
+                  />
+                  <Tooltip
+                    contentStyle={tooltipStyle}
+                    formatter={(value: number) => [
+                      `${(value / 1e6).toFixed(2)}M mana${maxMana ? ` (${((value / maxMana) * 100).toFixed(1)}%)` : ""}`,
+                      "Mana Used",
+                    ]}
+                    labelFormatter={(v) => `Block #${v}`}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="manaUsed"
+                    stroke={theme.colors.primary}
+                    fill={theme.colors.primary}
+                    fillOpacity={0.15}
+                  />
+                  {maxMana && (
+                    <ReferenceLine
+                      y={maxMana}
+                      stroke={theme.colors.danger}
+                      strokeDasharray="3 3"
+                      label={{
+                        value: "Max",
+                        position: "right",
+                        fontSize: 10,
+                        fill: theme.colors.danger,
+                      }}
+                    />
+                  )}
                   {makeCpBands("mana")}
                   {selectionOverlay}
                 </ComposedChart>
@@ -588,15 +871,56 @@ export function Blocks() {
           {/* Transactions Per Block */}
           <ChartCard>
             <ChartTitle>Transactions Per Block</ChartTitle>
-            {historyLoading ? <Loading /> : (
+            {historyLoading ? (
+              <Loading />
+            ) : (
               <ResponsiveContainer width="100%" height={200}>
-                <ComposedChart data={chartData} margin={{ top: 5, right: 10, bottom: 5, left: 10 }} {...zoomProps}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={theme.colors.border} opacity={0.3} />
-                  <XAxis dataKey="block" type="number" domain={["dataMin", "dataMax"]} padding={{ left: 10, right: 10 }} stroke={theme.colors.textMuted} fontSize={10} tickFormatter={(v) => `#${v}`} />
+                <ComposedChart
+                  data={chartData}
+                  margin={{ top: 5, right: 10, bottom: 5, left: 10 }}
+                  {...zoomProps}
+                >
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke={theme.colors.border}
+                    opacity={0.3}
+                  />
+                  <XAxis
+                    dataKey="block"
+                    type="number"
+                    domain={["dataMin", "dataMax"]}
+                    padding={{ left: 10, right: 10 }}
+                    stroke={theme.colors.textMuted}
+                    fontSize={10}
+                    tickFormatter={(v) => `#${v}`}
+                  />
                   <YAxis stroke={theme.colors.textMuted} fontSize={10} />
-                  <Tooltip contentStyle={tooltipStyle} formatter={(value: number) => [`${value}`, "Txs"]} labelFormatter={(v) => `Block #${v}`} />
-                  <Bar dataKey="numTxs" fill={theme.colors.accent} fillOpacity={0.4} stroke={theme.colors.accent} strokeOpacity={0.6} strokeWidth={0.5} />
-                  {config?.maxTxsPerBlock && <ReferenceLine y={config.maxTxsPerBlock} stroke={theme.colors.danger} strokeDasharray="3 3" label={{ value: "Max", position: "right", fontSize: 10, fill: theme.colors.danger }} />}
+                  <Tooltip
+                    contentStyle={tooltipStyle}
+                    formatter={(value: number) => [`${value}`, "Txs"]}
+                    labelFormatter={(v) => `Block #${v}`}
+                  />
+                  <Bar
+                    dataKey="numTxs"
+                    fill={theme.colors.accent}
+                    fillOpacity={0.4}
+                    stroke={theme.colors.accent}
+                    strokeOpacity={0.6}
+                    strokeWidth={0.5}
+                  />
+                  {config?.maxTxsPerBlock && (
+                    <ReferenceLine
+                      y={config.maxTxsPerBlock}
+                      stroke={theme.colors.danger}
+                      strokeDasharray="3 3"
+                      label={{
+                        value: "Max",
+                        position: "right",
+                        fontSize: 10,
+                        fill: theme.colors.danger,
+                      }}
+                    />
+                  )}
                   {makeCpBands("txs")}
                   {selectionOverlay}
                 </ComposedChart>
@@ -607,15 +931,59 @@ export function Blocks() {
           {/* Block Time */}
           <ChartCard>
             <ChartTitle>Block Time</ChartTitle>
-            {historyLoading ? <Loading /> : (
+            {historyLoading ? (
+              <Loading />
+            ) : (
               <ResponsiveContainer width="100%" height={200}>
-                <ComposedChart data={chartData.filter((d) => d.blockTime != null)} margin={{ top: 5, right: 10, bottom: 5, left: 10 }} {...zoomProps}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={theme.colors.border} opacity={0.3} />
-                  <XAxis dataKey="block" type="number" domain={["dataMin", "dataMax"]} stroke={theme.colors.textMuted} fontSize={10} tickFormatter={(v) => `#${v}`} />
-                  <YAxis stroke={theme.colors.textMuted} fontSize={10} unit="s" />
-                  <Tooltip contentStyle={tooltipStyle} formatter={(value: number) => [`${value}s`, "Block Time"]} labelFormatter={(v) => `Block #${v}`} />
-                  <Line type="monotone" dataKey="blockTime" stroke={theme.colors.warning} strokeWidth={1.5} dot={false} connectNulls />
-                  {config?.aztecSlotDuration && <ReferenceLine y={config.aztecSlotDuration} stroke={theme.colors.success} strokeDasharray="3 3" label={{ value: "Target", position: "right", fontSize: 10, fill: theme.colors.success }} />}
+                <ComposedChart
+                  data={chartData.filter((d) => d.blockTime != null)}
+                  margin={{ top: 5, right: 10, bottom: 5, left: 10 }}
+                  {...zoomProps}
+                >
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke={theme.colors.border}
+                    opacity={0.3}
+                  />
+                  <XAxis
+                    dataKey="block"
+                    type="number"
+                    domain={["dataMin", "dataMax"]}
+                    stroke={theme.colors.textMuted}
+                    fontSize={10}
+                    tickFormatter={(v) => `#${v}`}
+                  />
+                  <YAxis
+                    stroke={theme.colors.textMuted}
+                    fontSize={10}
+                    unit="s"
+                  />
+                  <Tooltip
+                    contentStyle={tooltipStyle}
+                    formatter={(value: number) => [`${value}s`, "Block Time"]}
+                    labelFormatter={(v) => `Block #${v}`}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="blockTime"
+                    stroke={theme.colors.warning}
+                    strokeWidth={1.5}
+                    dot={false}
+                    connectNulls
+                  />
+                  {config?.aztecSlotDuration && (
+                    <ReferenceLine
+                      y={config.aztecSlotDuration}
+                      stroke={theme.colors.success}
+                      strokeDasharray="3 3"
+                      label={{
+                        value: "Target",
+                        position: "right",
+                        fontSize: 10,
+                        fill: theme.colors.success,
+                      }}
+                    />
+                  )}
                   {makeCpBands("blockTime")}
                   {selectionOverlay}
                 </ComposedChart>
@@ -626,20 +994,52 @@ export function Blocks() {
           {/* Fee Revenue */}
           <ChartCard>
             <ChartTitle>Fee Revenue Per Block</ChartTitle>
-            {historyLoading ? <Loading /> : (
+            {historyLoading ? (
+              <Loading />
+            ) : (
               <ResponsiveContainer width="100%" height={200}>
-                <ComposedChart data={chartData} margin={{ top: 5, right: 10, bottom: 5, left: 10 }} {...zoomProps}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={theme.colors.border} opacity={0.3} />
-                  <XAxis dataKey="block" type="number" domain={["dataMin", "dataMax"]} stroke={theme.colors.textMuted} fontSize={10} tickFormatter={(v) => `#${v}`} />
-                  <YAxis stroke={theme.colors.textMuted} fontSize={10} tickFormatter={(v) => formatFJ(v)} />
-                  <Tooltip contentStyle={tooltipStyle}
+                <ComposedChart
+                  data={chartData}
+                  margin={{ top: 5, right: 10, bottom: 5, left: 10 }}
+                  {...zoomProps}
+                >
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke={theme.colors.border}
+                    opacity={0.3}
+                  />
+                  <XAxis
+                    dataKey="block"
+                    type="number"
+                    domain={["dataMin", "dataMax"]}
+                    stroke={theme.colors.textMuted}
+                    fontSize={10}
+                    tickFormatter={(v) => `#${v}`}
+                  />
+                  <YAxis
+                    stroke={theme.colors.textMuted}
+                    fontSize={10}
+                    tickFormatter={(v) => formatFJ(v)}
+                  />
+                  <Tooltip
+                    contentStyle={tooltipStyle}
                     formatter={(value: number) => {
                       const fj = formatFJ(value);
-                      const usd = ethPrice != null && ethPerFeeAssetE12 != null ? ` (${formatUsd(feeToUsd(value, ethPerFeeAssetE12, ethPrice))})` : "";
+                      const usd =
+                        ethPrice != null && ethPerFeeAssetE12 != null
+                          ? ` (${formatUsd(feeToUsd(value, ethPerFeeAssetE12, ethPrice))})`
+                          : "";
                       return [`${fj}${usd}`, "Fees"];
                     }}
-                    labelFormatter={(v) => `Block #${v}`} />
-                  <Area type="monotone" dataKey="totalFees" stroke={theme.colors.success} fill={theme.colors.success} fillOpacity={0.1} />
+                    labelFormatter={(v) => `Block #${v}`}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="totalFees"
+                    stroke={theme.colors.success}
+                    fill={theme.colors.success}
+                    fillOpacity={0.1}
+                  />
                   {makeCpBands("fees")}
                   {selectionOverlay}
                 </ComposedChart>
@@ -650,9 +1050,15 @@ export function Blocks() {
           {/* Checkpoint legend for chart bands */}
           {checkpointBands.length > 0 && (
             <CpLegend style={{ marginBottom: theme.spacing.sm }}>
-              <CpLegendItem><CpLegendDot opacity={0.07} /> Checkpointed</CpLegendItem>
-              <CpLegendItem><CpLegendDot opacity={0.12} /> Proven</CpLegendItem>
-              <CpLegendItem><CpLegendDot opacity={0.18} /> Finalized</CpLegendItem>
+              <CpLegendItem>
+                <CpLegendDot opacity={0.07} /> Checkpointed
+              </CpLegendItem>
+              <CpLegendItem>
+                <CpLegendDot opacity={0.12} /> Proven
+              </CpLegendItem>
+              <CpLegendItem>
+                <CpLegendDot opacity={0.18} /> Finalized
+              </CpLegendItem>
               <span style={{ color: theme.colors.textMuted, fontSize: 10 }}>
                 ({checkpointBands.length} checkpoints in view)
               </span>

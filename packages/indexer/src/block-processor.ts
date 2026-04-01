@@ -568,11 +568,24 @@ export class BlockProcessor extends L2TipsMemoryStore {
         ),
       );
 
-    // 6. Reset sync cursor
+    // 5b. Delete checkpoints that overlap with pruned blocks
+    await this.db
+      .delete(checkpoints)
+      .where(
+        and(
+          eq(checkpoints.networkId, this.networkId),
+          gt(checkpoints.endBlock, prunedAfter),
+        ),
+      );
+
+    // 6. Reset sync cursors (including checkpoint/proven/finalized)
     await this.db
       .update(syncCursors)
       .set({
         proposedBlock: prunedAfter,
+        checkpointedBlock: prunedAfter,
+        provenBlock: prunedAfter,
+        finalizedBlock: prunedAfter,
         updatedAt: new Date(),
       })
       .where(eq(syncCursors.networkId, this.networkId));
