@@ -543,6 +543,11 @@ export interface BlockHistoryPoint {
   feePerDaGas: string | null;
   feePerL2Gas: string | null;
   coinbase: string | null;
+  checkpointNumber: number | null;
+  indexWithinCheckpoint: number | null;
+  cpStatus: "checkpointed" | "proven" | "finalized" | null;
+  cpBlockCount: number | null;
+  cpAttestations: number | null;
 }
 
 export interface BlockStatsData {

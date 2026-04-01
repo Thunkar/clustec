@@ -18,7 +18,7 @@ import {
 } from "recharts";
 import { theme } from "../lib/theme";
 import { useNetworkStore } from "../stores/network";
-import { useBlockHistory, useBlockStats, useBlockConfig, useCurrentFees, useCheckpointHistory, useCheckpointStats } from "../api/hooks";
+import { useBlockHistory, useBlockStats, useBlockConfig, useCurrentFees, useCheckpointStats } from "../api/hooks";
 import { formatFJ } from "../lib/format";
 import {
   PageContainer,
@@ -198,37 +198,6 @@ const ChartTitle = styled.h3`
   color: ${theme.colors.text};
 `;
 
-const SectionTitle = styled.h2`
-  font-size: ${theme.fontSize.lg};
-  font-weight: 700;
-  color: ${theme.colors.text};
-  margin: ${theme.spacing.lg} 0 ${theme.spacing.sm};
-`;
-
-const CpBar = styled.div`
-  display: flex;
-  height: 36px;
-  border-radius: ${theme.radius.sm};
-  overflow: hidden;
-  gap: 1px;
-  background: ${theme.colors.border};
-`;
-
-const CpSegment = styled.div<{ pct: number; color: string; status: string }>`
-  width: ${(p) => Math.max(p.pct, 0.5)}%;
-  background: ${(p) => p.color};
-  opacity: ${(p) => (p.status === "finalized" ? 1 : p.status === "proven" ? 0.8 : p.status === "checkpointed" ? 0.6 : 0.35)};
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 8px;
-  color: #fff;
-  font-weight: 600;
-  cursor: default;
-  transition: opacity 0.15s;
-  &:hover { opacity: 1; }
-`;
-
 const CpLegend = styled.div`
   display: flex;
   gap: ${theme.spacing.md};
@@ -248,7 +217,7 @@ const CpLegendDot = styled.span<{ opacity: number }>`
   width: 8px;
   height: 8px;
   border-radius: 2px;
-  background: ${theme.colors.primary};
+  background: #6366f1;
   opacity: ${(p) => p.opacity};
 `;
 
@@ -325,7 +294,6 @@ export function Blocks() {
   const { data: statsData, isLoading: statsLoading } = useBlockStats(selectedNetwork);
   const { data: configData } = useBlockConfig(selectedNetwork);
   const { data: currentFees } = useCurrentFees(selectedNetwork);
-  const { data: cpHistoryData } = useCheckpointHistory(selectedNetwork);
   const { data: cpStatsData } = useCheckpointStats(selectedNetwork);
 
   const ethPrice = currentFees?.pricing?.ethUsdPrice ?? null;
@@ -351,8 +319,8 @@ export function Blocks() {
   const config = configData?.data;
   const stats = statsData?.data;
 
-  const chartData = useMemo(() => {
-    if (!historyData?.data) return [];
+  const { chartData, checkpointBands } = useMemo(() => {
+    if (!historyData?.data) return { chartData: [], checkpointBands: [] };
     const all = historyData.data.map((b, i, arr) => ({
       block: b.blockNumber,
       numTxs: b.numTxs,
@@ -360,13 +328,45 @@ export function Blocks() {
       totalFees: b.totalFees ? Number(b.totalFees) : 0,
       blockTime: (() => {
         if (i === 0 || !b.timestamp || !arr[i - 1].timestamp) return null;
-        // Only compute block time for sequential blocks (no gap in block numbers)
         if (b.blockNumber - arr[i - 1].blockNumber !== 1) return null;
         return b.timestamp - arr[i - 1].timestamp!;
       })(),
+      checkpointNumber: b.checkpointNumber,
     }));
-    if (zoomFrom != null && zoomTo != null) return all.filter((d) => d.block >= zoomFrom && d.block <= zoomTo);
-    return all;
+    const filtered = (zoomFrom != null && zoomTo != null)
+      ? all.filter((d) => d.block >= zoomFrom && d.block <= zoomTo)
+      : all;
+
+    // Compute checkpoint bands from block data
+    const bands: { cpNumber: number; x1: number; x2: number; status: string; blockCount: number; attestations: number | null; totalMana: number }[] = [];
+    const cpMap = new Map<number, { minBlock: number; maxBlock: number; status: string; blockCount: number; attestations: number | null; totalMana: number }>();
+    for (const b of historyData.data) {
+      if (b.checkpointNumber == null) continue;
+      const mana = b.totalManaUsed ? Number(b.totalManaUsed) : 0;
+      const existing = cpMap.get(b.checkpointNumber);
+      if (existing) {
+        existing.minBlock = Math.min(existing.minBlock, b.blockNumber);
+        existing.maxBlock = Math.max(existing.maxBlock, b.blockNumber);
+        existing.totalMana += mana;
+      } else {
+        cpMap.set(b.checkpointNumber, {
+          minBlock: b.blockNumber,
+          maxBlock: b.blockNumber,
+          status: b.cpStatus ?? "checkpointed",
+          blockCount: b.cpBlockCount ?? 1,
+          attestations: b.cpAttestations,
+          totalMana: mana,
+        });
+      }
+    }
+    let idx = 0;
+    for (const [cpNum, cp] of [...cpMap.entries()].sort((a, b) => a[0] - b[0])) {
+      if (zoomFrom != null && zoomTo != null && (cp.maxBlock < zoomFrom || cp.minBlock > zoomTo)) continue;
+      bands.push({ cpNumber: cpNum, x1: cp.minBlock - 0.5, x2: cp.maxBlock + 0.5, status: cp.status, blockCount: cp.blockCount, attestations: cp.attestations, totalMana: cp.totalMana });
+      idx++;
+    }
+
+    return { chartData: filtered, checkpointBands: bands };
   }, [historyData, zoomFrom, zoomTo]);
 
   // Bundle small proposers into "Other"
@@ -382,6 +382,37 @@ export function Blocks() {
   }, [stats]);
 
   const maxMana = config?.maxL2BlockGas ? Number(config.maxL2BlockGas) : null;
+  const cpStats = cpStatsData?.data;
+
+  // Checkpoint band overlays for recharts
+  const cpBandElements = checkpointBands.map((band, i) => {
+    const fillOpacity = band.status === "finalized" ? 0.18 : band.status === "proven" ? 0.12 : 0.07;
+    // Alternate warm/cool for adjacent checkpoints
+    const fill = i % 2 === 0 ? "#6366f1" : "#a78bfa";
+    const manaLabel = band.totalMana > 0 ? `${(band.totalMana / 1e6).toFixed(1)}M` : "";
+    const label = band.blockCount > 1
+      ? `${band.blockCount} blks${manaLabel ? ` · ${manaLabel}` : ""}`
+      : undefined;
+    return (
+      <ReferenceArea
+        key={`cp-${band.cpNumber}`}
+        x1={band.x1}
+        x2={band.x2}
+        fill={fill}
+        fillOpacity={fillOpacity}
+        stroke={fill}
+        strokeOpacity={0.15}
+        ifOverflow="extendDomain"
+        label={label ? {
+          value: label,
+          position: "insideTop",
+          fontSize: 8,
+          fill: theme.colors.textMuted,
+          opacity: 0.7,
+        } : undefined}
+      />
+    );
+  });
 
   const tooltipStyle = {
     background: theme.colors.bgCard,
@@ -434,8 +465,10 @@ export function Blocks() {
                 <StatValue>{stats.emptyBlockPct}%</StatValue>
               </CompactStatCard>
               <CompactStatCard>
-                <StatLabel>Missed Slots</StatLabel>
-                <StatValue>{stats.missedSlots}</StatValue>
+                <StatLabel>Avg Mana/Block</StatLabel>
+                <StatValue>
+                  {stats.avgManaPerBlock ? `${(Number(stats.avgManaPerBlock) / 1e6).toFixed(2)}M` : "-"}
+                </StatValue>
               </CompactStatCard>
               <CompactStatCard>
                 <StatLabel>Proposers</StatLabel>
@@ -446,6 +479,24 @@ export function Blocks() {
                   <StatLabel>Max Mana/Block</StatLabel>
                   <StatValue style={{ fontSize: theme.fontSize.sm }}>{(maxMana / 1e6).toFixed(1)}M</StatValue>
                 </CompactStatCard>
+              )}
+              {cpStats && (
+                <>
+                  <CompactStatCard>
+                    <StatLabel>Checkpoints</StatLabel>
+                    <StatValue>{cpStats.checkpointCount}</StatValue>
+                  </CompactStatCard>
+                  <CompactStatCard>
+                    <StatLabel>Blocks/Checkpoint</StatLabel>
+                    <StatValue>{cpStats.avgBlocksPerCheckpoint}</StatValue>
+                  </CompactStatCard>
+                  <CompactStatCard>
+                    <StatLabel>Avg Mana/Checkpoint</StatLabel>
+                    <StatValue>
+                      {cpStats.avgManaPerCheckpoint ? `${(Number(cpStats.avgManaPerCheckpoint) / 1e6).toFixed(2)}M` : "-"}
+                    </StatValue>
+                  </CompactStatCard>
+                </>
               )}
             </StatsColumn>
 
@@ -490,6 +541,7 @@ export function Blocks() {
                     labelFormatter={(v) => `Block #${v}`} />
                   <Area type="monotone" dataKey="manaUsed" stroke={theme.colors.primary} fill={theme.colors.primary} fillOpacity={0.15} />
                   {maxMana && <ReferenceLine y={maxMana} stroke={theme.colors.danger} strokeDasharray="3 3" label={{ value: "Max", position: "right", fontSize: 10, fill: theme.colors.danger }} />}
+                  {cpBandElements}
                   {selectionOverlay}
                 </ComposedChart>
               </ResponsiveContainer>
@@ -508,6 +560,7 @@ export function Blocks() {
                   <Tooltip contentStyle={tooltipStyle} formatter={(value: number) => [`${value}`, "Txs"]} labelFormatter={(v) => `Block #${v}`} />
                   <Bar dataKey="numTxs" fill={theme.colors.accent} fillOpacity={0.4} stroke={theme.colors.accent} strokeOpacity={0.6} strokeWidth={0.5} />
                   {config?.maxTxsPerBlock && <ReferenceLine y={config.maxTxsPerBlock} stroke={theme.colors.danger} strokeDasharray="3 3" label={{ value: "Max", position: "right", fontSize: 10, fill: theme.colors.danger }} />}
+                  {cpBandElements}
                   {selectionOverlay}
                 </ComposedChart>
               </ResponsiveContainer>
@@ -526,6 +579,7 @@ export function Blocks() {
                   <Tooltip contentStyle={tooltipStyle} formatter={(value: number) => [`${value}s`, "Block Time"]} labelFormatter={(v) => `Block #${v}`} />
                   <Line type="monotone" dataKey="blockTime" stroke={theme.colors.warning} strokeWidth={1.5} dot={false} connectNulls />
                   {config?.aztecSlotDuration && <ReferenceLine y={config.aztecSlotDuration} stroke={theme.colors.success} strokeDasharray="3 3" label={{ value: "Target", position: "right", fontSize: 10, fill: theme.colors.success }} />}
+                  {cpBandElements}
                   {selectionOverlay}
                 </ComposedChart>
               </ResponsiveContainer>
@@ -549,103 +603,23 @@ export function Blocks() {
                     }}
                     labelFormatter={(v) => `Block #${v}`} />
                   <Area type="monotone" dataKey="totalFees" stroke={theme.colors.success} fill={theme.colors.success} fillOpacity={0.1} />
+                  {cpBandElements}
                   {selectionOverlay}
                 </ComposedChart>
               </ResponsiveContainer>
             )}
           </ChartCard>
 
-          {/* ── Checkpoint Section ── */}
-          {cpStatsData?.data && (
-            <>
-              <SectionTitle>Checkpoints</SectionTitle>
-
-              <StatsColumn style={{ marginBottom: theme.spacing.md }}>
-                <CompactStatCard>
-                  <StatLabel>Checkpoints</StatLabel>
-                  <StatValue>{cpStatsData.data.checkpointCount}</StatValue>
-                </CompactStatCard>
-                <CompactStatCard>
-                  <StatLabel>Avg Blocks/CP</StatLabel>
-                  <StatValue>{cpStatsData.data.avgBlocksPerCheckpoint}</StatValue>
-                </CompactStatCard>
-                <CompactStatCard>
-                  <StatLabel>Avg Attestations</StatLabel>
-                  <StatValue>{cpStatsData.data.avgAttestations}</StatValue>
-                </CompactStatCard>
-                <CompactStatCard>
-                  <StatLabel>Proven</StatLabel>
-                  <StatValue>{cpStatsData.data.provenPct}%</StatValue>
-                </CompactStatCard>
-                <CompactStatCard>
-                  <StatLabel>Finalized</StatLabel>
-                  <StatValue>{cpStatsData.data.finalizedPct}%</StatValue>
-                </CompactStatCard>
-                <CompactStatCard>
-                  <StatLabel>Max Blocks/CP</StatLabel>
-                  <StatValue>{cpStatsData.data.maxBlocksPerCheckpoint}</StatValue>
-                </CompactStatCard>
-              </StatsColumn>
-
-              {/* Checkpoint timeline bar */}
-              {cpHistoryData?.data && cpHistoryData.data.length > 0 && (
-                <ChartCard>
-                  <ChartTitle>Checkpoint Timeline</ChartTitle>
-                  <CpBar>
-                    {cpHistoryData.data.slice(-100).map((cp) => {
-                      const status = cp.finalizedAt ? "finalized" : cp.provenAt ? "proven" : "checkpointed";
-                      const totalBlocks = cpHistoryData.data.reduce((s, c) => s + c.blockCount, 0);
-                      const pct = totalBlocks > 0 ? (cp.blockCount / totalBlocks) * 100 : 1;
-                      return (
-                        <CpSegment
-                          key={cp.checkpointNumber}
-                          pct={pct}
-                          color={theme.colors.primary}
-                          status={status}
-                          title={`CP #${cp.checkpointNumber}: ${cp.blockCount} blocks, ${status}${cp.attestationCount != null ? `, ${cp.attestationCount} attestations` : ""}`}
-                        >
-                          {cp.blockCount > 1 ? cp.blockCount : ""}
-                        </CpSegment>
-                      );
-                    })}
-                  </CpBar>
-                  <CpLegend>
-                    <CpLegendItem><CpLegendDot opacity={0.35} /> Checkpointed</CpLegendItem>
-                    <CpLegendItem><CpLegendDot opacity={0.6} /> Proven</CpLegendItem>
-                    <CpLegendItem><CpLegendDot opacity={1} /> Finalized</CpLegendItem>
-                  </CpLegend>
-                </ChartCard>
-              )}
-
-              {/* Checkpoint mana chart */}
-              {cpHistoryData?.data && cpHistoryData.data.length > 0 && (
-                <ChartCard>
-                  <ChartTitle>Mana Per Checkpoint</ChartTitle>
-                  <ResponsiveContainer width="100%" height={200}>
-                    <ComposedChart
-                      data={cpHistoryData.data.map((cp) => ({
-                        cp: cp.checkpointNumber,
-                        mana: cp.totalManaUsed ? Number(cp.totalManaUsed) : 0,
-                        blocks: cp.blockCount,
-                        attestations: cp.attestationCount ?? 0,
-                      }))}
-                      margin={{ top: 5, right: 10, bottom: 5, left: 10 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" stroke={theme.colors.border} opacity={0.3} />
-                      <XAxis dataKey="cp" type="number" domain={["dataMin", "dataMax"]} stroke={theme.colors.textMuted} fontSize={10} tickFormatter={(v) => `#${v}`} />
-                      <YAxis stroke={theme.colors.textMuted} fontSize={10} tickFormatter={(v) => `${(v / 1e6).toFixed(1)}M`} />
-                      <Tooltip contentStyle={tooltipStyle}
-                        formatter={(value: number, name: string) => {
-                          if (name === "blocks") return [`${value}`, "Blocks"];
-                          return [`${(value / 1e6).toFixed(2)}M`, "Mana"];
-                        }}
-                        labelFormatter={(v) => `Checkpoint #${v}`} />
-                      <Bar dataKey="mana" fill={theme.colors.primary} fillOpacity={0.3} stroke={theme.colors.primary} strokeWidth={0.5} />
-                    </ComposedChart>
-                  </ResponsiveContainer>
-                </ChartCard>
-              )}
-            </>
+          {/* Checkpoint legend for chart bands */}
+          {checkpointBands.length > 0 && (
+            <CpLegend style={{ marginBottom: theme.spacing.sm }}>
+              <CpLegendItem><CpLegendDot opacity={0.07} /> Checkpointed</CpLegendItem>
+              <CpLegendItem><CpLegendDot opacity={0.12} /> Proven</CpLegendItem>
+              <CpLegendItem><CpLegendDot opacity={0.18} /> Finalized</CpLegendItem>
+              <span style={{ color: theme.colors.textMuted, fontSize: 10 }}>
+                ({checkpointBands.length} checkpoints in view)
+              </span>
+            </CpLegend>
           )}
         </>
       )}

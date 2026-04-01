@@ -74,6 +74,8 @@ export function registerBlockRoutes(app: FastifyInstance, db: Db) {
         feePerDaGas: blocks.feePerDaGas,
         feePerL2Gas: blocks.feePerL2Gas,
         coinbase: blocks.coinbase,
+        checkpointNumber: blocks.checkpointNumber,
+        indexWithinCheckpoint: blocks.indexWithinCheckpoint,
       })
       .from(blocks)
       .where(and(...conditions))
@@ -82,7 +84,39 @@ export function registerBlockRoutes(app: FastifyInstance, db: Db) {
 
     if (needsReverse) rows.reverse();
 
-    return { data: rows };
+    // Attach checkpoint lifecycle status for each block's checkpoint
+    const cpNumbers = [...new Set(rows.map((r) => r.checkpointNumber).filter((n): n is number => n != null))];
+    let cpStatusMap = new Map<number, { provenAt: Date | null; finalizedAt: Date | null; blockCount: number; attestationCount: number | null }>();
+    if (cpNumbers.length > 0) {
+      const cpRows = await db
+        .select({
+          checkpointNumber: checkpoints.checkpointNumber,
+          provenAt: checkpoints.provenAt,
+          finalizedAt: checkpoints.finalizedAt,
+          blockCount: checkpoints.blockCount,
+          attestationCount: checkpoints.attestationCount,
+        })
+        .from(checkpoints)
+        .where(and(
+          eq(checkpoints.networkId, id),
+          sql`${checkpoints.checkpointNumber} = ANY(${sql`ARRAY[${sql.join(cpNumbers.map((n) => sql`${n}`), sql`, `)}]::bigint[]`})`,
+        ));
+      for (const cp of cpRows) {
+        cpStatusMap.set(cp.checkpointNumber, cp);
+      }
+    }
+
+    const data = rows.map((r) => {
+      const cpInfo = r.checkpointNumber != null ? cpStatusMap.get(r.checkpointNumber) : null;
+      return {
+        ...r,
+        cpStatus: cpInfo?.finalizedAt ? "finalized" as const : cpInfo?.provenAt ? "proven" as const : r.checkpointNumber != null ? "checkpointed" as const : null,
+        cpBlockCount: cpInfo?.blockCount ?? null,
+        cpAttestations: cpInfo?.attestationCount ?? null,
+      };
+    });
+
+    return { data };
   });
 
   // ── Block stats: aggregated analytics ─────────────────────
