@@ -191,16 +191,22 @@ export function Fees() {
     }
   };
 
-  // Sync URL with visible range
+  // Sync URL with visible range + network
   const effectiveFrom = zoomFrom ?? fromBlock;
   const effectiveTo = zoomTo ?? toBlock;
   useEffect(() => {
     if (effectiveFrom != null && effectiveTo != null) {
-      setSearchParams({ from: String(effectiveFrom), to: String(effectiveTo) }, { replace: true });
+      const next = new URLSearchParams(searchParams);
+      next.set("from", String(effectiveFrom));
+      next.set("to", String(effectiveTo));
+      setSearchParams(next, { replace: true });
     } else if (range === "all") {
-      setSearchParams({}, { replace: true });
+      const next = new URLSearchParams(searchParams);
+      next.delete("from");
+      next.delete("to");
+      setSearchParams(next, { replace: true });
     }
-  }, [effectiveFrom, effectiveTo, range, setSearchParams]);
+  }, [effectiveFrom, effectiveTo, range, selectedNetwork, setSearchParams]);
 
   const historyOpts = useMemo(
     () => ({ from: fromBlock, to: toBlock, resolution }),
