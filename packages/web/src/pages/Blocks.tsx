@@ -122,7 +122,9 @@ const NavButton = styled.button<{ disabled?: boolean }>`
   }
 `;
 
-const RangeButton = styled.button<{ active: boolean }>`
+const MOBILE_HIDDEN_RANGES = new Set(["1000", "5000"]);
+
+const RangeButton = styled.button<{ active: boolean; mobileHidden?: boolean }>`
   padding: 6px 12px;
   background: ${(p) => (p.active ? theme.colors.primary : "transparent")};
   color: ${(p) => (p.active ? "#fff" : theme.colors.textMuted)};
@@ -138,6 +140,9 @@ const RangeButton = styled.button<{ active: boolean }>`
     background: ${(p) =>
       p.active ? theme.colors.primary : theme.colors.bgHover};
     color: ${theme.colors.text};
+  }
+  @media (max-width: 768px) {
+    ${(p) => p.mobileHidden && "display: none;"}
   }
 `;
 
@@ -287,22 +292,24 @@ export function Blocks() {
   // Initialize from URL or defaults
   const urlFrom = searchParams.get("from") ? parseInt(searchParams.get("from")!, 10) : null;
   const urlTo = searchParams.get("to") ? parseInt(searchParams.get("to")!, 10) : null;
+  const urlDiff = urlFrom != null && urlTo != null ? urlTo - urlFrom : null;
+  const PRESETS = [20, 100, 500, 1000, 5000];
+  const urlMatchesPreset = urlDiff != null && PRESETS.includes(urlDiff);
 
   const [range, setRange] = useState<TimeRange>(() => {
-    if (urlFrom != null && urlTo != null) {
-      const diff = urlTo - urlFrom;
-      if (diff <= 20) return "20";
-      if (diff <= 100) return "100";
-      if (diff <= 500) return "500";
-      if (diff <= 1000) return "1000";
+    if (urlDiff != null) {
+      if (urlDiff <= 20) return "20";
+      if (urlDiff <= 100) return "100";
+      if (urlDiff <= 500) return "500";
+      if (urlDiff <= 1000) return "1000";
       return "5000";
     }
     return window.innerWidth <= 768 ? "20" : "100";
   });
 
-  // Zoom state
-  const [zoomFrom, setZoomFrom] = useState<number | null>(urlFrom);
-  const [zoomTo, setZoomTo] = useState<number | null>(urlTo);
+  // Zoom state — only set from URL if range doesn't match a preset
+  const [zoomFrom, setZoomFrom] = useState<number | null>(urlMatchesPreset ? null : urlFrom);
+  const [zoomTo, setZoomTo] = useState<number | null>(urlMatchesPreset ? null : urlTo);
   const [selecting, setSelecting] = useState<number | null>(null);
   const [selectEnd, setSelectEnd] = useState<number | null>(null);
   const selectingRef = useRef<number | null>(null);
@@ -419,12 +426,15 @@ export function Blocks() {
   const effectiveFrom = zoomFrom ?? fromBlock;
   const effectiveTo = zoomTo ?? toBlock;
 
-  // Sync URL with visible range
+  // Sync URL with visible range + network
   useEffect(() => {
     if (effectiveFrom != null && effectiveTo != null) {
-      setSearchParams({ from: String(effectiveFrom), to: String(effectiveTo) }, { replace: true });
+      const next = new URLSearchParams(searchParams);
+      next.set("from", String(effectiveFrom));
+      next.set("to", String(effectiveTo));
+      setSearchParams(next, { replace: true });
     }
-  }, [effectiveFrom, effectiveTo, setSearchParams]);
+  }, [effectiveFrom, effectiveTo, selectedNetwork, setSearchParams]);
   const rangeOpts = useMemo(
     () => ({ from: effectiveFrom, to: effectiveTo }),
     [effectiveFrom, effectiveTo],
@@ -671,6 +681,7 @@ export function Blocks() {
               <RangeButton
                 key={r}
                 active={range === r}
+                mobileHidden={MOBILE_HIDDEN_RANGES.has(r)}
                 onClick={() => {
                   setRange(r);
                   setOffset(0);

@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import styled from "@emotion/styled";
 import { keyframes } from "@emotion/react";
-import { Link, Outlet, useLocation } from "react-router-dom";
+import { Link, Outlet, useLocation, useNavigate, useParams } from "react-router-dom";
 import { theme } from "../lib/theme";
 import { useNetworks, useAnalysisStatus } from "../api/hooks";
 import { useNetworkStore } from "../stores/network";
@@ -150,10 +150,31 @@ const navItems = [
 
 export function Layout() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const params = useParams<{ network?: string }>();
   const { data: networks } = useNetworks();
   const { selectedNetwork, setNetwork } = useNetworkStore();
   const { data: analysisStatus } = useAnalysisStatus(selectedNetwork);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Sync network from URL path param
+  useEffect(() => {
+    if (params.network && params.network !== selectedNetwork) {
+      setNetwork(params.network);
+    }
+  }, [params.network]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // When network changes via selector, update the URL path
+  const handleNetworkChange = (newNetwork: string) => {
+    setNetwork(newNetwork);
+    // Replace the network segment in the current path
+    const path = location.pathname;
+    if (params.network) {
+      navigate(path.replace(`/${params.network}`, `/${newNetwork}`) + location.search, { replace: true });
+    } else if (path === "/") {
+      navigate(`/${newNetwork}`, { replace: true });
+    }
+  };
 
   const closeSidebar = () => setSidebarOpen(false);
 
@@ -168,7 +189,7 @@ export function Layout() {
         <NetworkSelector>
           <Select
             value={selectedNetwork}
-            onChange={(e) => setNetwork(e.target.value)}
+            onChange={(e) => handleNetworkChange(e.target.value)}
             style={{ width: "100%" }}
           >
             {networks?.map((n) => (
@@ -179,16 +200,19 @@ export function Layout() {
           </Select>
           {analysisStatus?.running && <AnalyzingDot title="Analysis running" />}
         </NetworkSelector>
-        {navItems.map((item) => (
-          <NavItem
-            key={item.path}
-            to={item.path}
-            active={location.pathname === item.path}
-            onClick={closeSidebar}
-          >
-            {item.label}
-          </NavItem>
-        ))}
+        {navItems.map((item) => {
+          const fullPath = `/${selectedNetwork}${item.path}`;
+          return (
+            <NavItem
+              key={item.path}
+              to={fullPath}
+              active={location.pathname === fullPath || location.pathname === item.path}
+              onClick={closeSidebar}
+            >
+              {item.label}
+            </NavItem>
+          );
+        })}
       </Sidebar>
       <Main>
         <MobileHeader>
