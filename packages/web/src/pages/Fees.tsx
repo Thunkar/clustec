@@ -28,9 +28,10 @@ import {
   Loading,
 } from "../components/ui";
 
-type TimeRange = "100" | "500" | "1000" | "5000" | "all";
+type TimeRange = "20" | "100" | "500" | "1000" | "5000" | "all";
 
 const RANGE_LABELS: Record<TimeRange, string> = {
+  "20": "20 blocks",
   "100": "100 blocks",
   "500": "500 blocks",
   "1000": "1K blocks",
@@ -40,25 +41,45 @@ const RANGE_LABELS: Record<TimeRange, string> = {
 
 function resolutionForRange(range: TimeRange): string {
   switch (range) {
-    case "100": return "raw";
-    case "500": return "raw";
-    case "1000": return "10";
-    case "5000": return "50";
-    case "all": return "100";
+    case "20":
+      return "raw";
+    case "100":
+      return "raw";
+    case "500":
+      return "raw";
+    case "1000":
+      return "10";
+    case "5000":
+      return "50";
+    case "all":
+      return "100";
   }
 }
 
 function spreadBucketForRange(range: TimeRange): number {
   switch (range) {
-    case "100": return 5;
-    case "500": return 10;
-    case "1000": return 20;
-    case "5000": return 50;
-    case "all": return 100;
+    case "20":
+      return 2;
+    case "100":
+      return 5;
+    case "500":
+      return 10;
+    case "1000":
+      return 20;
+    case "5000":
+      return 50;
+    case "all":
+      return 100;
   }
 }
 
-import { formatFJ, formatFJCompact, formatPerManaCompact, formatFJPerMana } from "../lib/format";
+import {
+  formatFJ,
+  formatFJCompact,
+  formatPerManaCompact,
+  formatFJPerMana,
+} from "../lib/format";
+import { RangeToolbar } from "../components/RangeToolbar";
 
 function toNum(v: string | null | undefined): number | null {
   if (!v) return null;
@@ -67,7 +88,11 @@ function toNum(v: string | null | undefined): number | null {
 }
 
 /** Convert raw Fee Juice amount to USD via ethPerFeeAsset and ethUsdPrice */
-function feeToUsd(rawFeeJuice: number, ethPerFeeAssetE12: string, ethUsdPrice: number): number {
+function feeToUsd(
+  rawFeeJuice: number,
+  ethPerFeeAssetE12: string,
+  ethUsdPrice: number,
+): number {
   const ethPerFeeAsset = Number(ethPerFeeAssetE12) / 1e12;
   const feeJuiceInEth = (rawFeeJuice / 1e18) * ethPerFeeAsset;
   return feeJuiceInEth * ethUsdPrice;
@@ -84,8 +109,12 @@ export function Fees() {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const urlFrom = searchParams.get("from") ? parseInt(searchParams.get("from")!, 10) : null;
-  const urlTo = searchParams.get("to") ? parseInt(searchParams.get("to")!, 10) : null;
+  const urlFrom = searchParams.get("from")
+    ? parseInt(searchParams.get("from")!, 10)
+    : null;
+  const urlTo = searchParams.get("to")
+    ? parseInt(searchParams.get("to")!, 10)
+    : null;
 
   const [range, setRange] = useState<TimeRange>(() => {
     if (urlFrom != null && urlTo != null) {
@@ -113,7 +142,8 @@ export function Fees() {
   type ChartMouseEvent = any;
   const getBlock = (e: ChartMouseEvent): number | null => {
     if (!e) return null;
-    if (e.activeLabel !== undefined && e.activeLabel !== null) return Number(e.activeLabel);
+    if (e.activeLabel !== undefined && e.activeLabel !== null)
+      return Number(e.activeLabel);
     const block = e.activePayload?.[0]?.payload?.block;
     if (block != null) return Number(block);
     return null;
@@ -152,7 +182,9 @@ export function Fees() {
     setZoomTo(null);
   }, []);
   const refresh = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ["networks", selectedNetwork, "fees"] });
+    queryClient.invalidateQueries({
+      queryKey: ["networks", selectedNetwork, "fees"],
+    });
   }, [queryClient, selectedNetwork]);
 
   const [offset, setOffset] = useState(0);
@@ -163,12 +195,24 @@ export function Fees() {
   // Compute from/to block range based on latest block
   const latestBlock = currentData?.block?.blockNumber ?? null;
   const rangeBlocks = range === "all" ? null : parseInt(range, 10);
-  const windowEnd = latestBlock != null && rangeBlocks != null ? latestBlock - offset * rangeBlocks : null;
-  const fromBlock = windowEnd != null ? Math.max(0, windowEnd - rangeBlocks!) : (range === "all" ? undefined : undefined);
-  const toBlock = range !== "all" ? windowEnd ?? undefined : undefined;
+  const windowEnd =
+    latestBlock != null && rangeBlocks != null
+      ? latestBlock - offset * rangeBlocks
+      : null;
+  const fromBlock =
+    windowEnd != null
+      ? Math.max(0, windowEnd - rangeBlocks!)
+      : range === "all"
+        ? undefined
+        : undefined;
+  const toBlock = range !== "all" ? (windowEnd ?? undefined) : undefined;
   const isZoomed = zoomFrom != null || zoomTo != null;
-  const canGoBack = range !== "all" && (isZoomed ? (zoomFrom ?? 0) > 0 : fromBlock != null && fromBlock > 0);
-  const canGoForward = range !== "all" && (isZoomed ? (zoomTo ?? 0) < (latestBlock ?? 0) : offset > 0);
+  const canGoBack =
+    range !== "all" &&
+    (isZoomed ? (zoomFrom ?? 0) > 0 : fromBlock != null && fromBlock > 0);
+  const canGoForward =
+    range !== "all" &&
+    (isZoomed ? (zoomTo ?? 0) < (latestBlock ?? 0) : offset > 0);
 
   const goBack = () => {
     if (!canGoBack) return;
@@ -286,7 +330,9 @@ export function Fees() {
       const s = spreadByBucket.get(b);
 
       // Average block base fees from all history entries within [b, b+spreadBucket)
-      let sumDa = 0, sumL2 = 0, countFee = 0;
+      let sumDa = 0,
+        sumL2 = 0,
+        countFee = 0;
       for (const hk of historyKeys) {
         if (hk < b) continue;
         if (hk >= b + spreadBucket) break;
@@ -334,13 +380,22 @@ export function Fees() {
 
     // Apply zoom filter
     const inZoom = (block: number) =>
-      (zoomFrom == null || block >= zoomFrom) && (zoomTo == null || block <= zoomTo);
+      (zoomFrom == null || block >= zoomFrom) &&
+      (zoomTo == null || block <= zoomTo);
 
     return {
       priceChartData: priceRows.filter((r) => inZoom(r.block)),
       costChartData: costRows.filter((r) => inZoom(r.block)),
     };
-  }, [historyData, spreadData, fromBlock, latestBlock, range, zoomFrom, zoomTo]);
+  }, [
+    historyData,
+    spreadData,
+    fromBlock,
+    latestBlock,
+    range,
+    zoomFrom,
+    zoomTo,
+  ]);
 
   // Shared drag-to-zoom props for all ComposedCharts
   const zoomProps = {
@@ -350,18 +405,19 @@ export function Fees() {
   };
 
   // Selection overlay element (rendered inside each chart when dragging)
-  const selectionOverlay = selecting != null && selectEnd != null ? (
-    <ReferenceArea
-      x1={Math.min(selecting, selectEnd)}
-      x2={Math.max(selecting, selectEnd)}
-      fill={theme.colors.primary}
-      fillOpacity={0.15}
-      stroke={theme.colors.primary}
-      strokeOpacity={0.4}
-      ifOverflow="extendDomain"
-      yAxisId="fee"
-    />
-  ) : null;
+  const selectionOverlay =
+    selecting != null && selectEnd != null ? (
+      <ReferenceArea
+        x1={Math.min(selecting, selectEnd)}
+        x2={Math.max(selecting, selectEnd)}
+        fill={theme.colors.primary}
+        fillOpacity={0.15}
+        stroke={theme.colors.primary}
+        strokeOpacity={0.4}
+        ifOverflow="extendDomain"
+        yAxisId="fee"
+      />
+    ) : null;
 
   // Current stats
   const currentDaFee = toNum(currentData?.block?.feePerDaGas);
@@ -373,25 +429,55 @@ export function Fees() {
     <FeesContainer>
       <Header>
         <PageTitle>Fee Analytics</PageTitle>
-        <HeaderControls>
-        <RefreshButton onClick={refresh} title="Refresh data">↻</RefreshButton>
-        {isZoomed && (
-          <ResetZoomButton onClick={resetZoom}>Reset Zoom</ResetZoomButton>
-        )}
-        {range !== "all" && <NavButton disabled={!canGoBack} onClick={goBack}>&#x25C0;</NavButton>}
-        <RangeSelector>
-          {(Object.keys(RANGE_LABELS) as TimeRange[]).map((r) => (
-            <RangeButton
-              key={r}
-              active={range === r}
-              onClick={() => { setRange(r); setOffset(0); resetZoom(); }}
-            >
-              {RANGE_LABELS[r]}
-            </RangeButton>
-          ))}
-        </RangeSelector>
-        {range !== "all" && <NavButton disabled={!canGoForward} onClick={goForward}>&#x25B6;</NavButton>}
-        </HeaderControls>
+        <RangeToolbar
+          ranges={Object.entries(RANGE_LABELS).map(([key, label]) => ({
+            key,
+            label,
+            mobileHidden: key === "1000" || key === "5000" || key === "all",
+          }))}
+          activeRange={(() => {
+            const zoomSize =
+              isZoomed && zoomFrom != null && zoomTo != null
+                ? zoomTo - zoomFrom
+                : null;
+            if (zoomSize != null) {
+              const match = Object.keys(RANGE_LABELS).find(
+                (r) => r !== "all" && parseInt(r, 10) === zoomSize,
+              );
+              return match ?? null;
+            }
+            return range;
+          })()}
+          onRangeSelect={(r) => {
+            const newRange = r as TimeRange;
+            if (newRange === "all") {
+              resetZoom();
+              setOffset(0);
+            } else {
+              const newSize = parseInt(r, 10);
+              if (isZoomed && zoomFrom != null && zoomTo != null) {
+                const center = Math.round((zoomFrom + zoomTo) / 2);
+                const newFrom = Math.max(0, center - Math.floor(newSize / 2));
+                setZoomFrom(newFrom);
+                setZoomTo(newFrom + newSize);
+              } else {
+                resetZoom();
+                setOffset(0);
+              }
+            }
+            setRange(newRange);
+          }}
+          canGoBack={canGoBack}
+          canGoForward={canGoForward}
+          onGoBack={goBack}
+          onGoForward={goForward}
+          onGoToLatest={() => {
+            setOffset(0);
+            resetZoom();
+            refresh();
+          }}
+          showArrows={range !== "all"}
+        />
       </Header>
 
       {/* Current stats */}
@@ -401,18 +487,30 @@ export function Fees() {
           <StatValue style={{ color: theme.colors.primary }}>
             {formatFJPerMana(currentDaFee)} <Unit>FJ/mana</Unit>
           </StatValue>
-          {ethPrice != null && ethPerFeeAssetE12 != null && currentDaFee != null && (
-            <SubStat>~{formatUsd(feeToUsd(currentDaFee, ethPerFeeAssetE12, ethPrice))}/mana</SubStat>
-          )}
+          {ethPrice != null &&
+            ethPerFeeAssetE12 != null &&
+            currentDaFee != null && (
+              <SubStat>
+                ~
+                {formatUsd(feeToUsd(currentDaFee, ethPerFeeAssetE12, ethPrice))}
+                /mana
+              </SubStat>
+            )}
         </CompactStatCard>
         <CompactStatCard>
           <StatLabel>L2 Base Fee</StatLabel>
           <StatValue style={{ color: theme.colors.accent }}>
             {formatFJPerMana(currentL2Fee)} <Unit>FJ/mana</Unit>
           </StatValue>
-          {ethPrice != null && ethPerFeeAssetE12 != null && currentL2Fee != null && (
-            <SubStat>~{formatUsd(feeToUsd(currentL2Fee, ethPerFeeAssetE12, ethPrice))}/mana</SubStat>
-          )}
+          {ethPrice != null &&
+            ethPerFeeAssetE12 != null &&
+            currentL2Fee != null && (
+              <SubStat>
+                ~
+                {formatUsd(feeToUsd(currentL2Fee, ethPerFeeAssetE12, ethPrice))}
+                /mana
+              </SubStat>
+            )}
         </CompactStatCard>
         <CompactStatCard>
           <StatLabel>ETH / USD</StatLabel>
@@ -428,27 +526,71 @@ export function Fees() {
       {/* Chart 1: Fee Per Mana — base fee vs tx bids */}
       <ChartCard>
         <ChartTitle>Fee Per Mana</ChartTitle>
-        <ChartSubtitle>Block base fee vs what txs bid (Fee Juice per mana). Band = p25–p75 of L2 bids. Dashed = mana limits.</ChartSubtitle>
-        {(historyLoading || spreadLoading || !rangeReady) ? (
+        <ChartSubtitle>
+          Block base fee vs what txs bid (Fee Juice per mana). Band = p25–p75 of
+          L2 bids. Dashed = mana limits.
+        </ChartSubtitle>
+        {historyLoading || spreadLoading || !rangeReady ? (
           <Loading />
         ) : (
           <ResponsiveContainer width="100%" height={380}>
-            <ComposedChart data={priceChartData} margin={{ top: 10, right: 20, bottom: 10, left: 10 }} {...zoomProps}>
+            <ComposedChart
+              data={priceChartData}
+              margin={{ top: 10, right: 20, bottom: 10, left: 10 }}
+              {...zoomProps}
+            >
               <defs>
                 <linearGradient id="gradBidL2" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={theme.colors.accent} stopOpacity={0.2} />
-                  <stop offset="100%" stopColor={theme.colors.accent} stopOpacity={0.02} />
+                  <stop
+                    offset="0%"
+                    stopColor={theme.colors.accent}
+                    stopOpacity={0.2}
+                  />
+                  <stop
+                    offset="100%"
+                    stopColor={theme.colors.accent}
+                    stopOpacity={0.02}
+                  />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke={theme.colors.border} opacity={0.3} />
-              <XAxis dataKey="block" type="number" domain={["dataMin", "dataMax"]} stroke={theme.colors.textMuted} fontSize={10} tickFormatter={(v) => `#${v}`} />
-              <YAxis yAxisId="fee" stroke={theme.colors.textMuted} fontSize={10} tickFormatter={(v) => formatPerManaCompact(v)} />
-              <YAxis yAxisId="mana" orientation="right" stroke={theme.colors.textMuted} fontSize={10} tickFormatter={(v) => formatPerManaCompact(v)} />
+              <CartesianGrid
+                strokeDasharray="3 3"
+                stroke={theme.colors.border}
+                opacity={0.3}
+              />
+              <XAxis
+                dataKey="block"
+                type="number"
+                domain={["dataMin", "dataMax"]}
+                stroke={theme.colors.textMuted}
+                fontSize={10}
+                tickFormatter={(v) => `#${v}`}
+              />
+              <YAxis
+                yAxisId="fee"
+                stroke={theme.colors.textMuted}
+                fontSize={10}
+                tickFormatter={(v) => formatPerManaCompact(v)}
+              />
+              <YAxis
+                yAxisId="mana"
+                orientation="right"
+                stroke={theme.colors.textMuted}
+                fontSize={10}
+                tickFormatter={(v) => formatPerManaCompact(v)}
+              />
               <Tooltip
-                contentStyle={{ background: theme.colors.bgCard, border: `1px solid ${theme.colors.border}`, borderRadius: theme.radius.sm, fontSize: 11, fontFamily: "monospace" }}
+                contentStyle={{
+                  background: theme.colors.bgCard,
+                  border: `1px solid ${theme.colors.border}`,
+                  borderRadius: theme.radius.sm,
+                  fontSize: 11,
+                  fontFamily: "monospace",
+                }}
                 labelFormatter={(v, payload) => {
                   const row = payload?.[0]?.payload;
-                  if (row?.blockEnd != null && row.blockEnd !== v) return `Blocks #${v}–#${row.blockEnd}`;
+                  if (row?.blockEnd != null && row.blockEnd !== v)
+                    return `Blocks #${v}–#${row.blockEnd}`;
                   return `Block #${v}`;
                 }}
                 formatter={(value: number, name: string) => {
@@ -462,31 +604,118 @@ export function Fees() {
                     medianManaL2: "Median L2 Mana Limit",
                     medianManaDa: "Median DA Mana Limit",
                   };
-                  const isMana = name === "medianManaL2" || name === "medianManaDa";
-                  return [isMana ? Number(value).toLocaleString() : `${formatFJPerMana(value)} FJ/mana`, labels[name] ?? name];
+                  const isMana =
+                    name === "medianManaL2" || name === "medianManaDa";
+                  return [
+                    isMana
+                      ? Number(value).toLocaleString()
+                      : `${formatFJPerMana(value)} FJ/mana`,
+                    labels[name] ?? name,
+                  ];
                 }}
               />
-              <Legend wrapperStyle={{ fontSize: 11 }} formatter={(v) => {
-                const m: Record<string, string> = {
-                  baseL2: "L2 Base Fee", baseDa: "DA Base Fee",
-                  medianBidL2: "Median L2 Bid", p75BidL2: "P75 L2 Bid", p25BidL2: "P25 L2 Bid",
-                  medianBidDa: "Median DA Bid",
-                  medianManaL2: "L2 Mana Limit", medianManaDa: "DA Mana Limit",
-                };
-                return m[v] ?? v;
-              }} />
+              <Legend
+                wrapperStyle={{ fontSize: 11 }}
+                formatter={(v) => {
+                  const m: Record<string, string> = {
+                    baseL2: "L2 Base Fee",
+                    baseDa: "DA Base Fee",
+                    medianBidL2: "Median L2 Bid",
+                    p75BidL2: "P75 L2 Bid",
+                    p25BidL2: "P25 L2 Bid",
+                    medianBidDa: "Median DA Bid",
+                    medianManaL2: "L2 Mana Limit",
+                    medianManaDa: "DA Mana Limit",
+                  };
+                  return m[v] ?? v;
+                }}
+              />
               {/* L2 bid spread band (p25-p75) */}
-              <Area yAxisId="fee" type="monotone" dataKey="p75BidL2" stroke="none" fill="url(#gradBidL2)" connectNulls name="p75BidL2" />
-              <Area yAxisId="fee" type="monotone" dataKey="p25BidL2" stroke="none" fill={theme.colors.bgCard} connectNulls name="p25BidL2" />
+              <Area
+                yAxisId="fee"
+                type="monotone"
+                dataKey="p75BidL2"
+                stroke="none"
+                fill="url(#gradBidL2)"
+                connectNulls
+                name="p75BidL2"
+              />
+              <Area
+                yAxisId="fee"
+                type="monotone"
+                dataKey="p25BidL2"
+                stroke="none"
+                fill={theme.colors.bgCard}
+                connectNulls
+                name="p25BidL2"
+              />
               {/* Base fees */}
-              <Line yAxisId="fee" type="monotone" dataKey="baseL2" stroke={theme.colors.accent} strokeWidth={2} dot={false} connectNulls name="baseL2" />
-              <Line yAxisId="fee" type="monotone" dataKey="baseDa" stroke={theme.colors.primary} strokeWidth={2} dot={false} connectNulls name="baseDa" />
+              <Line
+                yAxisId="fee"
+                type="monotone"
+                dataKey="baseL2"
+                stroke={theme.colors.accent}
+                strokeWidth={2}
+                dot={false}
+                connectNulls
+                name="baseL2"
+              />
+              <Line
+                yAxisId="fee"
+                type="monotone"
+                dataKey="baseDa"
+                stroke={theme.colors.primary}
+                strokeWidth={2}
+                dot={false}
+                connectNulls
+                name="baseDa"
+              />
               {/* Median bids */}
-              <Line yAxisId="fee" type="monotone" dataKey="medianBidL2" stroke={theme.colors.accent} strokeWidth={1} strokeDasharray="6 3" dot={false} connectNulls name="medianBidL2" />
-              <Line yAxisId="fee" type="monotone" dataKey="medianBidDa" stroke={theme.colors.primary} strokeWidth={1} strokeDasharray="6 3" dot={false} connectNulls name="medianBidDa" />
+              <Line
+                yAxisId="fee"
+                type="monotone"
+                dataKey="medianBidL2"
+                stroke={theme.colors.accent}
+                strokeWidth={1}
+                strokeDasharray="6 3"
+                dot={false}
+                connectNulls
+                name="medianBidL2"
+              />
+              <Line
+                yAxisId="fee"
+                type="monotone"
+                dataKey="medianBidDa"
+                stroke={theme.colors.primary}
+                strokeWidth={1}
+                strokeDasharray="6 3"
+                dot={false}
+                connectNulls
+                name="medianBidDa"
+              />
               {/* Mana limits on right axis */}
-              <Line yAxisId="mana" type="monotone" dataKey="medianManaL2" stroke={theme.colors.success} strokeWidth={1} strokeDasharray="3 3" dot={false} connectNulls name="medianManaL2" />
-              <Line yAxisId="mana" type="monotone" dataKey="medianManaDa" stroke={theme.colors.warning} strokeWidth={1} strokeDasharray="3 3" dot={false} connectNulls name="medianManaDa" />
+              <Line
+                yAxisId="mana"
+                type="monotone"
+                dataKey="medianManaL2"
+                stroke={theme.colors.success}
+                strokeWidth={1}
+                strokeDasharray="3 3"
+                dot={false}
+                connectNulls
+                name="medianManaL2"
+              />
+              <Line
+                yAxisId="mana"
+                type="monotone"
+                dataKey="medianManaDa"
+                stroke={theme.colors.warning}
+                strokeWidth={1}
+                strokeDasharray="3 3"
+                dot={false}
+                connectNulls
+                name="medianManaDa"
+              />
               {selectionOverlay}
             </ComposedChart>
           </ResponsiveContainer>
@@ -496,53 +725,167 @@ export function Fees() {
       {/* Chart 2: Total Fee Paid + utilization */}
       <ChartCard>
         <ChartTitle>Total Fee Paid</ChartTitle>
-        <ChartSubtitle>Actual tx fee distribution (Fee Juice). Band = p25–p75, line = median. Bar = txs per bucket.</ChartSubtitle>
-        {(historyLoading || spreadLoading || !rangeReady) ? (
+        <ChartSubtitle>
+          Actual tx fee distribution (Fee Juice). Band = p25–p75, line = median.
+          Bar = txs per bucket.
+        </ChartSubtitle>
+        {historyLoading || spreadLoading || !rangeReady ? (
           <Loading />
         ) : (
           <ResponsiveContainer width="100%" height={340}>
-            <ComposedChart data={costChartData} margin={{ top: 10, right: 20, bottom: 10, left: 10 }} {...zoomProps}>
+            <ComposedChart
+              data={costChartData}
+              margin={{ top: 10, right: 20, bottom: 10, left: 10 }}
+              {...zoomProps}
+            >
               <defs>
                 <linearGradient id="gradCost" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={theme.colors.success} stopOpacity={0.25} />
-                  <stop offset="100%" stopColor={theme.colors.success} stopOpacity={0.02} />
+                  <stop
+                    offset="0%"
+                    stopColor={theme.colors.success}
+                    stopOpacity={0.25}
+                  />
+                  <stop
+                    offset="100%"
+                    stopColor={theme.colors.success}
+                    stopOpacity={0.02}
+                  />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke={theme.colors.border} opacity={0.3} />
-              <XAxis dataKey="block" type="number" domain={["dataMin", "dataMax"]} stroke={theme.colors.textMuted} fontSize={10} tickFormatter={(v) => `#${v}`} />
-              <YAxis yAxisId="fee" stroke={theme.colors.textMuted} fontSize={10} tickFormatter={(v) => formatFJCompact(v)} />
-              <YAxis yAxisId="txs" orientation="right" stroke={theme.colors.textMuted} fontSize={10} />
+              <CartesianGrid
+                strokeDasharray="3 3"
+                stroke={theme.colors.border}
+                opacity={0.3}
+              />
+              <XAxis
+                dataKey="block"
+                type="number"
+                domain={["dataMin", "dataMax"]}
+                stroke={theme.colors.textMuted}
+                fontSize={10}
+                tickFormatter={(v) => `#${v}`}
+              />
+              <YAxis
+                yAxisId="fee"
+                stroke={theme.colors.textMuted}
+                fontSize={10}
+                tickFormatter={(v) => formatFJCompact(v)}
+              />
+              <YAxis
+                yAxisId="txs"
+                orientation="right"
+                stroke={theme.colors.textMuted}
+                fontSize={10}
+              />
               <Tooltip
-                contentStyle={{ background: theme.colors.bgCard, border: `1px solid ${theme.colors.border}`, borderRadius: theme.radius.sm, fontSize: 11, fontFamily: "monospace" }}
+                contentStyle={{
+                  background: theme.colors.bgCard,
+                  border: `1px solid ${theme.colors.border}`,
+                  borderRadius: theme.radius.sm,
+                  fontSize: 11,
+                  fontFamily: "monospace",
+                }}
                 labelFormatter={(v, payload) => {
                   const row = payload?.[0]?.payload;
-                  if (row?.blockEnd != null && row.blockEnd !== v) return `Blocks #${v}–#${row.blockEnd}`;
+                  if (row?.blockEnd != null && row.blockEnd !== v)
+                    return `Blocks #${v}–#${row.blockEnd}`;
                   return `Block #${v}`;
                 }}
                 formatter={(value: number, name: string) => {
                   if (name === "txCount") return [`${value}`, "Txs"];
-                  const labels: Record<string, string> = { medianFee: "Median", p25Fee: "P25", p75Fee: "P75", minFee: "Min", maxFee: "Max" };
+                  const labels: Record<string, string> = {
+                    medianFee: "Median",
+                    p25Fee: "P25",
+                    p75Fee: "P75",
+                    minFee: "Min",
+                    maxFee: "Max",
+                  };
                   const fj = formatFJ(value);
-                  const usd = ethPrice != null && ethPerFeeAssetE12 != null
-                    ? ` (${formatUsd(feeToUsd(value, ethPerFeeAssetE12, ethPrice))})`
-                    : "";
+                  const usd =
+                    ethPrice != null && ethPerFeeAssetE12 != null
+                      ? ` (${formatUsd(feeToUsd(value, ethPerFeeAssetE12, ethPrice))})`
+                      : "";
                   return [`${fj}${usd}`, labels[name] ?? name];
                 }}
               />
-              <Legend wrapperStyle={{ fontSize: 11 }} formatter={(v) => {
-                const m: Record<string, string> = { medianFee: "Median Fee", p25Fee: "P25", p75Fee: "P75", minFee: "Min", maxFee: "Max", txCount: "Tx Count" };
-                return m[v] ?? v;
-              }} />
+              <Legend
+                wrapperStyle={{ fontSize: 11 }}
+                formatter={(v) => {
+                  const m: Record<string, string> = {
+                    medianFee: "Median Fee",
+                    p25Fee: "P25",
+                    p75Fee: "P75",
+                    minFee: "Min",
+                    maxFee: "Max",
+                    txCount: "Tx Count",
+                  };
+                  return m[v] ?? v;
+                }}
+              />
               {/* Tx count as subtle area on right axis */}
-              <Bar yAxisId="txs" dataKey="txCount" fill={theme.colors.primary} fillOpacity={0.2} stroke={theme.colors.primary} strokeOpacity={0.4} strokeWidth={0.5} name="txCount" />
+              <Bar
+                yAxisId="txs"
+                dataKey="txCount"
+                fill={theme.colors.primary}
+                fillOpacity={0.2}
+                stroke={theme.colors.primary}
+                strokeOpacity={0.4}
+                strokeWidth={0.5}
+                name="txCount"
+              />
               {/* Min-max whiskers */}
-              <Line yAxisId="fee" type="monotone" dataKey="maxFee" stroke={theme.colors.warning} strokeWidth={0.8} strokeDasharray="3 3" dot={false} connectNulls name="maxFee" />
-              <Line yAxisId="fee" type="monotone" dataKey="minFee" stroke={theme.colors.accent} strokeWidth={0.8} strokeDasharray="3 3" dot={false} connectNulls name="minFee" />
+              <Line
+                yAxisId="fee"
+                type="monotone"
+                dataKey="maxFee"
+                stroke={theme.colors.warning}
+                strokeWidth={0.8}
+                strokeDasharray="3 3"
+                dot={false}
+                connectNulls
+                name="maxFee"
+              />
+              <Line
+                yAxisId="fee"
+                type="monotone"
+                dataKey="minFee"
+                stroke={theme.colors.accent}
+                strokeWidth={0.8}
+                strokeDasharray="3 3"
+                dot={false}
+                connectNulls
+                name="minFee"
+              />
               {/* P25-P75 band */}
-              <Area yAxisId="fee" type="monotone" dataKey="p75Fee" stroke="none" fill="url(#gradCost)" connectNulls name="p75Fee" />
-              <Area yAxisId="fee" type="monotone" dataKey="p25Fee" stroke="none" fill={theme.colors.bgCard} connectNulls name="p25Fee" />
+              <Area
+                yAxisId="fee"
+                type="monotone"
+                dataKey="p75Fee"
+                stroke="none"
+                fill="url(#gradCost)"
+                connectNulls
+                name="p75Fee"
+              />
+              <Area
+                yAxisId="fee"
+                type="monotone"
+                dataKey="p25Fee"
+                stroke="none"
+                fill={theme.colors.bgCard}
+                connectNulls
+                name="p25Fee"
+              />
               {/* Median line */}
-              <Line yAxisId="fee" type="monotone" dataKey="medianFee" stroke={theme.colors.success} strokeWidth={2} dot={false} connectNulls name="medianFee" />
+              <Line
+                yAxisId="fee"
+                type="monotone"
+                dataKey="medianFee"
+                stroke={theme.colors.success}
+                strokeWidth={2}
+                dot={false}
+                connectNulls
+                name="medianFee"
+              />
               {selectionOverlay}
             </ComposedChart>
           </ResponsiveContainer>
@@ -557,7 +900,11 @@ export function Fees() {
 const FeesContainer = styled(PageContainer)`
   display: flex;
   flex-direction: column;
-  gap: ${theme.spacing.lg};
+  gap: ${theme.spacing.md};
+
+  @media (max-width: 768px) {
+    gap: ${theme.spacing.sm};
+  }
 `;
 
 const Header = styled.div`
@@ -566,84 +913,6 @@ const Header = styled.div`
   justify-content: space-between;
   gap: ${theme.spacing.md};
   flex-wrap: wrap;
-`;
-
-const HeaderControls = styled.div`
-  display: flex;
-  align-items: center;
-  gap: ${theme.spacing.sm};
-`;
-
-const RefreshButton = styled.button`
-  padding: 4px 10px;
-  background: ${theme.colors.bgCard};
-  color: ${theme.colors.textMuted};
-  border: 1px solid ${theme.colors.border};
-  border-radius: ${theme.radius.sm};
-  cursor: pointer;
-  font-size: ${theme.fontSize.md};
-  line-height: 1;
-  transition: color 0.15s, background 0.15s;
-
-  &:hover {
-    color: ${theme.colors.text};
-    background: ${theme.colors.bgHover};
-  }
-`;
-
-const ResetZoomButton = styled.button`
-  padding: 6px 12px;
-  background: ${theme.colors.bgHover};
-  color: ${theme.colors.warning};
-  border: 1px solid ${theme.colors.warning}44;
-  border-radius: ${theme.radius.sm};
-  cursor: pointer;
-  font-size: ${theme.fontSize.xs};
-  font-family: monospace;
-  transition: background 0.15s;
-
-  &:hover {
-    background: ${theme.colors.warning}22;
-  }
-`;
-
-const NavButton = styled.button<{ disabled?: boolean }>`
-  padding: 6px 10px;
-  background: ${theme.colors.bgCard};
-  color: ${(p) => (p.disabled ? theme.colors.border : theme.colors.textMuted)};
-  border: 1px solid ${theme.colors.border};
-  border-radius: ${theme.radius.sm};
-  cursor: ${(p) => (p.disabled ? "default" : "pointer")};
-  font-size: ${theme.fontSize.sm};
-  line-height: 1;
-  transition: color 0.15s, background 0.15s;
-  &:hover:not(:disabled) { color: ${theme.colors.text}; background: ${theme.colors.bgHover}; }
-`;
-
-const RangeSelector = styled.div`
-  display: flex;
-  gap: 2px;
-  background: ${theme.colors.bgCard};
-  border: 1px solid ${theme.colors.border};
-  border-radius: ${theme.radius.md};
-  padding: 2px;
-`;
-
-const RangeButton = styled.button<{ active: boolean }>`
-  padding: 6px 12px;
-  background: ${(p) => (p.active ? theme.colors.primary : "transparent")};
-  color: ${(p) => (p.active ? "#fff" : theme.colors.textMuted)};
-  border: none;
-  border-radius: ${theme.radius.sm};
-  cursor: pointer;
-  font-size: ${theme.fontSize.xs};
-  font-family: monospace;
-  transition: background 0.15s, color 0.15s;
-
-  &:hover {
-    background: ${(p) => (p.active ? theme.colors.primaryHover : theme.colors.bgHover)};
-    color: ${theme.colors.text};
-  }
 `;
 
 const StatsRow = styled.div`
@@ -675,6 +944,10 @@ const CompactStatCard = styled(Card)`
 
 const ChartCard = styled(Card)`
   padding: ${theme.spacing.md};
+
+  @media (max-width: 768px) {
+    padding: ${theme.spacing.sm};
+  }
 `;
 
 const ChartTitle = styled.h3`
@@ -702,4 +975,3 @@ const SubStat = styled.div`
   margin-top: 2px;
   font-family: monospace;
 `;
-

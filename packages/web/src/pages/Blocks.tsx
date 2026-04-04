@@ -35,6 +35,7 @@ import {
   StatLabel,
   Loading,
 } from "../components/ui";
+import { RangeToolbar } from "../components/RangeToolbar";
 
 type TimeRange = "20" | "100" | "500" | "1000" | "5000";
 
@@ -56,100 +57,12 @@ const Header = styled.div`
   flex-wrap: wrap;
 `;
 
-const HeaderControls = styled.div`
-  display: flex;
-  align-items: center;
-  gap: ${theme.spacing.sm};
-`;
-
-const RefreshButton = styled.button`
-  padding: 4px 10px;
-  background: ${theme.colors.bgCard};
-  color: ${theme.colors.textMuted};
-  border: 1px solid ${theme.colors.border};
-  border-radius: ${theme.radius.sm};
-  cursor: pointer;
-  font-size: ${theme.fontSize.md};
-  line-height: 1;
-  transition:
-    color 0.15s,
-    background 0.15s;
-  &:hover {
-    color: ${theme.colors.text};
-    background: ${theme.colors.bgHover};
-  }
-`;
-
-const ResetZoomButton = styled.button`
-  padding: 6px 12px;
-  background: ${theme.colors.bgHover};
-  color: ${theme.colors.warning};
-  border: 1px solid ${theme.colors.warning}44;
-  border-radius: ${theme.radius.sm};
-  cursor: pointer;
-  font-size: ${theme.fontSize.xs};
-  font-family: monospace;
-  transition: background 0.15s;
-  &:hover {
-    background: ${theme.colors.warning}22;
-  }
-`;
-
-const RangeSelector = styled.div`
-  display: flex;
-  gap: 2px;
-  background: ${theme.colors.bgCard};
-  border: 1px solid ${theme.colors.border};
-  border-radius: ${theme.radius.md};
-  padding: 2px;
-`;
-
-const NavButton = styled.button<{ disabled?: boolean }>`
-  padding: 6px 10px;
-  background: ${theme.colors.bgCard};
-  color: ${(p) => (p.disabled ? theme.colors.border : theme.colors.textMuted)};
-  border: 1px solid ${theme.colors.border};
-  border-radius: ${theme.radius.sm};
-  cursor: ${(p) => (p.disabled ? "default" : "pointer")};
-  font-size: ${theme.fontSize.sm};
-  line-height: 1;
-  transition:
-    color 0.15s,
-    background 0.15s;
-  &:hover:not(:disabled) {
-    color: ${theme.colors.text};
-    background: ${theme.colors.bgHover};
-  }
-`;
-
 const MOBILE_HIDDEN_RANGES = new Set(["1000", "5000"]);
-
-const RangeButton = styled.button<{ active: boolean; mobileHidden?: boolean }>`
-  padding: 6px 12px;
-  background: ${(p) => (p.active ? theme.colors.primary : "transparent")};
-  color: ${(p) => (p.active ? "#fff" : theme.colors.textMuted)};
-  border: none;
-  border-radius: ${theme.radius.sm};
-  cursor: pointer;
-  font-size: ${theme.fontSize.xs};
-  font-family: monospace;
-  transition:
-    background 0.15s,
-    color 0.15s;
-  &:hover {
-    background: ${(p) =>
-      p.active ? theme.colors.primary : theme.colors.bgHover};
-    color: ${theme.colors.text};
-  }
-  @media (max-width: 768px) {
-    ${(p) => p.mobileHidden && "display: none;"}
-  }
-`;
 
 const TopBar = styled.div`
   display: flex;
   gap: ${theme.spacing.md};
-  margin-bottom: ${theme.spacing.lg};
+  margin-bottom: ${theme.spacing.sm};
 
   @media (max-width: 768px) {
     flex-direction: column;
@@ -167,10 +80,13 @@ const StatsColumn = styled.div`
   }
 `;
 
-const CompactStatCard = styled(Card)`
+const CompactStatCard = styled(Card)<{ mobileHidden?: boolean }>`
   padding: ${theme.spacing.sm};
   min-width: 0;
   text-align: center;
+  @media (max-width: 768px) {
+    ${(p) => p.mobileHidden && "display: none;"}
+  }
 
   @media (max-width: 768px) {
     ${StatValue} {
@@ -220,7 +136,7 @@ const PieDot = styled.span<{ color: string }>`
 
 const ChartCard = styled(Card)`
   padding: ${theme.spacing.md};
-  margin-bottom: ${theme.spacing.md};
+  margin-bottom: ${theme.spacing.sm};
 `;
 
 const ChartTitle = styled.h3`
@@ -290,14 +206,17 @@ export function Blocks() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Initialize from URL or defaults
-  const urlFrom = searchParams.get("from") ? parseInt(searchParams.get("from")!, 10) : null;
-  const urlTo = searchParams.get("to") ? parseInt(searchParams.get("to")!, 10) : null;
+  const urlFrom = searchParams.get("from")
+    ? parseInt(searchParams.get("from")!, 10)
+    : null;
+  const urlTo = searchParams.get("to")
+    ? parseInt(searchParams.get("to")!, 10)
+    : null;
   const urlDiff = urlFrom != null && urlTo != null ? urlTo - urlFrom : null;
-  const PRESETS = [20, 100, 500, 1000, 5000];
-  const urlMatchesPreset = urlDiff != null && PRESETS.includes(urlDiff);
 
   const [range, setRange] = useState<TimeRange>(() => {
     if (urlDiff != null) {
+      // Pick a range that covers the URL range
       if (urlDiff <= 20) return "20";
       if (urlDiff <= 100) return "100";
       if (urlDiff <= 500) return "500";
@@ -307,9 +226,9 @@ export function Blocks() {
     return window.innerWidth <= 768 ? "20" : "100";
   });
 
-  // Zoom state — only set from URL if range doesn't match a preset
-  const [zoomFrom, setZoomFrom] = useState<number | null>(urlMatchesPreset ? null : urlFrom);
-  const [zoomTo, setZoomTo] = useState<number | null>(urlMatchesPreset ? null : urlTo);
+  // Always use URL from/to as zoom so the exact range is shown
+  const [zoomFrom, setZoomFrom] = useState<number | null>(urlFrom);
+  const [zoomTo, setZoomTo] = useState<number | null>(urlTo);
   const [selecting, setSelecting] = useState<number | null>(null);
   const [selectEnd, setSelectEnd] = useState<number | null>(null);
   const selectingRef = useRef<number | null>(null);
@@ -376,17 +295,42 @@ export function Blocks() {
       />
     ) : null;
 
-  const [offset, setOffset] = useState(0); // how many range-widths back from latest
+  const [offset, setOffset] = useState(0);
+  const [offsetInitialized, setOffsetInitialized] = useState(urlTo == null);
 
   // Unscoped: just to get latest/earliest block for range computation
   const { data: globalStats } = useBlockStats(selectedNetwork);
+
+  // Once we know the latest block, compute offset to cover the URL range
+  const latestBlockGlobal = globalStats?.data?.blockRange.to ?? null;
+  useEffect(() => {
+    if (
+      offsetInitialized ||
+      latestBlockGlobal == null ||
+      urlTo == null ||
+      urlFrom == null
+    )
+      return;
+    const rangeSize = parseInt(range, 10);
+    const needed = Math.max(
+      0,
+      Math.ceil((latestBlockGlobal - urlTo) / rangeSize),
+    );
+    setOffset(needed);
+    // If URL range matches a preset window, clear zoom so "Reset Zoom" doesn't show
+    if (urlTo - urlFrom === rangeSize) {
+      setZoomFrom(null);
+      setZoomTo(null);
+    }
+    setOffsetInitialized(true);
+  }, [latestBlockGlobal, offsetInitialized, urlTo, urlFrom, range]);
   const { data: configData } = useBlockConfig(selectedNetwork);
   const { data: currentFees } = useCurrentFees(selectedNetwork);
 
   const ethPrice = currentFees?.pricing?.ethUsdPrice ?? null;
   const ethPerFeeAssetE12 = currentFees?.pricing?.ethPerFeeAssetE12 ?? null;
 
-  const latestBlock = globalStats?.data?.blockRange.to ?? null;
+  const latestBlock = latestBlockGlobal;
   const earliestBlock = globalStats?.data?.blockRange.from ?? 0;
   const rangeBlocks = parseInt(range, 10);
   const windowEnd =
@@ -453,8 +397,14 @@ export function Blocks() {
   );
 
   // Fetch data covering the wider of range selector or zoom
-  const fetchFrom = zoomFrom != null && fromBlock != null ? Math.min(zoomFrom, fromBlock) : fromBlock ?? zoomFrom;
-  const fetchTo = zoomTo != null && toBlock != null ? Math.max(zoomTo, toBlock) : toBlock ?? zoomTo;
+  const fetchFrom =
+    zoomFrom != null && fromBlock != null
+      ? Math.min(zoomFrom, fromBlock)
+      : (fromBlock ?? zoomFrom);
+  const fetchTo =
+    zoomTo != null && toBlock != null
+      ? Math.max(zoomTo, toBlock)
+      : (toBlock ?? zoomTo);
   const historyOpts = useMemo(
     () => ({
       from: fetchFrom ?? undefined,
@@ -633,25 +583,32 @@ export function Blocks() {
           stroke={fill}
           strokeOpacity={0.2}
           ifOverflow="extendDomain"
-          label={label ? (props: { viewBox?: { x?: number; y?: number; width?: number } }) => {
-            const vx = props.viewBox?.x ?? 0;
-            const vw = props.viewBox?.width ?? 0;
-            const vy = props.viewBox?.y ?? 0;
-            const cx = vx + vw / 2;
-            return (
-              <text
-                x={0} y={0}
-                transform={`translate(${cx}, ${vy - 26}) rotate(-55)`}
-                fontSize={9}
-                fill={theme.colors.text}
-                opacity={0.6}
-                fontFamily="monospace"
-                textAnchor="middle"
-              >
-                {label}
-              </text>
-            );
-          } : undefined}
+          label={
+            label
+              ? (props: {
+                  viewBox?: { x?: number; y?: number; width?: number };
+                }) => {
+                  const vx = props.viewBox?.x ?? 0;
+                  const vw = props.viewBox?.width ?? 0;
+                  const vy = props.viewBox?.y ?? 0;
+                  const cx = vx + vw / 2;
+                  return (
+                    <text
+                      x={0}
+                      y={0}
+                      transform={`translate(${cx}, ${vy - 26}) rotate(-55)`}
+                      fontSize={9}
+                      fill={theme.colors.text}
+                      opacity={0.6}
+                      fontFamily="monospace"
+                      textAnchor="middle"
+                    >
+                      {label}
+                    </text>
+                  );
+                }
+              : undefined
+          }
         />
       );
     });
@@ -668,34 +625,47 @@ export function Blocks() {
     <PageContainer>
       <Header>
         <PageTitle>Block Analytics</PageTitle>
-        <HeaderControls>
-          <RefreshButton title="Refresh">&#x21bb;</RefreshButton>
-          {isZoomed && (
-            <ResetZoomButton onClick={resetZoom}>Reset Zoom</ResetZoomButton>
-          )}
-          <NavButton disabled={!canGoBack} onClick={goBack}>
-            &#x25C0;
-          </NavButton>
-          <RangeSelector>
-            {(Object.keys(RANGE_LABELS) as TimeRange[]).map((r) => (
-              <RangeButton
-                key={r}
-                active={range === r}
-                mobileHidden={MOBILE_HIDDEN_RANGES.has(r)}
-                onClick={() => {
-                  setRange(r);
-                  setOffset(0);
-                  resetZoom();
-                }}
-              >
-                {RANGE_LABELS[r]}
-              </RangeButton>
-            ))}
-          </RangeSelector>
-          <NavButton disabled={!canGoForward} onClick={goForward}>
-            &#x25B6;
-          </NavButton>
-        </HeaderControls>
+        <RangeToolbar
+          ranges={Object.entries(RANGE_LABELS).map(([key, label]) => ({
+            key,
+            label,
+            mobileHidden: MOBILE_HIDDEN_RANGES.has(key),
+          }))}
+          activeRange={(() => {
+            const zoomSize =
+              isZoomed && zoomFrom != null && zoomTo != null
+                ? zoomTo - zoomFrom
+                : null;
+            if (zoomSize != null) {
+              const match = Object.keys(RANGE_LABELS).find(
+                (r) => parseInt(r, 10) === zoomSize,
+              );
+              return match ?? null;
+            }
+            return range;
+          })()}
+          onRangeSelect={(r) => {
+            const newSize = parseInt(r, 10);
+            if (isZoomed && zoomFrom != null && zoomTo != null) {
+              const center = Math.round((zoomFrom + zoomTo) / 2);
+              const newFrom = Math.max(0, center - Math.floor(newSize / 2));
+              setZoomFrom(newFrom);
+              setZoomTo(newFrom + newSize);
+            } else {
+              resetZoom();
+              setOffset(0);
+            }
+            setRange(r as TimeRange);
+          }}
+          canGoBack={canGoBack}
+          canGoForward={canGoForward}
+          onGoBack={goBack}
+          onGoForward={goForward}
+          onGoToLatest={() => {
+            setOffset(0);
+            resetZoom();
+          }}
+        />
       </Header>
 
       {statsLoading && <Loading />}
@@ -725,7 +695,7 @@ export function Blocks() {
                     : "-"}
                 </StatValue>
               </CompactStatCard>
-              <CompactStatCard style={{ position: "relative" }}>
+              <CompactStatCard>
                 <StatLabel>Avg Fees/Block</StatLabel>
                 <StatValue>
                   {stats.avgFeesPerBlock
@@ -735,13 +705,11 @@ export function Blocks() {
                 {stats.avgFeesPerBlock &&
                   ethPrice != null &&
                   ethPerFeeAssetE12 != null && (
-                    <span
+                    <div
                       style={{
-                        position: "absolute",
-                        right: 6,
-                        bottom: 6,
                         fontSize: 9,
                         color: theme.colors.textMuted,
+                        marginTop: 1,
                       }}
                     >
                       {formatUsd(
@@ -751,7 +719,7 @@ export function Blocks() {
                           ethPrice,
                         ),
                       )}
-                    </span>
+                    </div>
                   )}
               </CompactStatCard>
               <CompactStatCard>
@@ -761,22 +729,20 @@ export function Blocks() {
               {maxMana && (
                 <CompactStatCard>
                   <StatLabel>Max Mana/Block</StatLabel>
-                  <StatValue style={{ fontSize: theme.fontSize.sm }}>
-                    {(maxMana / 1e6).toFixed(1)}M
-                  </StatValue>
+                  <StatValue>{(maxMana / 1e6).toFixed(1)}M</StatValue>
                 </CompactStatCard>
               )}
               {cpStats && (
                 <>
-                  <CompactStatCard>
+                  <CompactStatCard mobileHidden>
                     <StatLabel>Checkpoints</StatLabel>
                     <StatValue>{cpStats.checkpointCount}</StatValue>
                   </CompactStatCard>
-                  <CompactStatCard>
+                  <CompactStatCard mobileHidden>
                     <StatLabel>Blocks/Checkpoint</StatLabel>
                     <StatValue>{cpStats.avgBlocksPerCheckpoint}</StatValue>
                   </CompactStatCard>
-                  <CompactStatCard>
+                  <CompactStatCard mobileHidden>
                     <StatLabel>Avg Mana/Checkpoint</StatLabel>
                     <StatValue>
                       {cpStats.avgManaPerCheckpoint
